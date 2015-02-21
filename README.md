@@ -62,10 +62,10 @@ If you would like to submit a patch for an issue, please add it to the
  Our preferred format for changes is "diff -u" output. You might
  generate it like this:
 
-'''
+```
 # cd nfp-common-work
 # [your changes]
 # [test thoroughly]
 # cd ..
 # diff -ur nfp-common-orig nfp-common-work > mydiffs.patch
-'''
+```
