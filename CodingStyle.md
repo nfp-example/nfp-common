@@ -52,7 +52,7 @@ Documentation is in the doc subdirectory.
 ## Scripts subdirectory
 
 The scripts subdirectory contains scripts that are accessible from the
-command line or Makefiles to help reduce typing for the developer
+command line or Makefiles to help reduce typing for the developer.
 
 ## Python subdirectory
 
