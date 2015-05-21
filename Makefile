@@ -28,3 +28,7 @@ include $(FIRMWARE_DIR)/Makefile
 include $(HOST_DIR)/Makefile
 include $(SCRIPTS_DIR)/Makefile
 #include $(DOCS_DIR)/Makefile
+
+ALL: firmware_all
+
+clean: firmware_clean

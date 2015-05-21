@@ -15,3 +15,33 @@
 # @file        firmware/Makefile
 # @brief       Makefile for the firmware
 #
+
+FW_BUILD = $(FIRMWARE_DIR)/build
+FW_NFFW  = $(FIRMWARE_DIR)/nffw
+
+NFAS = $(NETRONOME)/bin/nfas
+NFAS_BASE_INC = 
+NFAS_BASE_DEFS = 
+NFAS_BASE_FLAGS = -indirect_ref_format_nfp6000
+
+NFCC = $(NETRONOME)/bin/nfcc
+NFCC_BASE_INC = -I$(FIRMWARE_DIR)/lib
+NFCC_BASE_DEFS = 
+NFCC_BASE_FLAGS = 
+NFCC_BASE_CLIBS = 
+
+NFLD = $(NETRONOME)/bin/nfld
+NFLD_BASE_FLAGS = 
+
+include $(FIRMWARE_DIR)/Makefile.templates
+include $(FIRMWARE_DIR)/Makefile.apps
+
+firmware_all: all_nffw
+
+all_nffw:
+
+firmware_clean:
+	rm -f $(FW_BUILD)/*.map
+	rm -f $(FW_BUILD)/*.list
+	rm -f $(FW_BUILD)/*.obj
+	rm -f $(FW_NFFW)/*.nffw
