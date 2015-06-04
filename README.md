@@ -38,6 +38,16 @@ Read the documentation in the doc/ directory.  It is quite rough, but it
  lists the functions; you will probably have to look at the code to work out
  how to use them. Look at the example programs.
 
+The packages installed for building on Ubuntu comprise:
+
+* libjansson-dev
+
+* libhugetlbfs-dev
+
+* nfp-bsp
+
+* nfp-sdk
+
 ## Support
 
 The nfp-common project is aimed at providing solid working example

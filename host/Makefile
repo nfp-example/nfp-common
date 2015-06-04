@@ -15,3 +15,26 @@
 # @file        host/Makefile
 # @brief       Makefile for the host applications
 #
+ALL: all_host
+
+clean: clean_host
+
+HOST_SRC_DIR   = $(HOST_DIR)/src
+HOST_BUILD_DIR = $(HOST_DIR)/build
+HOST_BIN_DIR   = $(HOST_DIR)/bin
+
+#CC=gcc
+INCLUDES=-I$(NETRONOME)/include
+LIBS=-L$(NETRONOME)/lib -L/usr/lib/x86_64-linux-gnu/ -lnfp -lnfp_nffw -lhugetlbfs -ljansson
+
+CC=gcc $(INCLUDES) -g -Wall -Werror
+LD=gcc -g
+
+include $(HOST_DIR)/Makefile.templates
+include $(HOST_DIR)/Makefile.apps
+
+clean_host:
+	rm build/*o
+
+$(HOST_BUILD_DIR)/%.o: $(HOST_SRC_DIR)/%.c
+	$(CC) -c -o $@ -I$(HOST_DIR)/src $<
