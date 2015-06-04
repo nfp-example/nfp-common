@@ -542,7 +542,7 @@ pkt_receive(struct pkt_buf_desc *pkt_buf_desc)
         mem[packet_read_packet_status, pkt_status[0], pkt_num, 0, 1], \
             ctx_swap[sig]
             }
-    pkt_buf_desc->paddr = ((pkt_status[0]&0x3ff)<<8)|CTM_PKT_OFFSET;
+    pkt_buf_desc->pkt_addr = ((pkt_status[0]&0x3ff)<<8)|CTM_PKT_OFFSET;
 }
 
 /** pkt_buffer_alloc_from_current - 30i + 150d
@@ -607,8 +607,7 @@ pkt_buffer_alloc_from_current(struct mu_buf_desc *mu_buf_desc,
         }
         buffer_end = 1 << 18; /* Buffer size fixed at 256kB, 1<<18 */
 
-        pkt_starts_okay = ((mu_buf_desc->size != 0) &&
-                           (mu_buf_desc->offset <= buffer_end));
+        pkt_starts_okay = (mu_buf_desc->offset <= buffer_end);
         pkt_ends_okay   = ((mu_buf_desc->offset + pkt_buf_desc->num_blocks)
                            <= buffer_end);
         pkt_num_okay    = (mu_buf_desc->number < MU_BUF_MAX_PKT);
@@ -763,7 +762,7 @@ void pkt_dma_to_memory(struct pkt_buf_desc *pkt_buf_desc,
     local_csr_write(local_csr_cmd_indirect_ref0, mu_addr_high); 
     size         = pkt_buf_desc->num_blocks+1;
     override = (( (2 << 3) | (1 << 6) | (1 << 7) ) | ((size - 1) << 8) |
-                (pkt_buf_desc->paddr << (16 - 3)));
+                (pkt_buf_desc->pkt_addr << (16 - 3)));
     __asm {
         alu[ --, --, B, override ];
         mem[pe_dma_to_memory_buffer, --, mu_addr_low, mu_offset, 1], \
@@ -836,7 +835,7 @@ pkt_dma_memory_to_host(struct mu_buf_dma_desc *mu_buf_dma_desc,
          
         cmd.cpp_token = token;
         cmd.dma_cfg_index = PKT_CAP_PCIE_DMA_CONFIG;
-        pcie_dma_cmd_set_sig(&cmd, &sig);
+        pcie_dma_cmd_sig(&cmd, &sig);
         wr_cmd = cmd;
         pcie_write_int(&wr_cmd, PKT_CAP_PCIE_ISLAND,
                        NFP_PCIE_DMA_TOPCI_HI, sizeof(wr_cmd));

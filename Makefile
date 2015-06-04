@@ -24,11 +24,11 @@ FIRMWARE_DIR  = $(NFP_COMMON)/firmware
 HOST_DIR      = $(NFP_COMMON)/host
 DOCS_DIR      = $(NFP_COMMON)/docs
 
+ALL:
+
+clean:
+
 include $(FIRMWARE_DIR)/Makefile
 include $(HOST_DIR)/Makefile
 include $(SCRIPTS_DIR)/Makefile
 #include $(DOCS_DIR)/Makefile
-
-ALL: firmware_all
-
-clean: firmware_clean
