@@ -31,9 +31,15 @@ $(eval $(call micro_c.add_src_lib,pcap_host,app,pcap_lib))
 $(eval $(call micro_c.add_fw_libs,pcap_host,nfp sync))
 $(eval $(call micro_c.compile,pcap_host,app,pcap_host.c))
 
+$(eval $(call micro_c.add_src_lib,pcap_recycle,app,pcap_lib))
+$(eval $(call micro_c.add_fw_libs,pcap_recycle,nfp sync))
+$(eval $(call micro_c.add_define,pcap_recycle,PCAP_HOST_ISLAND))
+$(eval $(call micro_c.compile,pcap_recycle,app,pcap_recycle.c))
+
 $(eval $(call microcode.assemble_init,pcap_init,app,pcap_init.uc))
 
 $(eval $(call nffw.add_obj_with_mes,pcap,pcap_host,i4.me2))
-$(eval $(call nffw.add_obj_with_mes,pcap,pcap_rx,i32.me0))
+$(eval $(call nffw.add_obj_with_mes,pcap,pcap_recycle,i4.me3))
+$(eval $(call nffw.add_obj_with_mes,pcap,pcap_rx,i32.me0 i33.me0 i34.me0))
 $(eval $(call nffw.add_init_obj,pcap,pcap_init))
 $(eval $(call nffw.link,pcap))
