@@ -12,23 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# @file        Makefile
-# @brief       Top level makefile to set paths and include submakes
+# @file        host/Makefile.templates
+# @brief       Makefile templates for host building
 #
-
-NFP_COMMON    := $(abspath $(CURDIR))
-NETRONOME = /opt/netronome
-
-SCRIPTS_DIR   = $(NFP_COMMON)/scripts
-FIRMWARE_DIR  = $(NFP_COMMON)/firmware
-HOST_DIR      = $(NFP_COMMON)/host
-DOCS_DIR      = $(NFP_COMMON)/docs
-
-ALL:
-
-clean:
-
-include $(FIRMWARE_DIR)/Makefile
-include $(HOST_DIR)/Makefile
-include $(SCRIPTS_DIR)/Makefile
-#include $(DOCS_DIR)/Makefile

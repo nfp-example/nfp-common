@@ -12,23 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# @file        Makefile
-# @brief       Top level makefile to set paths and include submakes
+# @file        host/Makefile.apps
+# @brief       Makefile for the host applications
 #
 
-NFP_COMMON    := $(abspath $(CURDIR))
-NETRONOME = /opt/netronome
+$(HOST_BIN_DIR)/pcap_test: $(HOST_BUILD_DIR)/pcap_test.o
+$(HOST_BIN_DIR)/pcap_test: $(HOST_BUILD_DIR)/nfp_support.o
 
-SCRIPTS_DIR   = $(NFP_COMMON)/scripts
-FIRMWARE_DIR  = $(NFP_COMMON)/firmware
-HOST_DIR      = $(NFP_COMMON)/host
-DOCS_DIR      = $(NFP_COMMON)/docs
+$(HOST_BIN_DIR)/pcap_test:
+	$(LD) -o $(HOST_BIN_DIR)/pcap_test $(HOST_BUILD_DIR)/pcap_test.o $(HOST_BUILD_DIR)/nfp_support.o $(LIBS)
 
-ALL:
+all_host: pcap_test
 
-clean:
+pcap_test: $(HOST_BIN_DIR)/pcap_test
 
-include $(FIRMWARE_DIR)/Makefile
-include $(HOST_DIR)/Makefile
-include $(SCRIPTS_DIR)/Makefile
-#include $(DOCS_DIR)/Makefile
