@@ -56,6 +56,17 @@
 __intrinsic void mem_read64(__xread void *data, __mem void *addr,
                             const size_t size);
 
+/** mem_read64_s8
+ *
+ * @param data     Transfer registers to read
+ * @param base_s8  Base address in MU >> 8
+ * @param ofs      Offset in bytes from MU base
+ * @param size     Size in bytes to write (must be multiple of 8)
+ *
+ */
+__intrinsic void mem_read64_s8(__xread void *data, uint32_t base_s8,
+                               uint32_t ofs, const size_t size);
+
 /** mem_write64
  *
  * @param data   Transfer registers to read
@@ -65,6 +76,17 @@ __intrinsic void mem_read64(__xread void *data, __mem void *addr,
  */
 __intrinsic void mem_write64(__xwrite void *data, __mem void *addr,
                              const size_t size);
+
+/** mem_write64_s8
+ *
+ * @param data     Transfer registers to write
+ * @param base_s8  Base address in MU >> 8
+ * @param ofs      Offset in bytes from MU base
+ * @param size     Size in bytes to write (must be multiple of 8)
+ *
+ */
+__intrinsic void mem_write64_s8(__xwrite void *data, uint32_t base_s8,
+                                uint32_t ofs, const size_t size);
 
 /** mem_atomic_read_s8
  *
@@ -92,6 +114,13 @@ __intrinsic void mem_atomic_write_s8(__xwrite void *data,
  */
 __intrinsic void mem_workq_add_work(uint32_t mu_qdesc,
                                     __xwrite uint32_t *data, int size);
+
+/** mem_workq_add_work_async
+ */
+__intrinsic void mem_workq_add_work_async(uint32_t mu_qdesc,
+                                          __xwrite uint32_t *data,
+                                          int size,
+                                          SIGNAL *sig);
 
 /** mem_workq_add_thread
  */

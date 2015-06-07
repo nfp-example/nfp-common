@@ -22,6 +22,7 @@ NFCC_BASE_CLIBS = /opt/netronome/components/standardlibrary/microc/src/rtl.c
 # Need this to fix codeless ME assembles for initialization
 NFAS_CODELESS_FIXUP = sed -ie 's/\(\(\.%init_csr "default assembler setting"\)\|\(\.%third_party_addressing\)\|\(\.%indirect_ref_mode\)\).*//'
 
+#a Packet capture firmware
 $(eval $(call micro_c.add_src_lib,pcap_rx,app,pcap_lib))
 $(eval $(call micro_c.add_fw_libs,pcap_rx,nfp sync))
 $(eval $(call micro_c.add_define,pcap_rx,PCAP_RX_ISLAND))
@@ -43,3 +44,18 @@ $(eval $(call nffw.add_obj_with_mes,pcap,pcap_recycle,i4.me3))
 $(eval $(call nffw.add_obj_with_mes,pcap,pcap_rx,i32.me0 i33.me0 i34.me0))
 $(eval $(call nffw.add_init_obj,pcap,pcap_init))
 $(eval $(call nffw.link,pcap))
+
+#a Packet generator firmware
+$(eval $(call micro_c.add_src_lib,pktgen_host,app,pktgen_lib))
+$(eval $(call micro_c.add_fw_libs,pktgen_host,nfp sync))
+$(eval $(call micro_c.add_define,pktgen_host,PCAP_RX_ISLAND))
+$(eval $(call micro_c.compile,pktgen_host,app,pktgen_host.c))
+
+$(eval $(call microcode.assemble_init,pktgen_init,app,pktgen_init.uc))
+
+$(eval $(call nffw.add_obj_with_mes,pktgen,pktgen_host,i4.me2))
+#$(eval $(call nffw.add_obj_with_mes,pktgen,pktgen_recycle,i4.me3))
+#$(eval $(call nffw.add_obj_with_mes,pktgen,pktgen_rx,i32.me0 i33.me0 i34.me0))
+$(eval $(call nffw.add_init_obj,pktgen,pktgen_init))
+$(eval $(call nffw.link,pktgen))
+

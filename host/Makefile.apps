@@ -24,5 +24,10 @@ $(HOST_BIN_DIR)/pcap_test:
 
 all_host: pcap_test
 
+clean_host: clean_host__pcap_test
+
+clean_host__pcap_test:
+	rm $(HOST_BIN_DIR)/pcap_test
+
 pcap_test: $(HOST_BIN_DIR)/pcap_test
 

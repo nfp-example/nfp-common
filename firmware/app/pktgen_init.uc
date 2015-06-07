@@ -19,12 +19,12 @@
 
     /* DMA config 8 is for CLS */
 #define __PCI pcie:i4.PcieInternalTargets.DMAController
-    .init_csr __PCI.DMADescrConfig8.CppTargetIDEven     0xf const
-    .init_csr __PCI.DMADescrConfig8.Target64bitEven     0   const
-    .init_csr __PCI.DMADescrConfig8.NoSnoopEven         0   const
-    .init_csr __PCI.DMADescrConfig8.RelaxedOrderingEven 0   const
-    .init_csr __PCI.DMADescrConfig8.IdBasedOrderingEven 0   const
-    .init_csr __PCI.DMADescrConfig8.StartPaddingEven    0   const
-    .init_csr __PCI.DMADescrConfig8.EndPaddingEven      0   const
-    .init_csr __PCI.DMADescrConfig8.SignalOnlyEven      0   const
+    .init_csr __PCI.DMADescrConfig4.CppTargetIDEven     0xf const
+    .init_csr __PCI.DMADescrConfig4.Target64bitEven     0   const
+    .init_csr __PCI.DMADescrConfig4.NoSnoopEven         0   const
+    .init_csr __PCI.DMADescrConfig4.RelaxedOrderingEven 0   const
+    .init_csr __PCI.DMADescrConfig4.IdBasedOrderingEven 0   const
+    .init_csr __PCI.DMADescrConfig4.StartPaddingEven    0   const
+    .init_csr __PCI.DMADescrConfig4.EndPaddingEven      0   const
+    .init_csr __PCI.DMADescrConfig4.SignalOnlyEven      0   const
 #undef __PCI

@@ -12,7 +12,7 @@
  * used in the island, and for ach ME the number of contexts used
  *
  * 1 host island
- * 1 Rx island
+ * 3 Rx island
  *
  * Host island is two MEs
  *  First ME:
@@ -23,7 +23,7 @@
  * Rx islands is single ME
  *  All threads run packet receive
  */
-#define PCAP_ISLANDS 2
+#define PCAP_ISLANDS (1+3)
 
 #define PCAP_HOST_CTXTS 8
 #define PCAP_HOST_MES 2

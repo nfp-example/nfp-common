@@ -63,20 +63,18 @@
  *
  *     uint32_t     tx_time_lo;
  *     unsigned int tx_time_hi:8;
- *     uint32_t     mu_base_s8;
  *     unsigned int script_ofs:24;
- *     unsigned int batch_seq:16;
+ *     uint32_t     mu_base_s8;
+ *     unsigned int length:16;
  *     unsigned int tx_seq:16;
- * A script_ofs of 0 implies no packet - just consume the batch_seq
- * (but no tx_seq)
+ * A length of 0 implies no packet (and tx_seq is unused)
  *
  * The TX slave transmitter performs the following steps:
  *
- * 1) Wait for permission to progress within the batch (in range say 32 outstanding per batch)
- * 2) Wait for CTM credit
- * 3) Alloc
- * 4) Start DMA from MU to CTM (first <192B)
- * 4a) Read script
+ * 1) Wait for permission to progress within the batch (in range say 1024 'in the future' tx seq)
+ * 2) Alloc
+ * 3) Start DMA from MU to CTM (first <192B)
+ * 4) Start script read
  * 5) Write header
  * 6) Wait for DMA completion
  * 7) Overwrite DMA data
@@ -85,8 +83,8 @@
  * 10) Increment global batch 'ready' indicator
  *
  * Each batch has a 'total released' claimant globally
- * As a worker on a batch item, you can only start if the work item's batch sequence number is < 'total released' + FIXED_N
- * When you are done with an item (probably item 9 - so that CTM resources are not starved by one batch) you move on the 'total released'.
+ * As a worker on a batch item, you can only start if the work item's transmit sequence number is < 'last transmitted' + FIXED_N
+ * When the NBI BLM is done transmitting the buffer recycling can update 'last transmitted'
  *
  * CTM credit has to be handled per-CTM in hardware. 256B is used for
  * each transmit packet, so 1k packets are supported max (probably go
@@ -155,30 +153,124 @@
  *
  * So a script should be 64B of data
  */
+/** Includes
+ */
+#include <stdint.h>
+#include <nfp/me.h>
+#include <nfp/mem.h>
+#include <nfp/cls.h>
+#include <nfp/pcie.h>
+#include <nfp.h>
+#include <nfp_override.h>
+#include "pktgen_lib.h"
+
+/** Defines
+ */
+#define MAX_BATCH_ITEMS_IN_PROCESSING (32)
+
+/** Memory declarations
+ */
+_declare_resource("cls_host_data island 64")
+
+/** struct host_data
+ */
+struct host_data {
+    uint32_t cls_host_shared_data;
+    uint32_t cls_host_ring_base;
+    uint32_t cls_host_ring_item_mask;
+    uint32_t wptr;
+    uint32_t rptr;
+};
+
+/** struct host_cmd
+ */
+struct host_cmd {
+    union {
+        struct {
+            uint64_t base_delay;
+            uint32_t mu_base_s8;
+            int      total_pkts;
+        } cmd;
+    };
+};
+
 /** struct tx_pkt_work
  */
 struct tx_pkt_work {
-    uint32_t     tx_time; /* Not sure what units... */
+    uint32_t     tx_time_lo;   /* Not sure what units... */
+    uint32_t     tx_time_hi:8; /* Top 8 bits */
     uint32_t     mu_base_s8;   /* 256B aligned packet start */
     uint32_t     script_ofs;   /* Offset to script from script base */
-    unsigned int batch_seq:16; /* batch ordering to stop getting too
-                                * far ahead of ourselves */
-    unsigned int tx_seq:16;    /* for reorder pool */
+    unsigned int length:16;    /* Length of the packet (needed to DMA it) */
+    unsigned int tx_seq:16;    /* for reorder pool and to stop processing too far into the future */
+};
+
+/** struct batch_work
+ */
+struct batch_work {
+    uint32_t     tx_time_lo;   /* Not sure what units... */
+    unsigned int tx_time_hi:8; /* Top 8 bits */
+    unsigned int num_valid_pkts:8;        /* Pad 8 bits */
+    unsigned int tx_seq:16;    /* Tx sequence for first of 8 entries */
+    uint32_t     mu_base_s8;   /* 256B aligned flow script start */
+    uint32_t     work_ofs;     /* Offset to script from script base */
+};
+
+/** struct flow_entry
+ */
+struct flow_entry {
+    uint32_t     tx_time_lo;   /* Not sure what units... */
+    uint32_t     tx_time_hi:8; /* Top 8 bits */
+    unsigned int script_ofs:24;   /* Offset to script from script base */
+    uint32_t     mu_base_s8;   /* 256B aligned packet start */
+    unsigned int length:16;    /* Length of the packet (needed to DMA it) */
+    unsigned int flags:16;    /* */
+};
+
+/** struct tx_seq
+ */
+struct tx_seq {
+    uint32_t last_transmitted;
 };
 
 /** struct batch_desc
  */
 struct batch_desc {
-    muq;
-    __mem struct batch_seq *batch_seq;
+    uint32_t muq; /* MU queue handle for the batch workq */
+    uint32_t override;
+    __mem struct tx_seq *tx_seq;
+    uint32_t seq_base_s8;
+    uint32_t seq_ofs;
+};
+
+/** struct ctm_pkt_desc
+ */
+struct ctm_pkt_desc {
+    uint32_t pkt_num;
+    uint32_t pkt_addr;
+    uint32_t mod_script_offset;
+};
+
+/** struct script
+ */
+struct script {
+    uint32_t data[16];
+};
+
+/** struct script_finish
+ */
+struct script_finish {
+    uint32_t data[4];
 };
 
 /** Statics
  */
 __declspec(shared) static struct batch_desc batch_desc;
-__declspec(shared) static int last_batch_seq_released;
+__declspec(shared) static struct batch_desc batch_desc_array[8];
+__declspec(shared) static int last_seq_transmitted;
 __declspec(shared) static int poll_interval;
 __declspec(shared) uint32_t mu_script_base_s8;
+__declspec(shared) uint32_t batch_work_muq;
 
 /** tx_slave_get_pkt_in_batch
  * 10i + 150
@@ -193,26 +285,26 @@ tx_slave_get_pkt_in_batch(struct tx_pkt_work *tx_pkt_work)
     *tx_pkt_work = tx_pkt_work_in;
 }
 
-/** tx_slave_wait_feor_batch_seq
+/** tx_slave_wait_for_tx_seq
  * 5i * 90% / 15i+150 * 10% / poll if way ahead
  *
  * = 6i+15
  */
 void
-tx_slave_wait_for_batch_seq(struct tx_pkt_work *tx_pkt_work)
+tx_slave_wait_for_tx_seq(struct tx_pkt_work *tx_pkt_work)
 {
 
     for (;;) {
-        __xread  struct batch_seq batch_seq;
+        __xread struct tx_seq tx_seq;
 
-        if ((tx_pkt_work->batch_seq - last_batch_seq_released) <
+        if ((tx_pkt_work->tx_seq - last_seq_transmitted) <
             MAX_BATCH_ITEMS_IN_PROCESSING)
             return;
 
-        mem_atomic_read_s8(&batch_seq, base_s8, ofs, sizeof(batch_seq));
-        last_batch_seq_released = batch_seq.last_released;
+        mem_atomic_read_s8(&tx_seq, batch_desc.seq_base_s8, batch_desc.seq_ofs, sizeof(tx_seq));
+        last_seq_transmitted = tx_seq.last_transmitted;
 
-        if ((tx_pkt_work->batch_seq - last_batch_seq_released) <
+        if ((tx_pkt_work->tx_seq - last_seq_transmitted) <
             MAX_BATCH_ITEMS_IN_PROCESSING)
             return;
 
@@ -232,6 +324,8 @@ void
 tx_slave_alloc_pkt(struct ctm_pkt_desc *ctm_pkt_desc)
 {
     SIGNAL sig;
+    uint32_t pkt_num; /* Packet number for assembler command to get
+                         packet status from */
     __xread uint32_t pkt_status[2]; /* Packet status, including CTM
                                        address of packet */
 
@@ -251,9 +345,10 @@ tx_slave_alloc_pkt(struct ctm_pkt_desc *ctm_pkt_desc)
         me_sleep(poll_interval);
     }
 
+    pkt_num = ctm_pkt_desc->pkt_num;
     __asm {
         mem[packet_read_packet_status, pkt_status[0], \
-            ctm_pkt_desc->pkt_num, 0, 1],             \
+            pkt_num, 0, 1],             \
             ctx_swap[sig]
             }
     ctm_pkt_desc->pkt_addr = (pkt_status[0] & 0x3ff) << 8;
@@ -267,10 +362,14 @@ tx_slave_read_script_start(struct tx_pkt_work *tx_pkt_work,
                            SIGNAL *sig)
 {
     int script_size;
+    uint32_t script_ofs;
+    uint32_t base_s8;
     script_size = sizeof(*script) / sizeof(uint64_t);
+    script_ofs = tx_pkt_work->script_ofs;
+    base_s8 = mu_script_base_s8;
     __asm {
-        mem[read, *script, mu_script_base_s8, <<8,\
-            tx_pkt_work->script_offset, script_size], \
+        mem[read, *script, base_s8, <<8,\
+            script_ofs, script_size], \
             sig_done[*sig];
     }
 }
@@ -282,17 +381,23 @@ tx_slave_dma_pkt_start(struct tx_pkt_work *tx_pkt_work,
                        struct ctm_pkt_desc *ctm_pkt_desc,
                        SIGNAL *sig)
 {
-    int ctm_dma_len;
+    int ctm_dma_len; /* #64Bs to DMA -1 (0->64B, 1->128B etc) */
+    uint32_t mu_base_lo;
+    uint32_t mu_base_hi;
+    int len;
+
     ctm_dma_len = 0;
-    if (tx_pkt_work.length>64)  ctm_len_in_64B=1;
-    if (tx_pkt_work.length>128) ctm_len_in_64B=2;
-    mu_base_lo = tx_pkt_work.mu_base_s8 << 8;
-    bm = mu_base_hi;
-    dm/ref = ctm_pkt_desc.pkt_addr >> 3;
+    if (tx_pkt_work->length>64)  ctm_dma_len=1;
+    if (tx_pkt_work->length>128) ctm_dma_len=2;
+
+    mu_base_lo = tx_pkt_work->mu_base_s8 << 8;
+    mu_base_hi = tx_pkt_work->mu_base_s8 >> 24;
+    //bm = mu_base_hi;
+    //dm/ref = ctm_pkt_desc->pkt_addr >> 3;
     len = ctm_dma_len;
     __asm {
-        mem[pe_dma_from_mu, blah, mu_base_lo, 64, 1], indirect_ref,
-            sig_done[*sig];
+        mem[pe_dma_from_memory_buffer, --, mu_base_lo, 64, 1], \
+            indirect_ref, sig_done[*sig];
     }
 }
 
@@ -319,7 +424,7 @@ tx_slave_pkt_tx(struct tx_pkt_work *tx_pkt_work,
     override |= (((ctm_pkt_desc->mod_script_offset / 8) - 1) << 8);
     __asm {
         alu[--, --, b, override];
-        mem[packet_complete_unicast, --, pkt_num_s16, tx_pkt_length],
+        mem[packet_complete_unicast, --, pkt_num_s16, tx_pkt_length], \
             indirect_ref;
     }
 }
@@ -334,9 +439,13 @@ tx_slave_pkt_tx(struct tx_pkt_work *tx_pkt_work,
 void
 pktgen_tx_slave(void)
 {
+    int nbi=8;
+
     batch_desc.override = ( (1<<0) | (1<<1) | (1<<3) | (1<<6) | (1<<7) );
-    batch_desc.override |= (nbi<<12)<<16;
-    batch_desc.override |= batch_desc.queue << 16;
+    //batch_desc.override |= (nbi<<12)<<16; /* NBI is 2 bits */
+    batch_desc.override |= (0<<12)<<16; /* NBI is 2 bits */
+    //batch_desc.override |= batch_desc.queue << 16; /* For the packet complete */
+    batch_desc.override |= 0 << 16; /* queue 0 */
     for (;;) {
         struct tx_pkt_work tx_pkt_work;
         struct ctm_pkt_desc ctm_pkt_desc;
@@ -347,20 +456,18 @@ pktgen_tx_slave(void)
 
         tx_slave_get_pkt_in_batch(&tx_pkt_work);
         if (tx_pkt_work.script_ofs == 0) {
-            tx_slave_incr_batch_seq();
             continue;
         }
-        tx_slave_wait_for_batch_seq(&tx_pkt_work);
-        tx_slave_read_script_start(&tx_pkt_work, &script_sig);
+        tx_slave_wait_for_tx_seq(&tx_pkt_work);
+        tx_slave_read_script_start(&tx_pkt_work, &script, &script_sig);
         tx_slave_alloc_pkt(&ctm_pkt_desc);
         tx_slave_dma_pkt_start(&tx_pkt_work, &ctm_pkt_desc, &dma_sig);
-        ctx_wait(&script_sig);
+        wait_for_all(&script_sig);
         tx_slave_script_start(&ctm_pkt_desc, &script, &script_finish);
-        ctx_wait(&dma_sig);
+        wait_for_all(&dma_sig);
         tx_slave_script_finish(&ctm_pkt_desc, &script_finish);
         tx_slave_wait_for_tx_time(&tx_pkt_work);
         tx_slave_pkt_tx(&tx_pkt_work, &ctm_pkt_desc);
-        tx_slave_incr_batch_seq();
     }
 }
 
@@ -368,23 +475,64 @@ pktgen_tx_slave(void)
  */
 __intrinsic void
 batch_dist_add_pkt_to_batch(struct batch_work *batch_work,
-                            struct flow_entry *flow_entry,
-                            struct batch_desc *batch_desc,
+                            __xread struct flow_entry *flow_entry,
                             __xwrite struct tx_pkt_work *tx_pkt_work_out,
                             int i,
                             SIGNAL *sig)
 {
-        tx_seq = batch_work->tx_seq;
-        tx_pkt_work->tx_time_lo = batch_work->tx_time_lo + flow_entry->tx_time_lo;
-        tx_pkt_work->tx_time_hi = batch_work->tx_time_hi + flow_entry->tx_time_hi; /* carry */
-        tx_pkt_work->mu_base_s8 = flow_entry->mu_base_s8;
-        tx_pkt_work->script_ofs = flow_entry->script_ofs;
-        tx_pkt_work->batch_seq  = batch_work->batch_seq;
-        tx_pkt_work->tx_seq     = tx_seq+i;
-        tx_pkt_work_out[i] = tx_pkt_work;
-        mem_workq_add_work_async(batch_desc->muq, (void *)tx_pkt_work_out,
-                                 sizeof(tx_pkt_work), sig);
-    }
+    uint32_t tx_seq;
+    struct tx_pkt_work tx_pkt_work;
+
+    tx_seq = batch_work->tx_seq;
+    tx_pkt_work.tx_time_lo = batch_work->tx_time_lo + flow_entry->tx_time_lo;
+    tx_pkt_work.tx_time_hi = batch_work->tx_time_hi + flow_entry->tx_time_hi; /* carry */
+    tx_pkt_work.mu_base_s8 = flow_entry->mu_base_s8;
+    tx_pkt_work.script_ofs = flow_entry->script_ofs;
+    tx_pkt_work.length     = flow_entry->length;
+    tx_pkt_work.tx_seq     = tx_seq+i;
+    tx_pkt_work_out[i] = tx_pkt_work;
+    mem_workq_add_work_async(batch_desc_array[i].muq, (void *)tx_pkt_work_out,
+                             sizeof(tx_pkt_work), sig);
+}
+
+/** batch_dist_distribute_flow_entries
+ */
+__intrinsic
+void batch_dist_distribute_flow_entries(struct batch_work *batch_work,
+                                        __xread struct flow_entry *flow_entries)
+{
+    __xwrite struct tx_pkt_work tx_pkt_work[8];
+    SIGNAL sig0, sig1, sig2, sig3, sig4, sig5, sig6, sig7;
+    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[0], &tx_pkt_work[0], 0, &sig0 );
+    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[1], &tx_pkt_work[1], 1, &sig1 );
+    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[2], &tx_pkt_work[2], 2, &sig2 );
+    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[3], &tx_pkt_work[3], 3, &sig3 );
+    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[4], &tx_pkt_work[4], 4, &sig4 );
+    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[5], &tx_pkt_work[5], 5, &sig5 );
+    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[6], &tx_pkt_work[6], 6, &sig6 );
+    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[7], &tx_pkt_work[7], 7, &sig7 );
+    wait_for_all(&sig0, &sig1, &sig2, &sig3, &sig4, &sig5, &sig6, &sig7);
+}
+
+/** batch_dist_get_batch_work
+ */
+__intrinsic void
+batch_dist_get_batch_work(struct batch_work *batch_work)
+{
+    __xread struct batch_work batch_work_in;
+    mem_workq_add_thread(batch_work_muq, (void *)&batch_work_in,
+                       sizeof(batch_work));
+    *batch_work = batch_work_in;
+}
+
+/** batch_dist_get_flow_entries
+ */
+__intrinsic void
+batch_dist_get_flow_entries(struct batch_work *batch_work,
+                            __xread struct flow_entry flow_entries[8])
+{
+    mem_read64_s8( flow_entries, batch_work->mu_base_s8,
+                   batch_work->work_ofs, sizeof(flow_entries));
 }
 
 /** pktgen_batch_distributor
@@ -409,22 +557,103 @@ pktgen_batch_distributor(void)
 {
     for (;;) {
         struct batch_work batch_work;
-        struct tx_pkt_work tx_pkt_work;
         struct ctm_pkt_desc ctm_pkt_desc;
-        SIGNAL sig0, sig1, sig2, sig3, sig4, sig5, sig6, sig7;
+        __xread struct flow_entry flow_entries[8];
 
         batch_dist_get_batch_work(&batch_work);
-        batch_dist_get_flow_entries(&batch_work, &flow_entries[0]);
-        batch_dist_add_pkt_to_batch(&batch_work, &flow_entries[0], &batch_desc[0], &sig0 );
-        batch_dist_add_pkt_to_batch(&batch_work, &flow_entries[1], &batch_desc[1], &sig1 );
-        batch_dist_add_pkt_to_batch(&batch_work, &flow_entries[2], &batch_desc[2], &sig2 );
-        batch_dist_add_pkt_to_batch(&batch_work, &flow_entries[3], &batch_desc[3], &sig3 );
-        batch_dist_add_pkt_to_batch(&batch_work, &flow_entries[4], &batch_desc[4], &sig4 );
-        batch_dist_add_pkt_to_batch(&batch_work, &flow_entries[5], &batch_desc[5], &sig5 );
-        batch_dist_add_pkt_to_batch(&batch_work, &flow_entries[6], &batch_desc[6], &sig6 );
-        batch_dist_add_pkt_to_batch(&batch_work, &flow_entries[7], &batch_desc[7], &sig7 );
-        wait_for_all(&sig0, &sig1, &sig2, &sig3, &sig4, &sig5, &sig6, &sig7);
+        batch_dist_get_flow_entries(&batch_work, flow_entries);
+        batch_dist_distribute_flow_entries(&batch_work, flow_entries);
     }
+}
+
+/** tx_master_add_batch_work
+ */
+__intrinsic void
+tx_master_add_batch_work(struct batch_work *batch_work)
+{
+    __xwrite struct batch_work batch_work_out;
+    batch_work_out = *batch_work;
+    mem_workq_add_work(batch_work_muq, (void *)&batch_work_out,
+                       sizeof(batch_work));
+}
+
+/** tx_master_distribute_schedule
+ * The batches are credit-managed
+ *
+ * Probably need to do a number of batch_works at the same time to get
+ * the rate up, since each batch work is 8 packets
+ *
+ * A burst of 4 at one time would be good.
+ *
+ */
+void
+tx_master_distribute_schedule(uint64_t base_time,
+                              int total_pkts,
+                              uint32_t mu_base_s8,
+                              uint32_t *tx_seq)
+{
+    struct batch_work batch_work;
+    int num_batches;
+
+    num_batches = (total_pkts + 7) &~ 7;
+
+    batch_work.tx_time_lo = (uint32_t) base_time;
+    batch_work.tx_time_hi = ((uint32_t) (base_time >> 32)) & 0xff;
+    batch_work.mu_base_s8 = mu_base_s8;
+    batch_work.work_ofs = 0;
+    batch_work.tx_seq = *tx_seq;
+    batch_work.num_valid_pkts = 8;
+    *tx_seq = *tx_seq + total_pkts;
+
+    while (num_batches>0) {
+        //if (too backed up) {
+        //    me_sleep(poll_interval);
+        //    read_backup();
+        //    continue;
+        //}
+        if (total_pkts<8) {
+            batch_work.num_valid_pkts = total_pkts;
+        }
+        tx_master_add_batch_work(&batch_work);
+        batch_work.work_ofs += 128;
+        batch_work.tx_seq += 8;
+        total_pkts -= 8;
+        num_batches -= 1;
+    }
+}
+
+/** host_get_cmd
+ *
+ * Get a command from the host
+ *
+ * @param host_data   Host data read at init time
+ * @param host_cmd    Host command from the host
+ *
+ */
+static void
+host_get_cmd(struct host_data *host_data,
+             __xread struct host_cmd *host_cmd)
+{
+    uint32_t addr; /* Address in CLS of host data / ring */
+    uint32_t ofs;  /* Offset in to ring of 'rptr' entry */
+
+    addr = host_data->cls_host_shared_data;
+    if (host_data->wptr == host_data->rptr) {
+        __xread uint32_t wptr; /* Xfer to read CLS wptr */
+        for (;;) {
+            cls_read(&wptr, (__cls void *)addr, 0,
+                     sizeof(uint32_t));
+            if (wptr != host_data->rptr) break;
+            me_sleep(poll_interval);
+        }
+        host_data->wptr = wptr;
+    }
+    addr = host_data->cls_host_ring_base;
+    ofs = host_data->rptr & host_data->cls_host_ring_item_mask;
+    ofs = ofs << 3;
+    cls_read(host_cmd, (__cls void *)addr, ofs, 
+                 sizeof(host_cmd));
+    host_data->rptr++;
 }
 
 /** pktgen_master
@@ -442,48 +671,45 @@ pktgen_batch_distributor(void)
  *
  * When started it distributes the work over the batch work queues
  *
- * The batches are credit-managed
- *
- * Probably need to do a number of batch_works at the same time to get
- * the rate up, since each batch work is 8 packets
- *
- * A burst of 4 at one time would be good.
- *
  */
 void
 pktgen_master(void)
 {
+    struct host_data host_data; /* Host data cached in shared registers */
+    int buf_seq; /* Monotonically increasing buffer sequence number */
     int tx_seq;
-    tx_seq = 0;
 
+    host_data.cls_host_shared_data = __alloc_resource("hd cls_host_data island 64");
+    host_data.rptr = 0;
+    host_data.wptr = 0;
+
+    tx_seq = 0;
     for (;;) {
-        int batch_seq;
-        int num_batches;
-        int total_pkts;
-        int40 base_time;
-        batch_seq = 0;
-        batch_work.base_time = now + delay;
-        batch_work.work_ofs = 0;
-        batch_work.num_valid_pkts = 8;
-        while (num_batches>0) {
-            if (too backed up) {
-                me_sleep(poll_interval);
-                read_backup();
-                continue;
-            }
-            batch_work.tx_seq = tx_seq;
-            batch_work.batch_seq = batch_seq;
-            if (total_pkts<8) {
-                batch_work.num_valid_pkts = total_pkts;
-            }
-            tx_master_add_batch_work(&batch_work);
-            batch_work.work_ofs += 128;
-            batch_seq += 1;
-            tx_seq += 8;
-            total_pkts -= 8;
-            num_batches -= 1;
+        __xread uint32_t mu_base_s8;
+        __xread struct host_cmd host_cmd;
+
+        host_get_cmd(&host_data, &host_cmd);
+        if (1) {
+            uint64_t base_time;
+            int total_pkts;
+            uint32_t mu_base_s8;
+            base_time = me_time64() + host_cmd.cmd.base_delay;
+            mu_base_s8 = host_cmd.cmd.mu_base_s8;
+            total_pkts = host_cmd.cmd.total_pkts;
+            tx_master_distribute_schedule(base_time, total_pkts,
+                                          mu_base_s8, &tx_seq);
         }
-        tx_seq -= ((-total_pkts)&7);
     }
 }
 
+/** pktgen_master_init
+ */
+void pktgen_master_init(void)
+{
+}
+
+/** pktgen_batch_distributor_init
+ */
+void pktgen_batch_distributor_init(void)
+{
+}

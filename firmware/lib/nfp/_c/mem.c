@@ -69,6 +69,30 @@ mem_read64(__xread void *data, __mem void *addr, const size_t size)
     }
 }
 
+/** mem_read64_s8
+ *
+ * @param data     Transfer registers to read
+ * @param base_s8  Base address in MU >> 8
+ * @param ofs      Offset in bytes from MU base
+ * @param size     Size in bytes to write (must be multiple of 8)
+ *
+ */
+__intrinsic void
+mem_read64_s8(__xread void *data,
+              uint32_t base_s8,
+              uint32_t ofs,
+              const size_t size)
+{
+    SIGNAL sig;
+    uint32_t size_in_uint64;
+
+    size_in_uint64 = size >> 3;
+    __asm {
+        mem[read, *data, base_s8, <<8, ofs, \
+            __ct_const_val(size_in_uint64)], ctx_swap[sig];
+    }
+}
+
 /** mem_write64
  *
  * @param data   Transfer registers to write
@@ -86,6 +110,30 @@ mem_write64(__xwrite void *data, __mem void *addr, const size_t size)
     addr_hi = (uint32_t)(((uint64_t)addr)>>8);
     __asm {
         mem[write, *data, addr_hi, <<8, addr_lo, \
+            __ct_const_val(size_in_uint64)], ctx_swap[sig];
+    }
+}
+
+/** mem_write64_s8
+ *
+ * @param data     Transfer registers to write
+ * @param base_s8  Base address in MU >> 8
+ * @param ofs      Offset in bytes from MU base
+ * @param size     Size in bytes to write (must be multiple of 8)
+ *
+ */
+__intrinsic void
+mem_write64_s8(__xwrite void *data,
+              uint32_t base_s8,
+              uint32_t ofs,
+              const size_t size)
+{
+    SIGNAL sig;
+    uint32_t size_in_uint64;
+
+    size_in_uint64 = size >> 3;
+    __asm {
+        mem[write, *data, base_s8, <<8, ofs, \
             __ct_const_val(size_in_uint64)], ctx_swap[sig];
     }
 }
@@ -126,6 +174,22 @@ mem_workq_add_work(uint32_t mu_qdesc, __xwrite uint32_t *data, int size)
     mu = MU_QDESC_MU(mu_qdesc);
     __asm {
         mem[qadd_work, *data, mu,<<8,qa, size_in_words], ctx_swap[sig];
+    }
+}
+
+/** mem_workq_add_work_async
+ */
+__intrinsic void mem_workq_add_work_async(uint32_t mu_qdesc,
+                                          __xwrite uint32_t *data,
+                                          int size,
+                                          SIGNAL *sig)
+{
+    int size_in_words = size>>2;
+    uint32_t qa, mu;
+    qa = MU_QDESC_QA(mu_qdesc);
+    mu = MU_QDESC_MU(mu_qdesc);
+    __asm {
+        mem[qadd_work, *data, mu,<<8,qa, size_in_words], sig_done[*sig];
     }
 }
 
