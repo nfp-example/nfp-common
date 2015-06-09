@@ -25,3 +25,4 @@
 #include "_c/me.c"
 #include "_c/mem.c"
 #include "_c/pcie.c"
+#include "_c/xpb.c"

@@ -170,7 +170,8 @@
 
 /** Memory declarations
  */
-_declare_resource("cls_host_data island 64")
+_declare_resource("cls_host_pktgen island 64")
+#define ALLOC_HOST_SHARED_DATA() __alloc_resource("hd cls_host_pktgen island 64")
 
 /** struct host_data
  */
@@ -679,7 +680,7 @@ pktgen_master(void)
     int buf_seq; /* Monotonically increasing buffer sequence number */
     int tx_seq;
 
-    host_data.cls_host_shared_data = __alloc_resource("hd cls_host_data island 64");
+    host_data.cls_host_shared_data = ALLOC_HOST_SHARED_DATA();
     host_data.rptr = 0;
     host_data.wptr = 0;
 

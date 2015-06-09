@@ -48,14 +48,17 @@ $(eval $(call nffw.link,pcap))
 #a Packet generator firmware
 $(eval $(call micro_c.add_src_lib,pktgen_host,app,pktgen_lib))
 $(eval $(call micro_c.add_fw_libs,pktgen_host,nfp sync))
-$(eval $(call micro_c.add_define,pktgen_host,PCAP_RX_ISLAND))
 $(eval $(call micro_c.compile,pktgen_host,app,pktgen_host.c))
 
-$(eval $(call microcode.assemble_init,pktgen_init,app,pktgen_init.uc))
+$(eval $(call micro_c.add_src_lib,pktgen_tx_slave,app,pktgen_lib))
+$(eval $(call micro_c.add_fw_libs,pktgen_tx_slave,nfp sync))
+$(eval $(call micro_c.compile,pktgen_tx_slave,app,pktgen_tx_slave.c))
+
+$(eval $(call micro_c.add_fw_libs,pktgen_init,nfp sync))
+$(eval $(call micro_c.compile,pktgen_init,app,pktgen_init.c))
 
 $(eval $(call nffw.add_obj_with_mes,pktgen,pktgen_host,i4.me2))
-#$(eval $(call nffw.add_obj_with_mes,pktgen,pktgen_recycle,i4.me3))
-#$(eval $(call nffw.add_obj_with_mes,pktgen,pktgen_rx,i32.me0 i33.me0 i34.me0))
-$(eval $(call nffw.add_init_obj,pktgen,pktgen_init))
+$(eval $(call nffw.add_obj_with_mes,pktgen,pktgen_tx_slave,i32.me0 i32.me1 i32.me2 i32.me3 i32.me4 i32.me5 i32.me6 i32.me7 i33.me0 i33.me1 i33.me2 i33.me3 i33.me4 i33.me5 i33.me6 i33.me7))
+$(eval $(call nffw.add_obj_with_mes,pktgen,pktgen_init,i5.me2))
 $(eval $(call nffw.link,pktgen))
 

@@ -13,6 +13,7 @@
  *
  * 1 host island
  * 2 Tx islands
+ * 1 init island
  *
  * Host island is two MEs
  *  First ME:
@@ -23,14 +24,20 @@
  * Tx islands is eight MEs (one par batch)
  *  All threads run packet receive
  */
-#define PKTGEN_ISLANDS (1+2)
+#define PKTGEN_TX_ISLANDS 2
+#define PKTGEN_ISLANDS (1+1+PKTGEN_TX_ISLANDS)
 
 #define PKTGEN_HOST_CTXTS 8
-#define PKTGEN_HOST_MES 2
+#define PKTGEN_HOST_MES 1
 
 #define PKTGEN_TX_CTXTS 8
 #define PKTGEN_TX_MES 8
 
-#define PKTGEN_INIT_STAGES 2
-#define PKTGEN_INIT_STAGE_PREHOST_LOAD 1
-#define PKTGEN_INIT_STAGE_READY_TO_RUN 2
+#define PKTGEN_INIT_CTXTS 1
+#define PKTGEN_INIT_MES 1
+
+#define PKTGEN_INIT_STAGES 4
+#define PKTGEN_INIT_STAGE_CSR_INIT      1
+#define PKTGEN_INIT_STAGE_WAIT_FOR_HOST 2
+#define PKTGEN_INIT_STAGE_HOST_STARTED  3
+#define PKTGEN_INIT_STAGE_READY_TO_RUN  4

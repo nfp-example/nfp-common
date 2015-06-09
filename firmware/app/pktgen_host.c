@@ -22,6 +22,7 @@ SYNC_STAGE_SET_PREINIT(PKTGEN_INIT_STAGES,PKTGEN_HOST_CTXTS,PKTGEN_HOST_MES,PKTG
  */
 void main(void)
 {
+    sync_state_set_stage_complete(PKTGEN_INIT_STAGE_PREHOST_LOAD);
     if (ctx()==0) {
         pktgen_master_init();
     } else {

@@ -277,7 +277,7 @@ class c_schedule(object):
             schedfile.write(batch_data)
             pass
         tf = tarfile.open(name=filename, mode='w:gz')
-        add_to_tarfile(tf,memfile,'mem')
+        add_to_tarfile(tf,memfile,'pkt_data')
         add_to_tarfile(tf,schedfile,'sched')
         schedfile.close()
         memfile.close()

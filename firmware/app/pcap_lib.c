@@ -127,13 +127,8 @@ enum {
 
 /** Static data used globally
  */
-__asm {
-    /* mu_buf_desc_store : struct mu_buf_desc
-     *
-     * This is the shared buffer allocation descriptor
-     */
-    .alloc_mem mu_buf_desc_store emem global 8;
-};
+/* mu_buf_desc_store : struct mu_buf_desc */
+_alloc_mem("mu_buf_desc_store emem global 8")
 
 /** Queue descriptors and allocations
  */
@@ -157,23 +152,25 @@ MU_QUEUE_ALLOC(QDEF_TO_HOST_DMA);
 /** Memory allocation for packet receive threads
  */
 #ifdef PCAP_RX_ISLAND
-__asm {
-    /* cls_ctm_dmas : struct cls_ctm_dma_credit */
-    .alloc_mem cls_ctm_dmas cls island 8; 
-};
+/* cls_ctm_dmas : struct cls_ctm_dma_credit */
+_alloc_mem("cls_ctm_dmas cls island 8")
 #endif
 
 /** Memory allocation for host interaction threads
  */
 #ifdef PCAP_HOST_ISLAND
-__asm {
-    /* cls_host_shared_data : uint32 wptr */
-    .alloc_mem   cls_host_shared_data  cls global CLS_HOST_SHARED_DATA;
-    /* cls_host_ring_base:
-     *                struct pcie_buf_desc[CLS_HOST_RING_SIZE/8] */
-    .alloc_mem   cls_host_ring_base    cls global CLS_HOST_RING_SIZE;
-}
+#define __STR(a) #a
+#define STR(a) __STR(a)
+#define ALLOC_MEM(res,mem,scope,size) \
+    _alloc_mem(STR(res) " " STR(mem) " " STR(scope) " " STR(size))
+#define ALLOC_RES(name,pool,scope,size) \
+    __alloc_resource(STR(name) " " STR(pool) " " STR(scope) " " STR(size))
+
+ALLOC_MEM(cls_host_shared_data,cls,global,CLS_HOST_SHARED_DATA)
+ALLOC_MEM(cls_host_ring_base,  cls,global,CLS_HOST_RING_SIZE)
 #endif /* PCAP_HOST_ISLAND */
+
+#define ALLOC_CLS_HOST_RING() ALLOC_RES(chr,cls_host_ring_base,island,64)
 
 /** Static data for all thread types
  *
