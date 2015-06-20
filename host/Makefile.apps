@@ -31,3 +31,19 @@ clean_host__pcap_test:
 
 pcap_test: $(HOST_BIN_DIR)/pcap_test
 
+
+$(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/pktgencap.o
+$(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/nfp_support.o
+
+$(HOST_BIN_DIR)/pktgencap:
+	$(LD) -o $(HOST_BIN_DIR)/pktgencap $(HOST_BUILD_DIR)/pktgencap.o $(HOST_BUILD_DIR)/nfp_support.o $(LIBS)
+
+all_host: pktgencap
+
+clean_host: clean_host__pktgencap
+
+clean_host__pktgencap:
+	rm $(HOST_BIN_DIR)/pktgencap
+
+pktgencap: $(HOST_BIN_DIR)/pktgencap
+
