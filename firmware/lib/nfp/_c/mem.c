@@ -48,6 +48,40 @@ struct queue_desc {
     };
 };
 
+/** MEM_QUEUE_OP
+ */
+#define MEM_QUEUE_OP(fn_name,queue_op) \
+__intrinsic void fn_name(uint32_t mu_qdesc, \
+                         __xwrite uint32_t *data, \
+                         int size) \
+{ \
+    int size_in_words = size>>2; \
+    uint32_t qa, mu; \
+    SIGNAL sig; \
+    qa = MU_QDESC_QA(mu_qdesc); \
+    mu = MU_QDESC_MU(mu_qdesc); \
+    __asm { \
+        mem[queue_op, *data, mu,<<8,qa, size_in_words], ctx_swap[sig]; \
+    } \
+}
+
+/** MEM_QUEUE_OP_ASYNC
+ */
+#define MEM_QUEUE_OP_ASYNC(fn_name,queue_op) \
+__intrinsic void fn_name(uint32_t mu_qdesc, \
+                         __xwrite uint32_t *data, \
+                         int size, \
+                         SIGNAL *sig) \
+{ \
+    int size_in_words = size>>2; \
+    uint32_t qa, mu; \
+    qa = MU_QDESC_QA(mu_qdesc); \
+    mu = MU_QDESC_MU(mu_qdesc); \
+    __asm { \
+        mem[queue_op, *data, mu,<<8,qa, size_in_words], sig_done[*sig]; \
+    } \
+}
+
 /** mem_read64
  *
  * @param data   Transfer registers to read
@@ -164,49 +198,27 @@ mem_atomic_write_s8(__xwrite void *xfr, uint32_t base_s8, uint32_t ofs, int size
 
 /** mem_workq_add_work
  */
-__intrinsic void
-mem_workq_add_work(uint32_t mu_qdesc, __xwrite uint32_t *data, int size)
-{
-    int size_in_words = size>>2;
-    uint32_t qa, mu;
-    SIGNAL sig;
-    qa = MU_QDESC_QA(mu_qdesc);
-    mu = MU_QDESC_MU(mu_qdesc);
-    __asm {
-        mem[qadd_work, *data, mu,<<8,qa, size_in_words], ctx_swap[sig];
-    }
-}
+MEM_QUEUE_OP(mem_workq_add_work,qadd_work);
 
 /** mem_workq_add_work_async
  */
-__intrinsic void mem_workq_add_work_async(uint32_t mu_qdesc,
-                                          __xwrite uint32_t *data,
-                                          int size,
-                                          SIGNAL *sig)
-{
-    int size_in_words = size>>2;
-    uint32_t qa, mu;
-    qa = MU_QDESC_QA(mu_qdesc);
-    mu = MU_QDESC_MU(mu_qdesc);
-    __asm {
-        mem[qadd_work, *data, mu,<<8,qa, size_in_words], sig_done[*sig];
-    }
-}
+MEM_QUEUE_OP_ASYNC(mem_workq_add_work_async,qadd_work);
 
 /** mem_workq_add_thread
  */
-__intrinsic void
-mem_workq_add_thread(uint32_t mu_qdesc, __xread uint32_t *data, int size)
-{
-    int size_in_words = size>>2;
-    uint32_t qa, mu;
-    SIGNAL sig;
-    qa = MU_QDESC_QA(mu_qdesc);
-    mu = MU_QDESC_MU(mu_qdesc);
-    __asm {
-        mem[qadd_thread, *data, mu,<<8,qa, size_in_words], ctx_swap[sig];
-    }
-}
+MEM_QUEUE_OP(mem_workq_add_thread,qadd_thread);
+
+/** mem_workq_add_thread_async
+ */
+MEM_QUEUE_OP_ASYNC(mem_workq_add_thread_async,qadd_thread);
+
+/** mem_ring_journal
+ */
+MEM_QUEUE_OP(mem_ring_journal,journal);
+
+/** mem_ring_journal_async
+ */
+MEM_QUEUE_OP_ASYNC(mem_ring_journal_async,journal);
 
 /** mem_queue_config_write
  *

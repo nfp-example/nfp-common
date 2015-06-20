@@ -40,13 +40,22 @@ Read the documentation in the doc/ directory.  It is quite rough, but it
 
 The packages installed for building on Ubuntu comprise:
 
-* libjansson-dev
+* POSSIBLY NOT: libjansson-dev?
 
 * libhugetlbfs-dev
 
 * nfp-bsp
 
 * nfp-sdk
+
+To get these from stock Ubuntu LTS14.04:
+
+ apt-get install dkms
+ apt-get install libhugetlbfs-dev
+
+Don't forget to load the NFP kernel module with
+
+ insmod /lib/modules/3.13.0-53-generic/updates/dkms/nfp.ko
 
 ## Support
 
