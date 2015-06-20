@@ -44,13 +44,13 @@ struct tmq_config {
 /** Constant TM Queue configurations
  */
 const struct tmq_config tmq_config_1024_of_16 = {
-    0; 1024; 0; 4;
+    0, 1024, 0, 4
 };
 const struct tmq_config tmq_config_all_disabled = {
-    0; 1024; 0; 0;
+    0, 1024, 0, 0
 };
 const struct tmq_config tmq_config_q0_16k = {
-    0; 1; 0; 14;
+    0, 1, 0, 14
 };
 
 /** nbi_write64_s8
@@ -99,6 +99,7 @@ void network_base_init(void)
  */
 void network_init_ctm(int island, int mem_for_pkts)
 {
+    uint32_t xpb_base;
     xpb_base = ( (1 << 31) |
                  (island << 24) |
                  (7 << 16) );
@@ -158,7 +159,7 @@ void init_dma_buffer_list(int island, int buffer_list, int num_buffers, uint64_t
         data += (stride >> 11);
     }
     ofs = 0x8000 + (buffer_list << 3); // base of 0x68000 for TMHeadTailSram
-    data[0] = num_buffers; // MUST BE LESS THAN 512 SINCE WE ARE SETTING SIZE TO 512
+    data_out[0] = num_buffers; // MUST BE LESS THAN 512 SINCE WE ARE SETTING SIZE TO 512
     nbi_write64_s8(data_out, base_s8, ofs, sizeof(data_out));
 }
 
@@ -185,14 +186,15 @@ void network_init_dma(int island, int ctm_offset, int split_length)
         xpb_write(xpb_base_nbi_dma, 0x40 | (i << 2), 0 );
     }
 
-    xpb_write( xpb_base, 0x40, ((4 << 21) | /* CTM 4 */
-                                (64 << 10) | /* 64 packet credits */
-                                (64 << 0)) ); /* 64 2kB buffer credits */
+    xpb_write(xpb_base_nbi_dma, 0x40, ((4 << 21) | /* CTM 4 */
+                                       (64 << 10) | /* 64 packet credits */
+                                       (64 << 0)) ); /* 64 2kB buffer credits */
+
     /* Mark BPE0 is end of chain
      */
-    xpb_write( xpb_base, 0x18, (1<<0) );
+    xpb_write(xpb_base_nbi_dma, 0x18, (1<<0) );
 
-    init_dma_buffer_list( island, 0, 128, ((2LL<<38)|(28LL<<32)|0LL), 2048 );
+    init_dma_buffer_list(island, 0, 128, ((2LL<<38)|(28LL<<32)|0LL), 2048 );
 }
 
 /** network_init_tm_queues
@@ -203,11 +205,14 @@ void network_init_dma(int island, int ctm_offset, int split_length)
  * Write the head/tail SRAM and queue config for a range of queues
  *
  */
-__intrinsic void network_init_tm_queues(int island, struct tmq_config *tmq_config)
+__intrinsic void network_init_tm_queues(int island,
+                                        const struct tmq_config *tmq_config)
 {
     uint32_t nbi_base_s8;
     uint32_t xpb_base_nbi;
     SIGNAL sig;
+    int queue, entry, log2_size, enable;
+    int sram_offset, xpb_offset;
     int i;
 
     nbi_base_s8 = ( ((island & 3) << 30) |
@@ -236,7 +241,7 @@ __intrinsic void network_init_tm_queues(int island, struct tmq_config *tmq_confi
         head_tail = (head_tail << 14) | head_tail;
 
         head_tail_out = head_tail << 32; /* As the compiler is BE, HW is LWBE */
-        nbi_write64_s8(head_tail_out, nbi_base_s8, sram_offset, sizeof(head_tail_out));
+        nbi_write64_s8(&head_tail_out, nbi_base_s8, sram_offset, sizeof(head_tail_out));
         sram_offset += 8;
         xpb_offset  += 4;
         entry += 1 << log2_size;
@@ -254,11 +259,11 @@ static void network_init_tm(int island)
                                  (island << 24) |
                                  (0x14 << 16) );
 
-    xpb_write(xpb_base_nbi, 0, 0x1d40 ); /* MiniPacketFCEnable, NumSequencers 0, SchedulerEnable,
+    xpb_write(xpb_base_nbi_tm, 0, 0x1d40 ); /* MiniPacketFCEnable, NumSequencers 0, SchedulerEnable,
                                             Sequencer0Enable,
                                             DescQueuesEnable, LevelCheckEnable */
-    xpb_write(xpb_base_nbi, 0x0300, 0x1200014); /* CreditLimit 0x14, FPCreditLimit 0x200, MiniPacketFCMode 1*/
-    xpb_write(xpb_base_nbi, 8, 0xf); /* BLQEventStatusEnable=0xf */
+    xpb_write(xpb_base_nbi_tm, 0x0300, 0x1200014); /* CreditLimit 0x14, FPCreditLimit 0x200, MiniPacketFCMode 1*/
+    xpb_write(xpb_base_nbi_tm, 8, 0xf); /* BLQEventStatusEnable=0xf */
 }
 
 /** main - Initialize, then run

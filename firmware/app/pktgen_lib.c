@@ -430,6 +430,34 @@ tx_slave_pkt_tx(struct tx_pkt_work *tx_pkt_work,
     }
 }
 
+/** tx_slave_script_start
+ * Start the script, and keep anything for the finish in script_finish
+ * After this call 'script' will be disposed of
+ */
+void
+tx_slave_script_start(struct ctm_pkt_desc *ctm_pkt_desc,
+                      __xread struct script *script,
+                      struct script_finish *script_finish)
+{
+}
+
+/** tx_slave_script_finish
+ * Start the script, and keep anything for the finish in script_finish
+ */
+void
+tx_slave_script_finish(struct ctm_pkt_desc *ctm_pkt_desc,
+                      struct script_finish *script_finish)
+{
+}
+
+/** tx_slave_wait_for_tx_time
+ * Should wait until the transmit time required
+ */
+void
+tx_slave_wait_for_tx_time(struct tx_pkt_work *tx_pkt_work)
+{
+}
+
 /** pktgen_tx_slave
  * 10i+150 + 6i+15 + ?i + 8i+300 + ?i + 4i+500 + ?i+150 + wait + 10i
  *
@@ -712,5 +740,11 @@ void pktgen_master_init(void)
 /** pktgen_batch_distributor_init
  */
 void pktgen_batch_distributor_init(void)
+{
+}
+
+/** pktgen_tx_slave_init
+ */
+void pktgen_tx_slave_init(void)
 {
 }

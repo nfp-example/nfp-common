@@ -50,9 +50,9 @@ struct queue_desc {
 
 /** MEM_QUEUE_OP
  */
-#define MEM_QUEUE_OP(fn_name,queue_op) \
+#define MEM_QUEUE_OP(fn_name,queue_op,data_type)     \
 __intrinsic void fn_name(uint32_t mu_qdesc, \
-                         __xwrite uint32_t *data, \
+                         data_type data, \
                          int size) \
 { \
     int size_in_words = size>>2; \
@@ -61,15 +61,15 @@ __intrinsic void fn_name(uint32_t mu_qdesc, \
     qa = MU_QDESC_QA(mu_qdesc); \
     mu = MU_QDESC_MU(mu_qdesc); \
     __asm { \
-        mem[queue_op, *data, mu,<<8,qa, size_in_words], ctx_swap[sig]; \
+        mem[queue_op, *data, mu,<<8,qa, size_in_words], ctx_swap[sig] \
     } \
 }
 
 /** MEM_QUEUE_OP_ASYNC
  */
-#define MEM_QUEUE_OP_ASYNC(fn_name,queue_op) \
+#define MEM_QUEUE_OP_ASYNC(fn_name,queue_op,data_type)   \
 __intrinsic void fn_name(uint32_t mu_qdesc, \
-                         __xwrite uint32_t *data, \
+                         data_type data, \
                          int size, \
                          SIGNAL *sig) \
 { \
@@ -78,9 +78,25 @@ __intrinsic void fn_name(uint32_t mu_qdesc, \
     qa = MU_QDESC_QA(mu_qdesc); \
     mu = MU_QDESC_MU(mu_qdesc); \
     __asm { \
-        mem[queue_op, *data, mu,<<8,qa, size_in_words], sig_done[*sig]; \
+        mem[queue_op, *data, mu,<<8,qa, size_in_words], sig_done[*sig] \
     } \
 }
+
+/** MEM_QUEUE_READ_OP
+ */
+#define MEM_QUEUE_READ_OP(fn_name,queue_op) MEM_QUEUE_OP(fn_name,queue_op,__xread uint32_t *)
+
+/** MEM_QUEUE_READ_OP_ASYNC
+ */
+#define MEM_QUEUE_READ_OP_ASYNC(fn_name,queue_op) MEM_QUEUE_OP_ASYNC(fn_name,queue_op,__xread uint32_t *)
+
+/** MEM_QUEUE_WRITE_OP
+ */
+#define MEM_QUEUE_WRITE_OP(fn_name,queue_op) MEM_QUEUE_OP(fn_name,queue_op,__xwrite uint32_t *)
+
+/** MEM_QUEUE_WRITE_OP_ASYNC
+ */
+#define MEM_QUEUE_WRITE_OP_ASYNC(fn_name,queue_op) MEM_QUEUE_OP_ASYNC(fn_name,queue_op,__xwrite uint32_t *)
 
 /** mem_read64
  *
@@ -198,27 +214,27 @@ mem_atomic_write_s8(__xwrite void *xfr, uint32_t base_s8, uint32_t ofs, int size
 
 /** mem_workq_add_work
  */
-MEM_QUEUE_OP(mem_workq_add_work,qadd_work);
+MEM_QUEUE_WRITE_OP(mem_workq_add_work,qadd_work);
 
 /** mem_workq_add_work_async
  */
-MEM_QUEUE_OP_ASYNC(mem_workq_add_work_async,qadd_work);
+MEM_QUEUE_WRITE_OP_ASYNC(mem_workq_add_work_async,qadd_work);
 
 /** mem_workq_add_thread
  */
-MEM_QUEUE_OP(mem_workq_add_thread,qadd_thread);
+MEM_QUEUE_READ_OP(mem_workq_add_thread,qadd_thread);
 
 /** mem_workq_add_thread_async
  */
-MEM_QUEUE_OP_ASYNC(mem_workq_add_thread_async,qadd_thread);
+MEM_QUEUE_READ_OP_ASYNC(mem_workq_add_thread_async,qadd_thread);
 
 /** mem_ring_journal
  */
-MEM_QUEUE_OP(mem_ring_journal,journal);
+MEM_QUEUE_WRITE_OP(mem_ring_journal,journal);
 
 /** mem_ring_journal_async
  */
-MEM_QUEUE_OP_ASYNC(mem_ring_journal_async,journal);
+MEM_QUEUE_WRITE_OP_ASYNC(mem_ring_journal_async,journal);
 
 /** mem_queue_config_write
  *
