@@ -24,6 +24,7 @@
 #include <stdint.h> 
 #include <string.h> 
 #include "nfp_support.h"
+#include "pktgen_mem.h"
 
 /** Defines
  */
@@ -37,25 +38,7 @@ struct pktgen_nfp {
     char *pcie_base;
     uint64_t pcie_base_addr, p;
     long pcie_size, s;
-};
-
-/** struct pktgen_mem_region
- */
-struct pktgen_mem_region {
-    const char *filename;
-    FILE *file;
-    int data_size;
-    int mu_base_s8;
-};
-
-/** struct pktgen_mem_layout
- */
-struct pktgen_mem_layout {
-    int num_pkt_data;
-    const char *dirname;
-    struct pktgen_mem_region sched;
-    struct pktgen_mem_region script;
-    struct pktgen_mem_region data[8];
+    struct pktgen_mem_layout *mem_layout;
 };
 
 /** pktgen_load_schedule
@@ -79,114 +62,6 @@ static void pktgen_load_packet_data(void)
 {
 }
  */
-
-/** open_file
- */
-static FILE *
-open_file(const char *dirname, const char *filename)
-{
-    char *buf;
-    FILE *f;
-
-    if (dirname == NULL ) {
-        buf = (char *)filename;
-    } else {
-        buf = malloc(strlen(dirname) + strlen(filename) + 2);
-        sprintf(buf, "%s/%s", dirname, filename);
-    }
-    f = fopen(buf, "r");
-    if (dirname != NULL) { free(buf); }
-    return f;
-}
-
-/** file_size
- */
-static long file_size(FILE *f)
-{
-    long l;
-    if (!f) return 0L;
-    fseek(f,0L,SEEK_END);
-    l = ftell(f);
-    fseek(f,0L,SEEK_SET);
-    return l;
-}
-
-/** pktgen_region_open
- */
-static int
-pktgen_region_open(struct pktgen_mem_layout *layout,
-                   struct pktgen_mem_region *region)
-{
-    region->file = open_file(layout->dirname, region->filename);
-    region->data_size = file_size(region->file);
-    if (region->file == NULL) return 1;
-    return 0;
-}
-
-/** pktgen_region_close
- */
-static void
-pktgen_region_close(struct pktgen_mem_layout *layout,
-                    struct pktgen_mem_region *region)
-{
-    if (region->file != NULL) {
-        fclose(region->file);
-        region->file = NULL;
-    }
-}
-
-/** pktgen_mem_open_directory
- */
-static int
-pktgen_mem_open_directory(struct pktgen_mem_layout *layout)
-{
-    int err;
-    err = 0;
-
-    layout->sched.filename = "sched";
-    layout->script.filename = "script";
-    layout->data[0].filename = "data";
-    layout->data[1].filename = "data_1";
-    layout->data[2].filename = "data_2";
-    layout->data[3].filename = "data_3";
-    err |= pktgen_region_open(layout, &layout->sched);
-    err |= pktgen_region_open(layout, &layout->script);
-    err |= pktgen_region_open(layout, &layout->data[0]);
-    pktgen_region_open(layout, &layout->data[1]);
-    pktgen_region_open(layout, &layout->data[2]);
-    pktgen_region_open(layout, &layout->data[3]);
-
-    return err;
-}
-
-/** pktgen_mem_load
- * Load memory on the NFP from the provided layout
- */
-static int
-pktgen_mem_load(struct pktgen_nfp *pktgen_nfp,
-                struct pktgen_mem_layout *layout)
-{
-    int err;
-    err = 0;
-
-    //allocate regions;
-
-    //pktgen_load_schedule(layout, layout->sched);
-    return err;
-}
-
-/** pktgen_mem_close
- */
-static void
-pktgen_mem_close(struct pktgen_mem_layout *layout)
-{
-    pktgen_region_close(layout, &layout->sched);
-    pktgen_region_close(layout, &layout->script);
-    pktgen_region_close(layout, &layout->data[0]);
-    pktgen_region_close(layout, &layout->data[1]);
-    pktgen_region_close(layout, &layout->data[2]);
-    pktgen_region_close(layout, &layout->data[3]);
-}
 
 /** pktgen_load_nfp
  */
@@ -247,6 +122,44 @@ static int pktgen_give_pcie_pcap_buffers(struct pktgen_nfp *pktgen_nfp,
     return 0;
 }
 
+/** mem_load_callback
+ */
+static int 
+mem_load_callback(void *handle,
+                  struct pktgen_mem_layout *layout,
+                  struct pktgen_mem_data *data)
+{
+    printf("Load data from %p to %010lx size %ld\n",
+           data->base,
+           ((uint64_t)data->mu_base_s8)<<8,
+           data->size);
+    return 0;
+}
+
+/** mem_alloc_callback
+ */
+static uint64_t emem0_base=0x80000;
+static int 
+mem_alloc_callback(void *handle,
+                   uint64_t size,
+                   uint64_t min_break_size,
+                   int memory_mask,
+                   struct pktgen_mem_data *data)
+{
+
+    if (memory_mask==0) return 0;
+    if ((memory_mask & 1) == 0 ) return 0;
+
+    size = ((size+4095)/4096)*4096;
+    data[0].size = size;
+    data[0].mu_base_s8 = emem0_base>>8;
+    emem0_base += size;
+    printf("Allocated memory size %ld base %08x00\n",
+           size,
+           data[0].mu_base_s8);
+    return 0;
+}
+
 /** Main
     For this we load the firmware and give it packets.
  */
@@ -254,17 +167,29 @@ extern int
 main(int argc, char **argv)
 {
     struct pktgen_nfp pktgen_nfp;
-    struct pktgen_mem_layout layout;
     int pcie_size;
     void *pcie_base;
     uint64_t pcie_base_addr;
 
-    if (pktgen_mem_open_directory(&layout) != 0) {
+    pktgen_nfp.mem_layout = pktgen_mem_alloc(&pktgen_nfp,
+                                             mem_alloc_callback,
+                                             mem_load_callback,
+                                             NULL );
+    if (pktgen_mem_open_directory(pktgen_nfp.mem_layout,
+                                  "../pktgen_data/") != 0) {
         fprintf(stderr,"Failed to load packet generation data\n");
         return 4;
     }
 
-    pktgen_load_nfp(&pktgen_nfp, 0, "firmware/nffw/pcap.nffw");
+    if (pktgen_mem_load(pktgen_nfp.mem_layout) != 0) {
+        fprintf(stderr,"Failed to load generator memory\n");
+        return 4;
+    }
+
+    if (pktgen_load_nfp(&pktgen_nfp, 0, "firmware/nffw/pcap.nffw")!=0) {
+        fprintf(stderr,"Failed to open and load up NFP with ME code\n");
+        return 4;
+    }
 
     pcie_size = nfp_huge_malloc(pktgen_nfp.nfp,
                                 (void **)&pcie_base,
@@ -286,12 +211,14 @@ main(int argc, char **argv)
         return 4;
     }
 
-    if (pktgen_mem_load(&pktgen_nfp, &layout) != 0) {
+    if (pktgen_mem_load(pktgen_nfp.mem_layout) != 0) {
+        fprintf(stderr,"Failed to load generator memory\n");
+        return 4;
     }
 
     usleep(1000*1000);
 
-    pktgen_mem_close(&layout);
+    pktgen_mem_load(pktgen_nfp.mem_layout);
     nfp_huge_free(pktgen_nfp.nfp, pcie_base);
     nfp_shutdown(pktgen_nfp.nfp);
     return 0;

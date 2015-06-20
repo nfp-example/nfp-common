@@ -130,6 +130,7 @@ static uint64_t file_size(FILE *f)
  * @param region   Region to open
  *
  */
+static int verbose=1;
 static int
 region_open(struct pktgen_mem_layout *layout,
             struct pktgen_mem_region *region)
@@ -138,7 +139,13 @@ region_open(struct pktgen_mem_layout *layout,
     region->data_size = file_size(region->file);
     region->size_allocated = 0;
     region->allocations = NULL;
-    if ((region->file == NULL) && (region->required)) return 1;
+    if ((region->file == NULL) && (region->required)) {
+        fprintf(stderr,"Failed to open data file %s %s\n",layout->dirname, region->filename);
+        return 1;
+    }
+    if (verbose) {
+        fprintf(stderr, "Region %s has size %ld\n", region->filename, region->data_size);
+    }
     return 0;
 }
 
@@ -151,21 +158,33 @@ region_load_data(struct pktgen_mem_region *region,
 {
     char *mem;
 
+    if (verbose) {
+        fprintf(stderr, "Loading region data %s:%ld:%ld\n", region->filename, offset, size);
+    }
     if (region->file == NULL) return NULL;
 
-    if (size < 0)
+    if (size == 0)
         size = region->data_size;
 
+    if (verbose) {
+        fprintf(stderr, "Loading region data %s:%ld:%ld\n", region->filename, offset, size);
+    }
     mem = malloc(size);
     if (mem == NULL)
         return NULL;
 
+    if (verbose) {
+        fprintf(stderr, "Loading region data %s:%ld:%ld\n", region->filename, offset, size);
+    }
     if (size + offset > region->data_size)
         size = region->data_size - offset;
 
     if (size<=0)
         return mem;
 
+    if (verbose) {
+        fprintf(stderr, "Loading region data %s:%ld:%ld\n", region->filename, offset, size);
+    }
     fseek(region->file,offset,SEEK_SET);
     if (fread(mem,1,size,region->file) < size) {
         free(mem);
@@ -194,6 +213,13 @@ add_region_allocation(struct pktgen_mem_region *region,
 {
     struct pktgen_mem_region_allocation *alloc;
     struct pktgen_mem_region_allocation **prev;
+
+    if (verbose) {
+        fprintf(stderr, "Adding allocation for region %s of size %ld base %08x00\n", region->filename, mem_data->size, mem_data->mu_base_s8);
+    }
+
+    if (mem_data->size == 0)
+        return 0;
 
     alloc = malloc(sizeof(*alloc));
     if (alloc == NULL) return 1;
@@ -243,8 +269,11 @@ alloc_regions_with_hint(struct pktgen_mem_layout *layout,
             if (size_to_alloc > size)
                 size_to_alloc = size;
 
+            for (j=0; j<MAX_MEMORIES; j++) {
+                mem_data[j].size = 0;
+            }
             layout->alloc_callback(layout->handle,
-                                   size,
+                                   size_to_alloc,
                                    region->min_break_size,
                                    memory_mask,
                                    mem_data);
@@ -295,6 +324,10 @@ load_allocation(struct pktgen_mem_layout *layout,
     uint64_t alloc_size;
 
     alloc_size = allocation->size;
+    if (verbose) {
+        fprintf(stderr, "Loading allocation %s:%ld\n", region->filename, allocation->size);
+    }
+
     while (alloc_size > 0) {
         char *mem_to_load;
         uint64_t size_to_load;
@@ -327,6 +360,8 @@ load_allocation(struct pktgen_mem_layout *layout,
     return 0;
 }
 
+/** load_region
+ */
 static int
 load_region(struct pktgen_mem_layout *layout,
             int region_number)
@@ -339,7 +374,10 @@ load_region(struct pktgen_mem_layout *layout,
     region = &layout->regions[region_number];
     mem = NULL;
     if (region_number==REGION_SCHED) {
-        mem = region_load_data(region, 0, -1);
+        mem = region_load_data(region, 0, 0);
+        if (verbose) {
+            fprintf(stderr, "Loading scheduler data returned %p\n", mem);
+        }
         if (mem == NULL)
             return 1;
 
@@ -350,6 +388,11 @@ load_region(struct pktgen_mem_layout *layout,
     allocation = region->allocations;
     while (offset<region->data_size) {
         int err;
+
+        if (verbose) {
+            fprintf(stderr, "Loading allocation %s %ld\n",
+                    region->filename, offset);
+        }
 
         if (allocation==NULL) {
             return 1;
@@ -458,6 +501,9 @@ pktgen_mem_load(struct pktgen_mem_layout *layout)
     hint = 0;
     for (;;) {
         err = alloc_regions_with_hint(layout, &layout->alloc_hints[hint]);
+        if (verbose) {
+            fprintf(stderr, "Alloc regions returned %d\n",err);
+        }
         if (err != 0) return err;
         if (layout->alloc_hints[hint].hint_type == PKTGEN_ALLOC_HINT_END)
             break;
@@ -466,6 +512,9 @@ pktgen_mem_load(struct pktgen_mem_layout *layout)
 
     for (i=0; i<MAX_REGIONS; i++) {
         err = load_region(layout, i);
+        if (verbose) {
+            fprintf(stderr, "Load region returned %d\n",err);
+        }
         if (err != 0) return err;
     }
     return err;

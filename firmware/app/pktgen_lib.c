@@ -19,7 +19,7 @@
  * system to supply scripted packet generation
  * 
  */
-/** Proposed outline of code
+/** Outline of code
  *
  * The host delivers basic packets into the MU at 2kB+64 alignments,
  * or if the packets are <192B to a 256B+64B alignment.
@@ -28,10 +28,11 @@
  * are a set of scripts that are combined with a basic packet to form
  * a packet for transmission.
  * 
- * The host also delivers a stream of batches of flow-packets to
- * transmit. Each batch is 8 flow-packet entries. Each flow-packet
- * entry in a batch is a packet address+length, a script offset,
- * and a time (in ns) at which to transmit the packet.
+ * The host also delivers a schedule, or stream of batches of
+ * flow-packets, to transmit. Each batch is 8 flow-packet
+ * entries. Each flow-packet entry in a batch is a packet
+ * address+length, a script offset, and a time (in ns) at which to
+ * transmit the packet.
  *
  * Each flow-packet entry is 16B.
  *     uint32_t     tx_time_lo;

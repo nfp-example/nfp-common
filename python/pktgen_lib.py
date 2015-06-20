@@ -133,6 +133,57 @@ class c_flow_set(object):
         pass
     pass
 
+#c c_schedule_entry
+class c_schedule_entry(object):
+    def __init__(self, time, region, length, script, pkt):
+        self.time = time
+        self.region = region
+        self.length = length
+        self.script = script
+        self.pkt = pkt
+        pass
+#c c_schedule_batch
+class c_schedule_batch(object):
+    def __init__(self):
+        self.entries = []
+        pass
+    def append(self, entry):
+        if len(self.entries)==8:
+            raise Exception("Too many entries in a batch")
+        self.entries.append(entry)
+        pass
+    def pretty_print(self,indent="    "):
+        i=0
+        for b in self.entries:
+            batch_str = ""
+            if b is not None:
+                batch_str = "%20f %5d %08x %s"%(
+                    b.time/(1000.0*1000*1000),b.length,b.region,str(b.script))
+                pass
+            print "%s:%d:%s"%(indent,i,batch_str)
+            i+=1
+            pass
+        pass
+    def tarfile_data(self):
+        write_data = {"schedule":"",
+                      "memfile":[]}
+        for batch_entry in self.entries:
+            if batch_entry is None:
+                write_data["schedule"] += struct.pack('<4I',0,0,0,0)
+                pass
+            else:
+                write_data["schedule"] += struct.pack('<IB3BIHH',
+                                          batch_entry.time & 0xffffffff,
+                                          (batch_entry.time >> 32)&0xff,
+                                          0, 0, 0, # Script ofs 24
+                                          (batch_entry.region >> 8) & 0xffffffff,
+                                          batch_entry.length & 0xffff,
+                                          0 )
+                write_data["memfile"].append( (batch_entry.region, batch_entry.pkt) )
+                pass
+            pass
+        return write_data
+
 #c c_schedule
 class c_schedule(object):
     #f __init__
@@ -207,18 +258,23 @@ class c_schedule(object):
         l = len(self.pkts)
         l = (l+7) &~ 7
         for b in range(l/8):
-            batch = []
+            batch = c_schedule_batch()
             for i in range(8):
+                batch_entry = None
                 if (b*8+i >= len(self.pkts)):
-                    batch.append(None)
                     pass
                 else:
                     (t, p) = self.pkts[b*8+i]
                     t -= ts0
                     (flow, pkt_num, script) = p
                     (region, pkt) = flow.pkt_memory(pkt_num)
-                    batch.append( (t, self.memory[region][pkt][1], len(pkt), script, pkt) )
+                    batch_entry = c_schedule_entry(t,
+                                                   self.memory[region][pkt][1],
+                                                   len(pkt),
+                                                   script,
+                                                   pkt)
                     pass
+                batch.append(batch_entry)
                 pass
             self.pktgen_schedule.append(batch)
             pass
@@ -228,14 +284,7 @@ class c_schedule(object):
         j = 0
         for b in self.pktgen_schedule:
             print "Batch %d"%j
-            for i in range(8):
-                batch_str = ""
-                if b[i] is not None:
-                    batch_str = "%20f %5d %08x %s"%(
-                                  b[i][0]/(1000.0*1000*1000),b[i][2],b[i][1],str(b[i][3]))
-                    pass
-                print "   %d:%s"%(i,batch_str)
-                pass
+            b.pretty_print()
             j += 1
             pass
         pass
@@ -255,26 +304,21 @@ class c_schedule(object):
                                     len(self.pkts),
                                     len(self.pktgen_schedule)))
         for i in range(len(self.pktgen_schedule)):
-            b = self.pktgen_schedule[i]
-            batch_data = ""
-            for batch_entry in b:
-                if batch_entry is None:
-                    batch_data += struct.pack('<4I',0,0,0,0)
+            batch = self.pktgen_schedule[i]
+            write_data = batch.tarfile_data()
+            for (t,k) in write_data.iteritems():
+                if t=='schedule':
+                    schedfile.seek(64 + i*128)
+                    schedfile.write(k)
+                    pass
+                elif t=='memfile':
+                    for (ofs,pkt) in k:
+                        memfile.seek(ofs)
+                        memfile.write(pkt.pkt_data())
+                        pass
                     pass
                 else:
-                    batch_data += struct.pack('<IB3BIHH',
-                                              batch_entry[0] & 0xffffffff,
-                                              (batch_entry[0] >> 32)&0xff,
-                                              0, 0, 0, # Script ofs 24
-                                              (batch_entry[1] >> 8) & 0xffffffff,
-                                              batch_entry[2] & 0xffff,
-                                              0 )
-                    memfile.seek(batch_entry[1])
-                    memfile.write(batch_entry[4].pkt_data())
-                    pass
-                pass
-            schedfile.seek(64 + i*128)
-            schedfile.write(batch_data)
+                    raise Exception("Bad write data for batch entry write")
             pass
         tf = tarfile.open(name=filename, mode='w:gz')
         add_to_tarfile(tf,memfile,'pkt_data')
