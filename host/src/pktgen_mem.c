@@ -15,6 +15,29 @@
  * @file          pktgen_mem.c
  * @brief         Packet generator memory support
  *
+ * This file provides functions to support loading of the memories in
+ * an NFP for the packet generator, from a set of packet generator
+ * files created (for example) in pktgen_lib.py.
+ *
+ * The set of files includes a schedule, a script, and at least one
+ * packet data region.
+ *
+ * An instance of the 'pktgen_mem_layout' structure must be allocated,
+ * and then filled by loading from a directory.
+ *
+ * The layout can then be allocated within the NFP, using an
+ * allocation callback and hints for regions of the data to be placed
+ * in suitable memories. A single region may be placed in more than
+ * one memory of the NFP, being split up in no smaller than
+ * 'min_break_size' pieces.
+ *
+ * After allocation, the structuce can be patched up - the schedule
+ * particularly refers to absolute NFP memory addresses for packets,
+ * and the addresses clearly depend on the allocation.
+ *
+ * After patching, the layout can be loaded into an NFP, with a
+ * callback for each region of memory that needs to be loaded.
+ *
  */
 
 /** Includes
@@ -29,8 +52,18 @@
  */
 #define MAX_MEMORIES 4
 #define MAX_SIZE_TO_LOAD (2*1024*1024)
+#define ERROR(f, args...)    fprintf(stderr,"pktgen_mem_error: " f, ## args)
+#define VERBOSE(f, args...)  do {if (verbose) { printf("pktgen_mem_verbose:" f, ## args); }} while (0)
 
 /** Enum regions
+ * 
+ * A packet generator memory load has one schedule region, one script
+ * region (optional), and at least one packet data region. These are
+ * loaded from files.
+ *
+ * The enumeration here is used in the layout structure and the
+ * allocation hints.
+ *
  */
 enum {
     REGION_SCHED,
@@ -46,6 +79,11 @@ enum {
 };
 
 /** struct pktgen_mem_region_allocation
+ *
+ * A region allocation is an allocation in NFP memory for part of the
+ * region. They are placed in a linked list in the order in which they
+ * will be filled
+ *
  */
 struct pktgen_mem_region_allocation {
     struct pktgen_mem_region_allocation *next;
@@ -54,36 +92,59 @@ struct pktgen_mem_region_allocation {
 };
 
 /** struct pktgen_mem_region
+ *
+ * A region of a packet generator memory layout contains the contents
+ * of a single file, be it the schedule, scripts, or one of the packet
+ * data files.
+ *
  */
 struct pktgen_mem_region {
-    const char *filename;
-    FILE *file;
-    int required;
-    uint64_t data_size;
-    uint64_t size_allocated;
-    uint64_t min_break_size;
-    struct pktgen_mem_region_allocation *allocations;
+    const char *filename; /* Leaf filename for the region file */
+    FILE *file;           /* File handle while leaf file is open */
+    int required;         /* True if region is required (scrip, data0 */
+    uint64_t data_size;   /* Size of region (file size) */
+    uint64_t size_allocated; /* Total allocated size */
+    uint64_t min_break_size; /* Minimum size the region may be split
+                              * into */
+    struct pktgen_mem_region_allocation *allocations; /* Linked list
+                                                       * of
+                                                       * allocations */
 };
 
 /** struct pktgen_mem_layout
+ *
+ * The structure describing a complete packet generator memory layout
+ *
  */
 struct pktgen_mem_layout {
-    int num_pkt_data;
-    const char *dirname;
-    void *handle;
-    pktgen_mem_alloc_callback alloc_callback;
-    pktgen_mem_load_callback load_callback;
-    struct pktgen_mem_alloc_hints *alloc_hints;
+    const char *dirname; /* Directory name to load region files from */
+    void *handle;        /* Callback handle */
+    pktgen_mem_alloc_callback alloc_callback; /* Allocation callback,
+                                               * invoked to allocate
+                                               * memory for the
+                                               * region */
+    pktgen_mem_load_callback load_callback;  /* Load callback, invoked
+                                              * to load a region
+                                              * allocation */
+    struct pktgen_mem_alloc_hints *alloc_hints; /* Hints for
+                                                 * allocation */
     struct pktgen_mem_region regions[MAX_REGIONS];
 };
 
 /** no_alloc_hints
+ *
+ * If no allocation hints are provided by the client, then this hint
+ * set is used. It will preferentially place all the data in memory 0.
+ *
  */
 static struct pktgen_mem_alloc_hints no_alloc_hints[]={
     {PKTGEN_ALLOC_HINT_END,{{0,0}}},
 };
 
 /** layout_default_filenames
+ *
+ * Default filenames for the allocation regions
+ *
  */
 static const char *layout_default_filenames[]={
     "sched", "script", "data",
@@ -91,7 +152,19 @@ static const char *layout_default_filenames[]={
     "data_4", "data_5", "data_6",
 };
 
+/** Statics
+ */
+static int verbose=1;
+
 /** open_file
+ *
+ * Open a file given a directory name and filename.
+ *
+ * @param dirname    Directory name (ending with '/')
+ * @param filename   Filename to load within directory
+ *
+ * Returns a file handle, or NULL on failure
+ *
  */
 static FILE *
 open_file(const char *dirname, const char *filename)
@@ -111,6 +184,13 @@ open_file(const char *dirname, const char *filename)
 }
 
 /** file_size
+ *
+ * Find the size of an open file
+ *
+ * @param f
+ *
+ * Returns the size of an open file, of 0 if the file is closed
+ *
  */
 static uint64_t file_size(FILE *f)
 {
@@ -124,13 +204,12 @@ static uint64_t file_size(FILE *f)
 
 /** region_open
  *
- * Open a region from a file and set up for later allocation
+ * Open a region from a file and sets it up for later allocation
  *
  * @param layout   Memory layout to open a region of
  * @param region   Region to open
  *
  */
-static int verbose=1;
 static int
 region_open(struct pktgen_mem_layout *layout,
             struct pktgen_mem_region *region)
@@ -143,13 +222,23 @@ region_open(struct pktgen_mem_layout *layout,
         fprintf(stderr,"Failed to open data file %s %s\n",layout->dirname, region->filename);
         return 1;
     }
-    if (verbose) {
-        fprintf(stderr, "Region %s has size %ld\n", region->filename, region->data_size);
-    }
+    VERBOSE("Region %s has size %ld\n", region->filename, region->data_size);
     return 0;
 }
 
 /** region_load_data
+ *
+ * Load part (or all) of a region into memory, using malloc to
+ * allocate space
+ *
+ * @param region   Region to load
+ * @param offset   Offset from start of region to load
+ * @param size     Size to load - if 0 then load the whole region
+ *
+ * Return NULL on error (if the region does not need to be loaded, or
+ * if the malloc fails).
+ * Return a malloc'ed buffer filled with the data on success.
+ *
  */
 static char *
 region_load_data(struct pktgen_mem_region *region,
@@ -158,33 +247,22 @@ region_load_data(struct pktgen_mem_region *region,
 {
     char *mem;
 
-    if (verbose) {
-        fprintf(stderr, "Loading region data %s:%ld:%ld\n", region->filename, offset, size);
-    }
+    VERBOSE("Loading region data %s:%ld:%ld\n", region->filename, offset, size);
     if (region->file == NULL) return NULL;
 
     if (size == 0)
         size = region->data_size;
 
-    if (verbose) {
-        fprintf(stderr, "Loading region data %s:%ld:%ld\n", region->filename, offset, size);
-    }
     mem = malloc(size);
     if (mem == NULL)
         return NULL;
 
-    if (verbose) {
-        fprintf(stderr, "Loading region data %s:%ld:%ld\n", region->filename, offset, size);
-    }
     if (size + offset > region->data_size)
         size = region->data_size - offset;
 
     if (size<=0)
         return mem;
 
-    if (verbose) {
-        fprintf(stderr, "Loading region data %s:%ld:%ld\n", region->filename, offset, size);
-    }
     fseek(region->file,offset,SEEK_SET);
     if (fread(mem,1,size,region->file) < size) {
         free(mem);
@@ -194,6 +272,12 @@ region_load_data(struct pktgen_mem_region *region,
 }
 
 /** region_close
+ *
+ * Close a region, including its file
+ *
+ * @param layout   Memory layout to close a region of
+ * @param region   Region to close
+ *
  */
 static void
 region_close(struct pktgen_mem_layout *layout,
@@ -206,6 +290,13 @@ region_close(struct pktgen_mem_layout *layout,
 }
 
 /** add_region_allocation
+ *
+ * Add an NFP memory allocation to a region (at the end of the current
+ * allocations).
+ *
+ * @param region   Region to add allocation to
+ * @param mem_data Allocation to add to the region
+ *
  */
 static int
 add_region_allocation(struct pktgen_mem_region *region,
@@ -214,12 +305,10 @@ add_region_allocation(struct pktgen_mem_region *region,
     struct pktgen_mem_region_allocation *alloc;
     struct pktgen_mem_region_allocation **prev;
 
-    if (verbose) {
-        fprintf(stderr, "Adding allocation for region %s of size %ld base %08x00\n", region->filename, mem_data->size, mem_data->mu_base_s8);
-    }
-
     if (mem_data->size == 0)
         return 0;
+
+    VERBOSE("Adding allocation for region %s of size %ld base %08x00\n", region->filename, mem_data->size, mem_data->mu_base_s8);
 
     alloc = malloc(sizeof(*alloc));
     if (alloc == NULL) return 1;
@@ -237,6 +326,20 @@ add_region_allocation(struct pktgen_mem_region *region,
 }
 
 /** alloc_regions_with_hint
+ *
+ * Allocate regions using one allocation hint
+ *
+ * @param layout  Memory layout to allocate regions for
+ * @param hint    Hint to use
+ *
+ * Return non-zero on error, zero on success
+ *
+ * Allocate the regions specified by the hint in the memories
+ * specified, and the size specified.
+ *
+ * A PKTGEN_ALLOC_HINT_END implies allocating all regions in all
+ * memories with 16GB per memory.
+ *
  */
 static int
 alloc_regions_with_hint(struct pktgen_mem_layout *layout,
@@ -290,28 +393,100 @@ alloc_regions_with_hint(struct pktgen_mem_layout *layout,
 
 /** patch_schedule
  *
- * @param layout   Memory layout previously allocated
+ * Patch up a schedule's packet pointers based on alloacted memory. 
  *
- * Patch up a schedule's packet pointers based on alloacted memory
+ * @param layout  Memory layout previously allocated
+ * @param region  Schedule region to patch
+ * @param mem     Memory containing the schedule
+ *
+ * Invoked just prior to loading the schedule region.
  *
  */
+struct pktgen_batch_entry {
+    uint32_t     tx_time_lo;
+    unsigned int tx_time_hi:8;
+    unsigned int script_ofs:24;
+    uint32_t     mu_base_s8;
+    unsigned int length:16;
+    unsigned int tx_seq:16;
+};
+
+static uint32_t
+find_data_region_allocation(struct pktgen_mem_layout *layout,
+                            int data_region,
+                            uint32_t region_offset_s8)
+{
+    struct pktgen_mem_region_allocation *alloc;
+    uint64_t region_offset;
+
+    data_region += REGION_DATA;
+    if (data_region >= MAX_REGIONS) {
+        ERROR("Data region %d out of range when finding its allocation\n", data_region);
+        return 0;
+    }
+    if (layout->regions[data_region].data_size == 0) {
+        ERROR("Data region %d empty when looking for allocation\n", data_region);
+        return 0;
+    }
+
+    alloc = layout->regions[data_region].allocations;
+    region_offset = ((uint64_t) region_offset_s8) << 8;
+    while (alloc) {
+        if (alloc->size > region_offset)
+            break;
+        region_offset = region_offset - alloc->size;
+        alloc = alloc->next;
+    }
+    if (!alloc) {
+        ERROR("Data region %d has not got enough allocation for %08x00\n",
+              data_region,
+              region_offset_s8);
+        return 0;
+    }
+    return alloc->mu_base_s8 + (region_offset >> 8);
+}
+
 static int
 patch_schedule(struct pktgen_mem_layout *layout,
                struct pktgen_mem_region *region,
                char *mem)
 {
-//    struct pktgen_mem_region *sched;
-//    int i;
-
-//    sched = &layout->regions[REGION_SCHED];
+    int i;
+    struct pktgen_batch_entry *batch_entry;
+    for (i=64; i<region->data_size; i+=sizeof(*batch_entry)) {
+        int data_region;
+        uint32_t region_offset_s8;
+        uint32_t mu_base_s8;
+        batch_entry = (struct pktgen_batch_entry *)(mem + i);
+        if (batch_entry->mu_base_s8 != 0) {
+            data_region   = batch_entry->mu_base_s8 >> 28;
+            region_offset_s8 = batch_entry->mu_base_s8 & 0xfffffff;
+            mu_base_s8 = find_data_region_allocation(layout, data_region, region_offset_s8);
+            if (mu_base_s8 == 0)
+                return 1;
+            VERBOSE("%d: %d %d %08x00 %08x00\n", i,
+                   batch_entry->tx_time_lo,
+                   batch_entry->length,
+                   batch_entry->mu_base_s8,
+                   mu_base_s8);
+            batch_entry->mu_base_s8 = mu_base_s8;
+        }
+    }
     return 0;
 }
 
-/** load_region
+/** load_allocation
  *
- * @param layout   Memory layout previously allocated
+ * Load an allocatin of a region into NFP memory
  *
- * Load a region into NFP memory
+ * @param layout      Memory layout
+ * @param region      Region of which the allocation is for
+ * @param allocation  Allocation of region of layout to load
+ * @param offset      Offset within region that allocation starts at
+ * @param mem         Memory containing region data, or NULL if not
+ *                    loaded as yet
+ *
+ * Return non-zero on error, zero on success
  *
  */
 static int
@@ -324,9 +499,7 @@ load_allocation(struct pktgen_mem_layout *layout,
     uint64_t alloc_size;
 
     alloc_size = allocation->size;
-    if (verbose) {
-        fprintf(stderr, "Loading allocation %s:%ld\n", region->filename, allocation->size);
-    }
+    VERBOSE("Loading allocation %s:%ld\n", region->filename, allocation->size);
 
     while (alloc_size > 0) {
         char *mem_to_load;
@@ -361,6 +534,14 @@ load_allocation(struct pktgen_mem_layout *layout,
 }
 
 /** load_region
+ *
+ * Load a region into NFP memory, patching as necessary first
+ *
+ * @param layout      Memory layout
+ * @param region_number  Number of region within layout to load
+ *
+ * Return non-zero on error, zero on success
+ *
  */
 static int
 load_region(struct pktgen_mem_layout *layout,
@@ -375,9 +556,7 @@ load_region(struct pktgen_mem_layout *layout,
     mem = NULL;
     if (region_number==REGION_SCHED) {
         mem = region_load_data(region, 0, 0);
-        if (verbose) {
-            fprintf(stderr, "Loading scheduler data returned %p\n", mem);
-        }
+        VERBOSE("Loading scheduler data returned %p\n", mem);
         if (mem == NULL)
             return 1;
 
@@ -389,10 +568,8 @@ load_region(struct pktgen_mem_layout *layout,
     while (offset<region->data_size) {
         int err;
 
-        if (verbose) {
-            fprintf(stderr, "Loading allocation %s %ld\n",
-                    region->filename, offset);
-        }
+        VERBOSE("Loading allocation %s %ld\n",
+                region->filename, offset);
 
         if (allocation==NULL) {
             return 1;
@@ -412,14 +589,14 @@ load_region(struct pktgen_mem_layout *layout,
 
 /** pktgen_mem_alloc
  *
+ * Allocate a packet generator memory layout structure
+ *
  * @param handle          Handle for callbacks
  * @param alloc_callback  Callback invoked to allocate MU for a structure
  * @param load_callback   Callback invoked to load data into the NFP
  * @param alloc_hints     Allocation hint array used to split up packet data
  *
  * Return an allocated memory layout
- *
- * Allocate a packet generator memory layout structure
  *
  */
 extern struct pktgen_mem_layout *pktgen_mem_alloc(void *handle,
@@ -434,7 +611,6 @@ extern struct pktgen_mem_layout *pktgen_mem_alloc(void *handle,
     if (layout == NULL)
         return NULL;
 
-    layout->num_pkt_data=0;
     layout->dirname = NULL;
     layout->handle = handle;
     layout->alloc_callback = alloc_callback;
@@ -501,9 +677,7 @@ pktgen_mem_load(struct pktgen_mem_layout *layout)
     hint = 0;
     for (;;) {
         err = alloc_regions_with_hint(layout, &layout->alloc_hints[hint]);
-        if (verbose) {
-            fprintf(stderr, "Alloc regions returned %d\n",err);
-        }
+        VERBOSE("Alloc regions returned %d\n",err);
         if (err != 0) return err;
         if (layout->alloc_hints[hint].hint_type == PKTGEN_ALLOC_HINT_END)
             break;
@@ -512,15 +686,18 @@ pktgen_mem_load(struct pktgen_mem_layout *layout)
 
     for (i=0; i<MAX_REGIONS; i++) {
         err = load_region(layout, i);
-        if (verbose) {
-            fprintf(stderr, "Load region returned %d\n",err);
-        }
+        VERBOSE("Load region returned %d\n",err);
         if (err != 0) return err;
     }
     return err;
 }
 
 /** pktgen_mem_close
+ *
+ * @param layout   Memory layout previously allocated
+ *
+ * Close and deallocate a layout
+ *
  */
 extern void
 pktgen_mem_close(struct pktgen_mem_layout *layout)
@@ -529,4 +706,5 @@ pktgen_mem_close(struct pktgen_mem_layout *layout)
     for (i=0; i<MAX_REGIONS; i++) {
         region_close(layout, &layout->regions[i]);
     }
+    free(layout);
 }
