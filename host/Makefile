@@ -24,7 +24,7 @@ HOST_BUILD_DIR = $(HOST_DIR)/build
 HOST_BIN_DIR   = $(HOST_DIR)/bin
 
 #CC=gcc
-INCLUDES=-I$(NETRONOME)/include
+INCLUDES=-I$(NETRONOME)/include -I$(INCLUDE_DIR)
 LIBS=-L$(NETRONOME)/lib -L/usr/lib/x86_64-linux-gnu/ -lnfp -lnfp_nffw -lhugetlbfs -ljansson
 
 CC=gcc $(INCLUDES) -g -Wall -Werror

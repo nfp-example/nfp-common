@@ -21,6 +21,7 @@ NETRONOME = /opt/netronome
 
 SCRIPTS_DIR   = $(NFP_COMMON)/scripts
 FIRMWARE_DIR  = $(NFP_COMMON)/firmware
+INCLUDE_DIR   = $(NFP_COMMON)/include
 HOST_DIR      = $(NFP_COMMON)/host
 DOCS_DIR      = $(NFP_COMMON)/docs
 

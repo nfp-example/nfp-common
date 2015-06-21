@@ -100,6 +100,18 @@ extern int nfp_fw_start(struct nfp *nfp);
  */
 extern long nfp_huge_malloc(struct nfp *nfp, void **ptr, uint64_t *addr, long byte_size);
 
+/** nfp_huge_physical_address
+ *
+ * Find physical address of an offset into a huge malloc region
+ *
+ * @param nfp   NFP structure already initialized
+ * @param ptr   Previously nfp_huge_malloc pointer
+ * @param ofs   Offset from pointer to find address
+ *
+ */
+uint64_t
+nfp_huge_physical_address(struct nfp *nfp, void *ptr, uint64_t ofs);
+
 /** nfp_huge_free
  *
  * Free a hugepage allocation

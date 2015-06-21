@@ -266,22 +266,48 @@ nfp_huge_malloc(struct nfp *nfp, void **ptr, uint64_t *addr, long byte_size)
 {
     int  num_huge_pages;
     long allocation_size;
-    uint64_t linux_pfn, linux_page_data;
-    int err;
 
     num_huge_pages = ((byte_size-1)/nfp->pagemap.huge_page_size)+1;
     allocation_size = num_huge_pages*nfp->pagemap.huge_page_size;
 
     *addr = 0;
     *ptr = get_huge_pages(allocation_size,GHP_DEFAULT);
-    if (!*ptr) return 0;
+    if (*ptr == NULL)
+        return 0;
 
     ((uint64_t *)(*ptr))[0]=0;
+
+    *addr = nfp_huge_physical_address(nfp, *ptr, 0);
+    if (*addr == 0) {
+        fprintf(stderr, "Failed to find linux page mapping in /proc/self/pagemap\n");
+        free_huge_pages(*ptr);
+        *ptr=NULL;
+        return 0;
+    }
+    return allocation_size;
+}
+
+/** nfp_huge_physical_address
+ *
+ * Find physical address of an offset into a huge malloc region
+ *
+ * @param nfp   NFP structure already initialized
+ * @param ptr   Previously nfp_huge_malloc pointer
+ * @param ofs   Offset from pointer to find address
+ *
+ */
+uint64_t
+nfp_huge_physical_address(struct nfp *nfp, void *ptr, uint64_t ofs)
+{
+    uint64_t linux_pfn, linux_page_data;
+    uint64_t addr;
+    int err;
 
     /* Hack around with the internals of the pagemap file
        This is based on DPDK's huge page hacking
     */
-    linux_pfn = ((uint64_t)(*ptr))/nfp->pagemap.page_size;
+    ptr = (void *)(((char *)ptr) + ofs);
+    linux_pfn = ((uint64_t)ptr) / nfp->pagemap.page_size;
     err = (lseek(nfp->pagemap.fd, linux_pfn*sizeof(uint64_t),SEEK_SET)<0);
     if (!err) {
         err=(read(nfp->pagemap.fd, &linux_page_data, sizeof(uint64_t))<0);
@@ -290,13 +316,11 @@ nfp_huge_malloc(struct nfp *nfp, void **ptr, uint64_t *addr, long byte_size)
         err=(((linux_page_data>>63)&1)==0); /* page not present */
     }
     if (err) {
-        fprintf(stderr, "Failed to find linux page mapping in /proc/self/pagemap\n");
-        free_huge_pages(*ptr);
-        *ptr=NULL;
         return 0;
     }
-    *addr = (linux_page_data & (-1LL>>(64-55)))*nfp->pagemap.page_size;
-    return allocation_size;
+    addr = (linux_page_data & (-1LL>>(64-55)))*nfp->pagemap.page_size;
+    addr += ((uint64_t)ptr) % nfp->pagemap.page_size;
+    return addr;
 }
 
 /** nfp_huge_free

@@ -164,6 +164,7 @@
 #include <nfp.h>
 #include <nfp_override.h>
 #include "pktgen_lib.h"
+#include "firmware/pktgen.h"
 
 /** Defines
  */
@@ -171,29 +172,16 @@
 
 /** Memory declarations
  */
-_declare_resource("cls_host_pktgen island 64")
-#define ALLOC_HOST_SHARED_DATA() __alloc_resource("hd cls_host_pktgen island 64")
+_declare_resource("pktgen_cls_host island 64")
+#define ALLOC_HOST_SHARED_DATA() __alloc_resource("hd pktgen_cls_host island 64")
 
 /** struct host_data
  */
 struct host_data {
+    struct pktgen_cls_ring cls_ring;
     uint32_t cls_host_shared_data;
-    uint32_t cls_host_ring_base;
-    uint32_t cls_host_ring_item_mask;
     uint32_t wptr;
     uint32_t rptr;
-};
-
-/** struct host_cmd
- */
-struct host_cmd {
-    union {
-        struct {
-            uint64_t base_delay;
-            uint32_t mu_base_s8;
-            int      total_pkts;
-        } cmd;
-    };
 };
 
 /** struct tx_pkt_work
@@ -660,9 +648,11 @@ tx_master_distribute_schedule(uint64_t base_time,
  * @param host_cmd    Host command from the host
  *
  */
+/** struct pktgen_cls_host
+ */
 static void
 host_get_cmd(struct host_data *host_data,
-             __xread struct host_cmd *host_cmd)
+             __xread struct pktgen_host_cmd *host_cmd)
 {
     uint32_t addr; /* Address in CLS of host data / ring */
     uint32_t ofs;  /* Offset in to ring of 'rptr' entry */
@@ -671,16 +661,26 @@ host_get_cmd(struct host_data *host_data,
     if (host_data->wptr == host_data->rptr) {
         __xread uint32_t wptr; /* Xfer to read CLS wptr */
         for (;;) {
-            cls_read(&wptr, (__cls void *)addr, 0,
+            cls_read(&wptr,
+                     (__cls void *)addr,
+                     offsetof(struct pktgen_cls_host,wptr),
                      sizeof(uint32_t));
             if (wptr != host_data->rptr) break;
             me_sleep(poll_interval);
         }
         host_data->wptr = wptr;
     }
-    addr = host_data->cls_host_ring_base;
-    ofs = host_data->rptr & host_data->cls_host_ring_item_mask;
-    ofs = ofs << 3;
+    if (host_data->cls_ring.item_mask == 0) {
+        __xread struct pktgen_cls_ring cls_ring;
+        cls_read(&cls_ring,
+                 (__cls void *)addr,
+                 offsetof(struct pktgen_cls_host,cls_ring),
+                 sizeof(cls_ring));
+        host_data->cls_ring = cls_ring;
+    }
+    addr = host_data->cls_ring.base;
+    ofs = host_data->rptr & host_data->cls_ring.item_mask;
+    ofs = ofs << 4;
     cls_read(host_cmd, (__cls void *)addr, ofs, 
                  sizeof(host_cmd));
     host_data->rptr++;
@@ -710,25 +710,29 @@ pktgen_master(void)
     int tx_seq;
 
     host_data.cls_host_shared_data = ALLOC_HOST_SHARED_DATA();
+    host_data.cls_ring.base = 0;
+    host_data.cls_ring.item_mask = 0;
     host_data.rptr = 0;
     host_data.wptr = 0;
 
     tx_seq = 0;
     for (;;) {
         __xread uint32_t mu_base_s8;
-        __xread struct host_cmd host_cmd;
+        __xread struct pktgen_host_cmd host_cmd;
 
         host_get_cmd(&host_data, &host_cmd);
-        if (1) {
+        if (host_cmd.all_cmds.cmd_type == PKTGEN_HOST_CMD_PKT) {
             uint64_t base_time;
             int total_pkts;
             uint32_t mu_base_s8;
-            base_time = me_time64() + host_cmd.cmd.base_delay;
-            mu_base_s8 = host_cmd.cmd.mu_base_s8;
-            total_pkts = host_cmd.cmd.total_pkts;
+            base_time = me_time64() + host_cmd.pkt_cmd.base_delay;
+            mu_base_s8 = host_cmd.pkt_cmd.mu_base_s8;
+            total_pkts = host_cmd.pkt_cmd.total_pkts;
             tx_master_distribute_schedule(base_time, total_pkts,
                                           mu_base_s8, &tx_seq);
+        } else if (host_cmd.all_cmds.cmd_type == PKTGEN_HOST_CMD_DMA) {
         }
+
     }
 }
 

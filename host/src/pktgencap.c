@@ -25,19 +25,24 @@
 #include <string.h> 
 #include "nfp_support.h"
 #include "pktgen_mem.h"
+#include "firmware/pktgen.h"
 
 /** Defines
  */
+#define MAX_PAGES 1
 #define PCIE_HUGEPAGE_SIZE (1<<20)
 
 /** struct pktgen_nfp
  */
 struct pktgen_nfp {
     struct nfp *nfp;
-    struct nfp_cppid cls_wptr, cls_ring;
+    struct nfp_cppid pktgen_cls_host;
+    struct nfp_cppid cls_wptr;
+    struct nfp_cppid cls_ring;
     char *pcie_base;
-    uint64_t pcie_base_addr, p;
-    long pcie_size, s;
+    long pcie_size;
+    uint64_t pcie_base_addr[MAX_PAGES];
+    long s;
     struct pktgen_mem_layout *mem_layout;
 };
 
@@ -79,6 +84,9 @@ pktgen_load_nfp(struct pktgen_nfp *pktgen_nfp, int dev_num, const char *nffw_fil
     }
     /*nfp_show_rtsyms(nfp);*/
     if ((nfp_get_rtsym_cppid(pktgen_nfp->nfp,
+                             "pktgen_cls_host",
+                             &pktgen_nfp->pktgen_cls_host) < 0) ||
+        (nfp_get_rtsym_cppid(pktgen_nfp->nfp,
                              "host_shared_data",
                              &pktgen_nfp->cls_wptr) < 0) ||
         (nfp_get_rtsym_cppid(pktgen_nfp->nfp,
@@ -92,22 +100,23 @@ pktgen_load_nfp(struct pktgen_nfp *pktgen_nfp, int dev_num, const char *nffw_fil
 
 /** pktgen_give_pcie_pcap_buffers
  */
-static int pktgen_give_pcie_pcap_buffers(struct pktgen_nfp *pktgen_nfp,
-                                         void *p,
-                                         uint64_t pcie_base_addr,
-                                         long pcie_size)
+static int pktgen_give_pcie_pcap_buffers(struct pktgen_nfp *pktgen_nfp)
 {
     int offset;
     int num_buffers;
     int err;
+    uint64_t pcie_size;
+    uint64_t pcie_base_addr;
 
     offset = 0;
     num_buffers = 0;
+    pcie_base_addr = pktgen_nfp->pcie_base_addr[0];
+    pcie_size = pktgen_nfp->pcie_size;
     while (pcie_size > 0) {
         err = nfp_write(pktgen_nfp->nfp,
                         &pktgen_nfp->cls_ring,
                         offset,
-                        (void *)&p, sizeof(p));
+                        (void *)&pcie_base_addr, sizeof(pcie_base_addr));
         if (err) return err;
         pcie_base_addr += 1 << 18;
         pcie_size -= 1 << 18;
@@ -119,20 +128,6 @@ static int pktgen_give_pcie_pcap_buffers(struct pktgen_nfp *pktgen_nfp,
         fprintf(stderr,"Failed to write buffers etc to NFP memory\n");
         return 1;
     }
-    return 0;
-}
-
-/** mem_load_callback
- */
-static int 
-mem_load_callback(void *handle,
-                  struct pktgen_mem_layout *layout,
-                  struct pktgen_mem_data *data)
-{
-    printf("Load data from %p to %010lx size %ld\n",
-           data->base,
-           ((uint64_t)data->mu_base_s8)<<8,
-           data->size);
     return 0;
 }
 
@@ -160,6 +155,54 @@ mem_alloc_callback(void *handle,
     return 0;
 }
 
+/** mem_load_callback
+ */
+static int 
+mem_load_callback(void *handle,
+                  struct pktgen_mem_layout *layout,
+                  struct pktgen_mem_data *data)
+{
+    struct pktgen_nfp *pktgen_nfp;
+    struct pktgen_host_cmd host_cmd;
+    uint32_t mu_base_s8;
+    uint64_t size;
+    const char *mem;
+
+    printf("Load data from %p to %010lx size %ld\n",
+           data->base,
+           ((uint64_t)data->mu_base_s8)<<8,
+           data->size);
+
+    pktgen_nfp = (struct pktgen_nfp *)handle;
+    mu_base_s8 = data->mu_base_s8;
+    size       = data->size;
+    mem        = data->base;
+
+    while (size>0) {
+        uint64_t size_to_do;
+        size_to_do = size;
+        if (size_to_do > 4096)
+            size_to_do = 4096;
+
+        host_cmd.dma_cmd.cmd_type = PKTGEN_HOST_CMD_DMA;
+        host_cmd.dma_cmd.length = size_to_do;
+        host_cmd.dma_cmd.mu_base_s8     = mu_base_s8;
+        host_cmd.dma_cmd.pcie_base_low  = pktgen_nfp->pcie_base_addr[0];
+        host_cmd.dma_cmd.pcie_base_high = pktgen_nfp->pcie_base_addr[0];
+
+        fprintf(stderr,"memcpy %p %p %ld",pktgen_nfp->pcie_base, mem, size_to_do);
+        memcpy(pktgen_nfp->pcie_base, mem, size_to_do);
+
+        host_cmd = host_cmd;
+        //do_dma
+
+        mu_base_s8 += size_to_do >> 8;
+        mem += size_to_do; 
+        size -= size_to_do;
+    }
+    return 0;
+}
+
 /** Main
     For this we load the firmware and give it packets.
  */
@@ -167,9 +210,6 @@ extern int
 main(int argc, char **argv)
 {
     struct pktgen_nfp pktgen_nfp;
-    int pcie_size;
-    void *pcie_base;
-    uint64_t pcie_base_addr;
 
     pktgen_nfp.mem_layout = pktgen_mem_alloc(&pktgen_nfp,
                                              mem_alloc_callback,
@@ -181,27 +221,21 @@ main(int argc, char **argv)
         return 4;
     }
 
-    if (pktgen_mem_load(pktgen_nfp.mem_layout) != 0) {
-        fprintf(stderr,"Failed to load generator memory\n");
-        return 4;
-    }
-
     if (pktgen_load_nfp(&pktgen_nfp, 0, "firmware/nffw/pcap.nffw")!=0) {
         fprintf(stderr,"Failed to open and load up NFP with ME code\n");
         return 4;
     }
 
-    pcie_size = nfp_huge_malloc(pktgen_nfp.nfp,
-                                (void **)&pcie_base,
-                                &pcie_base_addr,
-                                PCIE_HUGEPAGE_SIZE);
-    if (pcie_size == 0) {
+    pktgen_nfp.pcie_size = nfp_huge_malloc(pktgen_nfp.nfp,
+                                           (void **)&pktgen_nfp.pcie_base,
+                                           &pktgen_nfp.pcie_base_addr[0],
+                                           PCIE_HUGEPAGE_SIZE);
+    if (pktgen_nfp.pcie_size == 0) {
         fprintf(stderr,"Failed to allocate memory\n");
         return 4;
     }
 
-    if (pktgen_give_pcie_pcap_buffers(&pktgen_nfp,
-                                      pcie_base, pcie_base_addr, pcie_size) != 0) {
+    if (0 && pktgen_give_pcie_pcap_buffers(&pktgen_nfp) != 0) {
         fprintf(stderr,"Failed to give PCIe pcap buffers\n");
         return 4;
     }
@@ -219,7 +253,7 @@ main(int argc, char **argv)
     usleep(1000*1000);
 
     pktgen_mem_load(pktgen_nfp.mem_layout);
-    nfp_huge_free(pktgen_nfp.nfp, pcie_base);
+    nfp_huge_free(pktgen_nfp.nfp, pktgen_nfp.pcie_base);
     nfp_shutdown(pktgen_nfp.nfp);
     return 0;
 }
