@@ -173,7 +173,7 @@
 /** Memory declarations
  */
 _declare_resource("pktgen_cls_host island 64")
-#define ALLOC_HOST_SHARED_DATA() __alloc_resource("hd pktgen_cls_host island 64")
+#define ALLOC_HOST_SHARED_DATA() __alloc_resource("pktgen_cls_host pktgen_cls_host island 64")
 
 /** struct host_data
  */

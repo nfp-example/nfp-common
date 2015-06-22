@@ -82,16 +82,11 @@ pktgen_load_nfp(struct pktgen_nfp *pktgen_nfp, int dev_num, const char *nffw_fil
         fprintf(stderr, "Failed to load NFP firmware\n");
         return 1;
     }
-    /*nfp_show_rtsyms(nfp);*/
+    nfp_show_rtsyms(pktgen_nfp->nfp);
     if ((nfp_get_rtsym_cppid(pktgen_nfp->nfp,
-                             "pktgen_cls_host",
+                             "i4.pktgen_cls_host",
                              &pktgen_nfp->pktgen_cls_host) < 0) ||
-        (nfp_get_rtsym_cppid(pktgen_nfp->nfp,
-                             "host_shared_data",
-                             &pktgen_nfp->cls_wptr) < 0) ||
-        (nfp_get_rtsym_cppid(pktgen_nfp->nfp,
-                             "host_ring_base",
-                             &pktgen_nfp->cls_ring) < 0)) {
+        0) {
         fprintf(stderr, "Failed to find necessary symbols\n");
         return 1;
     }
@@ -190,7 +185,7 @@ mem_load_callback(void *handle,
         host_cmd.dma_cmd.pcie_base_low  = pktgen_nfp->pcie_base_addr[0];
         host_cmd.dma_cmd.pcie_base_high = pktgen_nfp->pcie_base_addr[0];
 
-        fprintf(stderr,"memcpy %p %p %ld",pktgen_nfp->pcie_base, mem, size_to_do);
+        fprintf(stderr,"memcpy %p %p %ld\n",pktgen_nfp->pcie_base, mem, size_to_do);
         memcpy(pktgen_nfp->pcie_base, mem, size_to_do);
 
         host_cmd = host_cmd;
@@ -221,7 +216,7 @@ main(int argc, char **argv)
         return 4;
     }
 
-    if (pktgen_load_nfp(&pktgen_nfp, 0, "firmware/nffw/pcap.nffw")!=0) {
+    if (pktgen_load_nfp(&pktgen_nfp, 0, "firmware/nffw/pktgen.nffw")!=0) {
         fprintf(stderr,"Failed to open and load up NFP with ME code\n");
         return 4;
     }

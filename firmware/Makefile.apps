@@ -60,5 +60,6 @@ $(eval $(call micro_c.compile,pktgen_init,app,pktgen_init.c))
 $(eval $(call nffw.add_obj_with_mes,pktgen,pktgen_host,i4.me2))
 $(eval $(call nffw.add_obj_with_mes,pktgen,pktgen_tx_slave,i32.me0 i32.me1 i32.me2 i32.me3 i32.me4 i32.me5 i32.me6 i32.me7 i33.me0 i33.me1 i33.me2 i33.me3 i33.me4 i33.me5 i33.me6 i33.me7))
 $(eval $(call nffw.add_obj_with_mes,pktgen,pktgen_init,i5.me2))
+$(eval $(call nffw.add_rtsyms,pktgen))
 $(eval $(call nffw.link,pktgen))
 
