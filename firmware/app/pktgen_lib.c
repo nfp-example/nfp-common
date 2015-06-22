@@ -648,8 +648,6 @@ tx_master_distribute_schedule(uint64_t base_time,
  * @param host_cmd    Host command from the host
  *
  */
-/** struct pktgen_cls_host
- */
 static void
 host_get_cmd(struct host_data *host_data,
              __xread struct pktgen_host_cmd *host_cmd)
@@ -686,6 +684,30 @@ host_get_cmd(struct host_data *host_data,
     host_data->rptr++;
 }
 
+/** host_ack_cmd
+ *
+ * Acknowledge a command from the host
+ *
+ * @param host_data   Host data read at init time
+ * @param host_cmd    Host command from the host
+ *
+ */
+static void
+host_ack_cmd(struct host_data *host_data,
+             __xread struct pktgen_host_cmd *host_cmd)
+{
+    uint32_t addr; /* Address in CLS of host data / ring */
+    __xwrite uint32_t data_out;
+
+    addr = host_data->cls_host_shared_data;
+    data_out = host_data->rptr;
+    cls_write(&data_out, (__cls void *)addr, offsetof(struct pktgen_cls_host, rptr),
+              sizeof(data_out));
+    data_out = host_cmd->ack_cmd.data;
+    cls_write(&data_out, (__cls void *)addr, offsetof(struct pktgen_cls_host, ack_data),
+              sizeof(data_out));
+}
+
 /** pktgen_master
  *
  * The master monitors the CLS and uses it to indicate that data is ready
@@ -712,8 +734,8 @@ pktgen_master(void)
     host_data.cls_host_shared_data = ALLOC_HOST_SHARED_DATA();
     host_data.cls_ring.base = 0;
     host_data.cls_ring.item_mask = 0;
-    host_data.rptr = 0;
     host_data.wptr = 0;
+    host_data.rptr = 0;
 
     tx_seq = 0;
     for (;;) {
@@ -725,14 +747,29 @@ pktgen_master(void)
             uint64_t base_time;
             int total_pkts;
             uint32_t mu_base_s8;
-            base_time = me_time64() + host_cmd.pkt_cmd.base_delay;
+            uint64_32_t time_now;
+            time_now = me_time64();
+            base_time = time_now.uint64 + host_cmd.pkt_cmd.base_delay;
             mu_base_s8 = host_cmd.pkt_cmd.mu_base_s8;
             total_pkts = host_cmd.pkt_cmd.total_pkts;
             tx_master_distribute_schedule(base_time, total_pkts,
                                           mu_base_s8, &tx_seq);
         } else if (host_cmd.all_cmds.cmd_type == PKTGEN_HOST_CMD_DMA) {
-        }
+            uint64_32_t cpp_addr;
+            uint64_32_t pcie_addr;
+            int length;
 
+            cpp_addr.uint32_lo = host_cmd.dma_cmd.mu_base_s8 << 8;
+            cpp_addr.uint32_hi = host_cmd.dma_cmd.mu_base_s8 >> 24;
+            pcie_addr.uint32_lo = host_cmd.dma_cmd.pcie_base_low;
+            pcie_addr.uint32_hi = host_cmd.dma_cmd.pcie_base_high;
+            length = host_cmd.dma_cmd.length;
+
+            pcie_dma_buffer(PCIE_ISLAND, pcie_addr, cpp_addr, length,
+                            NFP_PCIE_DMA_TOPCI_HI, 0 /*token*/, PKTGEN_PCIE_DMA_CFG );
+        } else if (host_cmd.all_cmds.cmd_type == PKTGEN_HOST_CMD_ACK) {
+            host_ack_cmd(&host_data, &host_cmd);
+        }
     }
 }
 

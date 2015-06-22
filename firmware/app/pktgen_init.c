@@ -14,19 +14,31 @@
 
 /** CSR initialization
  */
-/* DMA config 8 for CLS */
+/* DMA config */
 #define __PCI "pcie:i4.PcieInternalTargets.DMAController"
-#define __DCFG __PCI ".DMADescrConfig4"
-_init_csr( __DCFG ".CppTargetIDEven 0xf const");
-_init_csr( __DCFG ".Target64bitEven 0   const");
-_init_csr( __PCI ".DMADescrConfig4.Target64bitEven     0   const");
-_init_csr( __PCI ".DMADescrConfig4.NoSnoopEven         0   const");
-_init_csr( __PCI ".DMADescrConfig4.RelaxedOrderingEven 0   const");
-_init_csr( __PCI ".DMADescrConfig4.IdBasedOrderingEven 0   const");
-_init_csr( __PCI ".DMADescrConfig4.StartPaddingEven    0   const");
-_init_csr( __PCI ".DMADescrConfig4.EndPaddingEven      0   const");
-_init_csr( __PCI ".DMADescrConfig4.SignalOnlyEven      0   const");
+#define __str(x) #x
+#define __xstr(x) __str(x)
+#define __DCFG __PCI ".DMADescrConfig" __xstr(PKTGEN_PCIE_DMA_CFG)
+_init_csr( __DCFG ".CppTargetIDEven     0x7 const");
+_init_csr( __DCFG ".Target64bitEven     0   const");
+_init_csr( __DCFG ".NoSnoopEven         0   const");
+_init_csr( __DCFG ".RelaxedOrderingEven 0   const");
+_init_csr( __DCFG ".IdBasedOrderingEven 0   const");
+_init_csr( __DCFG ".StartPaddingEven    0   const");
+_init_csr( __DCFG ".EndPaddingEven      0   const");
+_init_csr( __DCFG ".SignalOnlyEven      0   const");
 #undef __PCI
+#undef __str
+#undef __xstr
+
+/* Debug CLS ring
+ */
+_init_csr("cls:Rings.RingBase0.Size 5")
+_init_csr("cls:Rings.RingBase0.Base 0x1e0")
+_init_csr("cls:Rings.RingBase0.Full 0")
+_init_csr("cls:Rings.RingBase0.NotEmpty 0")
+_init_csr("cls:Rings.RingPtrs0.HeadPointer 0")
+_init_csr("cls:Rings.RingPtrs0.TailPointer 0")
 
 /** Synchronization
  */

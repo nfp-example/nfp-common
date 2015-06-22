@@ -81,3 +81,23 @@ cls_incr(__cls void *addr, int ofs)
     }
 }
 
+/** cls_ring_journal_rem
+ *
+ * @param data   Transfer registers to write
+ * @param addr   32-bit CLS island-local address
+ * @param ofs    Offset from address
+ * @param size   Size in bytes to write (must be multiple of 4)
+ *
+ */
+__intrinsic void
+cls_ring_journal_rem(__xwrite void *data, uint32_t cls_base_s8,
+                     int ring_s2, const size_t size)
+{
+    uint32_t size_in_uint32 = (size >> 2);
+    SIGNAL sig;
+
+    __asm {
+        cls[ring_journal, *data, cls_base_s8, <<8, ring_s2, size_in_uint32], ctx_swap[sig];
+    }
+}
+

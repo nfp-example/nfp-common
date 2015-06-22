@@ -58,6 +58,17 @@ __intrinsic void cls_write(__xwrite void *data, __cls void *addr,
  */
 __intrinsic void cls_incr(__cls void *addr, int ofs);
 
+/** cls_ring_journal_rem
+ *
+ * @param data         Transfer registers to write
+ * @param cls_base_s8  40-bit CLS address >> 8
+ * @param ring_s2      Ring number << 2
+ * @param size         Size in bytes to write (must be multiple of 4)
+ *
+ */
+__intrinsic void cls_ring_journal_rem(__xwrite void *data, uint32_t cls_base_s8,
+                                      int ring_s2, const size_t size);
+
 /** Close guard
  */
 #endif /*_NFP__CLS_H_ */

@@ -34,6 +34,7 @@ struct pktgen_cls_host {
     struct pktgen_cls_ring cls_ring;
     uint32_t wptr;
     uint32_t rptr;
+    uint32_t ack_data;
 };
 
 /** struct pktgen_host_cmd
@@ -41,6 +42,7 @@ struct pktgen_cls_host {
 enum {
     PKTGEN_HOST_CMD_DMA=0,
     PKTGEN_HOST_CMD_PKT=1,
+    PKTGEN_HOST_CMD_ACK=2,
 };
 struct pktgen_host_cmd {
     union {
@@ -61,6 +63,12 @@ struct pktgen_host_cmd {
             uint32_t mu_base_s8;
             int      total_pkts;
         } pkt_cmd;
+        struct {
+            int      cmd_type:8;
+            unsigned int pad_0:24;
+            uint32_t data;
+            uint32_t pad_1[2];
+        } ack_cmd;
     };
 };
 

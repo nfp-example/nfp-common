@@ -94,16 +94,11 @@ me_sleep(unsigned int cycles)
  * Get 64-bit current time
  *
  */
-union raw_uint64 {
-    uint64_t uint64;
-    uint32_t uint32[2];
-};
-
-__intrinsic uint64_t
+__intrinsic uint64_32_t
 me_time64(void)
 {
-    union raw_uint64 ts;
-    ts.uint32[0] = local_csr_read(local_csr_timestamp_low);
-    ts.uint32[1] = local_csr_read(local_csr_timestamp_high);
-    return ts.uint64;
+    uint64_32_t ts;
+    ts.uint32_lo = local_csr_read(local_csr_timestamp_low);
+    ts.uint32_hi = local_csr_read(local_csr_timestamp_high);
+    return ts;
 }

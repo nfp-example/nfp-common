@@ -24,6 +24,11 @@
 #include "pktgen.h"
 #include <stdint.h>
 
+/** Defines
+ */
+#define PCIE_ISLAND 4
+#define PKTGEN_PCIE_DMA_CFG 4    
+
 /** pktgen_tx_slave
  */
 void pktgen_tx_slave(void);
