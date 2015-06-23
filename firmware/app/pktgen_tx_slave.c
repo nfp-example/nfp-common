@@ -22,7 +22,9 @@ SYNC_STAGE_SET_PREINIT(PKTGEN_INIT_STAGES,PKTGEN_TX_CTXTS,PKTGEN_TX_MES,PKTGEN_I
  */
 void main(void)
 {
-    pktgen_tx_slave_init();
+    int batch;
+    batch = ctx();
+    pktgen_tx_slave_init(batch);
     sync_state_set_stage_complete(PKTGEN_INIT_STAGE_READY_TO_RUN);
     pktgen_tx_slave();
 }

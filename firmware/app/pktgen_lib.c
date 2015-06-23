@@ -179,6 +179,33 @@ _declare_resource("pktgen_cls_ring island " PKTGEN_CLS_RING_SIZE__STR " pktgen_c
 #define ALLOC_PKTGEN_HOST() __alloc_resource("pktgen_cls_host pktgen_cls_host island 64")
 #define ALLOC_PKTGEN_RING() __alloc_resource("pktgen_cls_ring pktgen_cls_ring island " PKTGEN_CLS_RING_SIZE__STR)
 
+/** Queue descriptors and allocations
+ */
+/* Batch work queue is from pktgen_master to batch_distributor */
+/* Currently 1k words = 256 entries = 4k packets*/
+#define QDEF_BATCH_WORK mu_workq_batch_work,10,8,emem
+
+/* Batch descriptor queues are from batch_distributor to tx_slaves */
+/* Currently 1k words = 256 entries = 4k packets*/
+#define QDEF_BATCH_DESC_0 mu_workq_batch_desc_0,10,16,emem
+#define QDEF_BATCH_DESC_1 mu_workq_batch_desc_1,10,17,emem
+#define QDEF_BATCH_DESC_2 mu_workq_batch_desc_2,10,18,emem
+#define QDEF_BATCH_DESC_3 mu_workq_batch_desc_3,10,19,emem
+#define QDEF_BATCH_DESC_4 mu_workq_batch_desc_4,10,20,emem
+#define QDEF_BATCH_DESC_5 mu_workq_batch_desc_5,10,21,emem
+#define QDEF_BATCH_DESC_6 mu_workq_batch_desc_6,10,22,emem
+#define QDEF_BATCH_DESC_7 mu_workq_batch_desc_7,10,23,emem
+
+MU_QUEUE_ALLOC(QDEF_BATCH_WORK);
+MU_QUEUE_ALLOC(QDEF_BATCH_DESC_0);
+MU_QUEUE_ALLOC(QDEF_BATCH_DESC_1);
+MU_QUEUE_ALLOC(QDEF_BATCH_DESC_2);
+MU_QUEUE_ALLOC(QDEF_BATCH_DESC_3);
+MU_QUEUE_ALLOC(QDEF_BATCH_DESC_4);
+MU_QUEUE_ALLOC(QDEF_BATCH_DESC_5);
+MU_QUEUE_ALLOC(QDEF_BATCH_DESC_6);
+MU_QUEUE_ALLOC(QDEF_BATCH_DESC_7);
+
 /** struct host_data
  */
 struct host_data {
@@ -757,16 +784,63 @@ pktgen_master(void)
  */
 void pktgen_master_init(void)
 {
+    uint32_t local_muq;
+
+    batch_work_muq = MU_QUEUE_CONFIG_WRITE(QDEF_BATCH_WORK);
+   
+    local_muq = MU_QUEUE_CONFIG_WRITE(QDEF_BATCH_DESC_0);
+    local_muq = MU_QUEUE_CONFIG_WRITE(QDEF_BATCH_DESC_1);
+    local_muq = MU_QUEUE_CONFIG_WRITE(QDEF_BATCH_DESC_2);
+    local_muq = MU_QUEUE_CONFIG_WRITE(QDEF_BATCH_DESC_3);
+    local_muq = MU_QUEUE_CONFIG_WRITE(QDEF_BATCH_DESC_4);
+    local_muq = MU_QUEUE_CONFIG_WRITE(QDEF_BATCH_DESC_5);
+    local_muq = MU_QUEUE_CONFIG_WRITE(QDEF_BATCH_DESC_6);
+    local_muq = MU_QUEUE_CONFIG_WRITE(QDEF_BATCH_DESC_7);
 }
 
 /** pktgen_batch_distributor_init
  */
 void pktgen_batch_distributor_init(void)
 {
+    batch_work_muq          = MU_QUEUE_CONFIG_GET(QDEF_BATCH_WORK);
+    batch_desc_array[0].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_0);
+    batch_desc_array[1].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_1);
+    batch_desc_array[2].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_2);
+    batch_desc_array[3].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_3);
+    batch_desc_array[4].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_4);
+    batch_desc_array[5].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_5);
+    batch_desc_array[6].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_6);
+    batch_desc_array[7].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_7);
 }
 
 /** pktgen_tx_slave_init
  */
-void pktgen_tx_slave_init(void)
+void pktgen_tx_slave_init(int batch)
 {
+    switch (batch) {
+    case 0:
+        batch_desc.muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_0);
+        break;
+    case 1:
+        batch_desc.muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_1);
+        break;
+    case 2:
+        batch_desc.muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_2);
+        break;
+    case 3:
+        batch_desc.muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_3);
+        break;
+    case 4:
+        batch_desc.muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_4);
+        break;
+    case 5:
+        batch_desc.muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_5);
+        break;
+    case 6:
+        batch_desc.muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_6);
+        break;
+    case 7:
+        batch_desc.muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_7);
+        break;
+    }
 }

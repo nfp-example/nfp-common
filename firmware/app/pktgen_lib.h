@@ -49,3 +49,14 @@ void pktgen_batch_distributor(void);
  *
  */
 void pktgen_master(void);
+/** pktgen_master_init
+ */
+void pktgen_master_init(void);
+
+/** pktgen_batch_distributor_init
+ */
+void pktgen_batch_distributor_init(void);
+
+/** pktgen_tx_slave_init
+ */
+void pktgen_tx_slave_init(int batch);

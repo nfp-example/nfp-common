@@ -8,6 +8,7 @@
 /** Includes
  */
 #include "pcap.h"
+#include "nfp/xpb.h"
 #include "sync/stage.h"
 #include "pktgen_lib.h"
 #include <stdint.h>
