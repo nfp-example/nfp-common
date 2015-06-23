@@ -27,7 +27,9 @@
 /** Defines
  */
 #define PCIE_ISLAND 4
-#define PKTGEN_PCIE_DMA_CFG 4    
+/* CSR is HALF of the CFG */
+#define PKTGEN_PCIE_DMA_CFG 4
+#define PKTGEN_PCIE_DMA_CFG_CSR 2
 
 /** pktgen_tx_slave
  */

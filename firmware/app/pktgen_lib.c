@@ -745,8 +745,8 @@ pktgen_master(void)
             pcie_addr.uint32_hi = host_cmd.dma_cmd.pcie_base_high;
             length = host_cmd.dma_cmd.length;
 
-            pcie_dma_buffer(PCIE_ISLAND, pcie_addr, cpp_addr, length,
-                            NFP_PCIE_DMA_TOPCI_HI, 0 /*token*/, PKTGEN_PCIE_DMA_CFG );
+            pcie_dma_buffer(0 /*PCIE_ISLAND*/, pcie_addr, cpp_addr, length,
+                            NFP_PCIE_DMA_FROMPCI_HI, 0 /*token*/, PKTGEN_PCIE_DMA_CFG );
         } else if (host_cmd.all_cmds.cmd_type == PKTGEN_HOST_CMD_ACK) {
             host_ack_cmd(&host_data, &host_cmd);
         }

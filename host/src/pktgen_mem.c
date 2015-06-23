@@ -155,7 +155,7 @@ static const char *layout_default_filenames[]={
 
 /** Statics
  */
-static int verbose=1;
+static int verbose=0;
 
 /** open_file
  *

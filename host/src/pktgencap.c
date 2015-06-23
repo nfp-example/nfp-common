@@ -222,7 +222,7 @@ pktgen_issue_ack_and_wait(struct pktgen_nfp *pktgen_nfp)
  * for a memory requires it.
  *
  */
-static uint64_t emem0_base=(8L << 36) | 0x90000;
+static uint64_t emem0_base=(4L << 35) | 0x900000;
 static int 
 mem_alloc_callback(void *handle,
                    uint64_t size,

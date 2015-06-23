@@ -320,6 +320,7 @@ nfp_huge_physical_address(struct nfp *nfp, void *ptr, uint64_t ofs)
     }
     addr = (linux_page_data & (-1LL>>(64-55)))*nfp->pagemap.page_size;
     addr += ((uint64_t)ptr) % nfp->pagemap.page_size;
+    fprintf(stderr,"Huge page for %p offset %lx is %lx\n",ptr,ofs,addr);
     return addr;
 }
 
