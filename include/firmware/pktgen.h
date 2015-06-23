@@ -60,14 +60,16 @@ struct pktgen_cls_host {
 /** struct pktgen_host_cmd
  */
 enum {
-    PKTGEN_HOST_CMD_DMA=0,
     PKTGEN_HOST_CMD_PKT=1,
     PKTGEN_HOST_CMD_ACK=2,
+    PKTGEN_HOST_CMD_DMA=3,
 };
+#ifdef __NFCC_VERSION
 struct pktgen_host_cmd {
     union {
         struct {
             int      cmd_type:8;
+            int      pad_0:24;
             uint32_t pad[3];
         } all_cmds;
         struct {
@@ -79,6 +81,7 @@ struct pktgen_host_cmd {
         } dma_cmd;
         struct {
             int      cmd_type:8;
+            int      pad_0:24;
             uint32_t base_delay;
             uint32_t mu_base_s8;
             int      total_pkts;
@@ -92,3 +95,36 @@ struct pktgen_host_cmd {
     };
 };
 
+#else
+
+struct pktgen_host_cmd {
+    union {
+        struct {
+            int      pad_0:24;
+            int      cmd_type:8;
+            uint32_t pad[3];
+        } all_cmds;
+        struct {
+            unsigned int length:24;
+            int      cmd_type:8;
+            uint32_t mu_base_s8;
+            uint32_t pcie_base_low;
+            uint32_t pcie_base_high;
+        } dma_cmd;
+        struct {
+            int      pad_0:24;
+            int      cmd_type:8;
+            uint32_t base_delay;
+            uint32_t mu_base_s8;
+            int      total_pkts;
+        } pkt_cmd;
+        struct {
+            unsigned int pad_0:24;
+            int      cmd_type:8;
+            uint32_t data;
+            uint32_t pad_1[2];
+        } ack_cmd;
+    };
+};
+
+#endif

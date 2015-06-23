@@ -172,8 +172,10 @@
 
 /** Memory declarations
  */
-_declare_resource("pktgen_cls_host island 64")
-_declare_resource("pktgen_cls_ring island " PKTGEN_CLS_RING_SIZE__STR)
+_alloc_mem("pktgen_cls_host_res cls island 64 64")
+_alloc_mem("pktgen_cls_ring_res cls island " PKTGEN_CLS_RING_SIZE__STR " " PKTGEN_CLS_RING_SIZE__STR)
+_declare_resource("pktgen_cls_host island 64 pktgen_cls_host_res")
+_declare_resource("pktgen_cls_ring island " PKTGEN_CLS_RING_SIZE__STR " pktgen_cls_ring_res")
 #define ALLOC_PKTGEN_HOST() __alloc_resource("pktgen_cls_host pktgen_cls_host island 64")
 #define ALLOC_PKTGEN_RING() __alloc_resource("pktgen_cls_ring pktgen_cls_ring island " PKTGEN_CLS_RING_SIZE__STR)
 
@@ -511,16 +513,17 @@ __intrinsic
 void batch_dist_distribute_sched_entries(struct batch_work *batch_work,
                                         __xread struct pktgen_sched_entry *sched_entries)
 {
-    __xwrite struct tx_pkt_work tx_pkt_work[8];
+    __xwrite struct tx_pkt_work tx_pkt_work[4];
     SIGNAL sig0, sig1, sig2, sig3, sig4, sig5, sig6, sig7;
     batch_dist_add_pkt_to_batch(batch_work, &sched_entries[0], &tx_pkt_work[0], 0, &sig0 );
     batch_dist_add_pkt_to_batch(batch_work, &sched_entries[1], &tx_pkt_work[1], 1, &sig1 );
     batch_dist_add_pkt_to_batch(batch_work, &sched_entries[2], &tx_pkt_work[2], 2, &sig2 );
     batch_dist_add_pkt_to_batch(batch_work, &sched_entries[3], &tx_pkt_work[3], 3, &sig3 );
-    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[4], &tx_pkt_work[4], 4, &sig4 );
-    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[5], &tx_pkt_work[5], 5, &sig5 );
-    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[6], &tx_pkt_work[6], 6, &sig6 );
-    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[7], &tx_pkt_work[7], 7, &sig7 );
+    wait_for_all(&sig0, &sig1, &sig2, &sig3);
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[4], &tx_pkt_work[0], 4, &sig4 );
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[5], &tx_pkt_work[1], 5, &sig5 );
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[6], &tx_pkt_work[2], 6, &sig6 );
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[7], &tx_pkt_work[3], 7, &sig7 );
     wait_for_all(&sig0, &sig1, &sig2, &sig3, &sig4, &sig5, &sig6, &sig7);
 }
 

@@ -34,7 +34,7 @@ include $(HOST_DIR)/Makefile.templates
 include $(HOST_DIR)/Makefile.apps
 
 clean_host:
-	rm $(HOST_BUILD_DIR)/*.o
+	rm -f $(HOST_BUILD_DIR)/*.o
 
 $(HOST_BUILD_DIR)/%.o: $(HOST_SRC_DIR)/%.c
 	$(CC) -c -o $@ -I$(HOST_DIR)/src $<

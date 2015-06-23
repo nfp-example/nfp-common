@@ -28,11 +28,11 @@ NFAS_BASE_FLAGS = -chip nfp-6xxx-a0
 NFCC = $(NETRONOME)/bin/nfcc
 NFCC_BASE_INC = -I$(FIRMWARE_DIR)/lib -I$(INCLUDE_DIR)
 NFCC_BASE_DEFS = 
-NFCC_BASE_FLAGS = 
+NFCC_BASE_FLAGS = -Zi -W3 -Qspill=7 -Qnctx_mode=8 -single_dram_signal
 NFCC_BASE_CLIBS = 
 
 NFLD = $(NETRONOME)/bin/nfld
-NFLD_BASE_FLAGS = -chip nfp-6xxx-a0
+NFLD_BASE_FLAGS = -chip nfp-6xxx-a0 -g -elf64
 
 include $(FIRMWARE_DIR)/Makefile.templates
 include $(FIRMWARE_DIR)/Makefile.apps

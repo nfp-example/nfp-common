@@ -84,15 +84,7 @@ __intrinsic void
 pcie_dma_enqueue(int island, __xwrite struct nfp_pcie_dma_cmd *cmd,
                  int queue)
 {
-    if (1) {
-        uint32_t addr_s8;
-        uint32_t ofs=CLS_DEBUG_JOURNAL_RING<<2;
-        addr_s8 = PCIE_ISLAND << (34 - 8);
-        cls_ring_journal_rem(cmd, addr_s8, ofs, sizeof(*cmd));
-    }
-    else {
-        pcie_write_int(cmd, island, queue, sizeof(*cmd));
-    }
+    pcie_write_int(cmd, island, queue, sizeof(*cmd));
 }
 
 /** pcie_dma_buffer
@@ -148,15 +140,26 @@ pcie_dma_buffer(int island, uint64_32_t pcie_addr, uint64_32_t cpp_addr,
         cmd_out.__raw[1] = cmd.__raw[1] | (signal << 14);
         cmd_out.__raw[2] = cmd.__raw[2];
         cmd_out.__raw[3] = cmd.__raw[3] | ((length_to_dma - 1) << 20);
-        pcie_dma_enqueue(island,
-                         &cmd_out,
-                         queue );
+
+        if (0) {
+            uint32_t addr_s8;
+            uint32_t ofs=CLS_DEBUG_JOURNAL_RING<<2;
+            addr_s8 = PCIE_ISLAND << (34 - 8);
+            cls_ring_journal_rem(&cmd_out, addr_s8, ofs, sizeof(cmd_out));
+        } else {
+            pcie_dma_enqueue(island,
+                             &cmd_out,
+                             queue );
+        }
         length -= length_to_dma;
         if (length > 0) {
             cmd.__raw[0] += length_to_dma;
             cmd.__raw[2] += length_to_dma;
         }
-        wait_for_all(&sig);
+        if (0) {
+        } else {
+            wait_for_all(&sig);
+        }
     }
 }
 

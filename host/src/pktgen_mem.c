@@ -499,6 +499,7 @@ load_allocation(struct pktgen_mem_layout *layout,
         char *mem_to_load;
         uint64_t size_to_load;
         struct pktgen_mem_data mem_data;
+        int err;
 
         size_to_load = alloc_size;
         if (size_to_load > MAX_SIZE_TO_LOAD)
@@ -517,7 +518,10 @@ load_allocation(struct pktgen_mem_layout *layout,
         mem_data.size = size_to_load;
         mem_data.mu_base_s8 = allocation->mu_base_s8 + (offset >> 8);
 
-        layout->load_callback(layout->handle, layout, &mem_data);
+        err = layout->load_callback(layout->handle, layout, &mem_data);
+        if (err != 0)
+            return err;
+
         if (mem == NULL) {
             free(mem_to_load);
         }

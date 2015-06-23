@@ -36,12 +36,12 @@ _init_csr( __DCFG ".SignalOnlyEven      0   const");
 
 /* Debug CLS ring
  */
-_init_csr("cls:Rings.RingBase0.Size 5")
-_init_csr("cls:Rings.RingBase0.Base 0x1e0")
-_init_csr("cls:Rings.RingBase0.Full 0")
-_init_csr("cls:Rings.RingBase0.NotEmpty 0")
-_init_csr("cls:Rings.RingPtrs0.HeadPointer 0")
-_init_csr("cls:Rings.RingPtrs0.TailPointer 0")
+_init_csr("cls:i4.Rings.RingBase0.Size 5")
+_init_csr("cls:i4.Rings.RingBase0.Base 0x1e0")
+_init_csr("cls:i4.Rings.RingBase0.Full 0")
+_init_csr("cls:i4.Rings.RingBase0.NotEmpty 0")
+_init_csr("cls:i4.Rings.RingPtrs0.HeadPointer 0")
+_init_csr("cls:i4.Rings.RingPtrs0.TailPointer 0")
 
 /** Synchronization
  */

@@ -27,7 +27,7 @@ all_host: pcap_test
 clean_host: clean_host__pcap_test
 
 clean_host__pcap_test:
-	rm $(HOST_BIN_DIR)/pcap_test
+	rm -f $(HOST_BIN_DIR)/pcap_test
 
 pcap_test: $(HOST_BIN_DIR)/pcap_test
 
@@ -43,7 +43,7 @@ all_host: pktgencap
 clean_host: clean_host__pktgencap
 
 clean_host__pktgencap:
-	rm $(HOST_BIN_DIR)/pktgencap
+	rm -f $(HOST_BIN_DIR)/pktgencap
 
 pktgencap: $(HOST_BIN_DIR)/pktgencap
 

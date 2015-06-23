@@ -81,7 +81,7 @@ pktgen_load_nfp(struct pktgen_nfp *pktgen_nfp,
                              "i4.pktgen_cls_host",
                              &pktgen_nfp->pktgen_cls_host) < 0) ||
         (nfp_get_rtsym_cppid(pktgen_nfp->nfp,
-                             "i4.pktgen_cls_ring_base",
+                             "i4.pktgen_cls_ring",
                              &pktgen_nfp->pktgen_cls_ring) < 0) ||
         0) {
         fprintf(stderr, "Failed to find necessary symbols\n");
@@ -145,6 +145,14 @@ pktgen_issue_cmd(struct pktgen_nfp *pktgen_nfp,
     ofs = ofs << 4;
 
     pktgen_nfp->host.wptr++;
+    fprintf(stderr,"%x:%d:%d:%02x, %016lx, %d\n",
+            (pktgen_nfp->pktgen_cls_ring.cpp_id>>24)&0xff,
+            (pktgen_nfp->pktgen_cls_ring.cpp_id>>16)&0xff,
+            (pktgen_nfp->pktgen_cls_ring.cpp_id>>8)&0xff,
+            (pktgen_nfp->pktgen_cls_ring.cpp_id>>0)&0xff,
+            pktgen_nfp->pktgen_cls_ring.addr,
+            ofs );
+
     if (nfp_write(pktgen_nfp->nfp,
                   &pktgen_nfp->pktgen_cls_ring,
                   ofs,
@@ -214,7 +222,7 @@ pktgen_issue_ack_and_wait(struct pktgen_nfp *pktgen_nfp)
  * for a memory requires it.
  *
  */
-static uint64_t emem0_base=0x80000;
+static uint64_t emem0_base=(8L << 36) | 0x90000;
 static int 
 mem_alloc_callback(void *handle,
                    uint64_t size,
@@ -228,7 +236,7 @@ mem_alloc_callback(void *handle,
 
     size = ((size+4095)/4096)*4096;
     data[0].size = size;
-    data[0].mu_base_s8 = emem0_base>>8;
+    data[0].mu_base_s8 = emem0_base >> 8;
     emem0_base += size;
     printf("Allocated memory size %ld base %08x00\n",
            size,
@@ -256,6 +264,7 @@ mem_load_callback(void *handle,
     uint32_t mu_base_s8;
     uint64_t size;
     const char *mem;
+    int err;
 
     printf("Load data from %p to %010lx size %ld\n",
            data->base,
@@ -272,20 +281,23 @@ mem_load_callback(void *handle,
         struct pktgen_host_cmd host_cmd;
 
         size_to_do = size;
-        if (size_to_do > 4096)
-            size_to_do = 4096;
+        if (size_to_do > 512*1024)
+            size_to_do = 512*1024;
 
         host_cmd.dma_cmd.cmd_type = PKTGEN_HOST_CMD_DMA;
         host_cmd.dma_cmd.length = size_to_do;
         host_cmd.dma_cmd.mu_base_s8     = mu_base_s8;
         host_cmd.dma_cmd.pcie_base_low  = pktgen_nfp->pcie_base_addr[0];
-        host_cmd.dma_cmd.pcie_base_high = pktgen_nfp->pcie_base_addr[0];
+        host_cmd.dma_cmd.pcie_base_high = pktgen_nfp->pcie_base_addr[0] >> 32;
 
         fprintf(stderr,"memcpy %p %p %ld\n",pktgen_nfp->pcie_base, mem, size_to_do);
         memcpy(pktgen_nfp->pcie_base, mem, size_to_do);
 
-        pktgen_issue_cmd(pktgen_nfp, &host_cmd);
-        pktgen_issue_ack_and_wait(pktgen_nfp);
+        err = pktgen_issue_cmd(pktgen_nfp, &host_cmd);
+        if (err == 0)
+            err = pktgen_issue_ack_and_wait(pktgen_nfp);
+        if (err != 0)
+            return err;
 
         mu_base_s8 += size_to_do >> 8;
         mem += size_to_do; 
