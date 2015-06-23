@@ -12,13 +12,18 @@
 #include "pktgen_lib.h"
 #include <stdint.h>
 
+/** Defines
+ */
+#ifndef STRINGIFY
+#define __STRINGIFY(x) #x
+#define STRINGIFY(x) __STRINGIFY(x)
+#endif
+
 /** CSR initialization
  */
 /* DMA config */
 #define __PCI "pcie:i4.PcieInternalTargets.DMAController"
-#define __str(x) #x
-#define __xstr(x) __str(x)
-#define __DCFG __PCI ".DMADescrConfig" __xstr(PKTGEN_PCIE_DMA_CFG)
+#define __DCFG __PCI ".DMADescrConfig" STRINGIFY(PKTGEN_PCIE_DMA_CFG)
 _init_csr( __DCFG ".CppTargetIDEven     0x7 const");
 _init_csr( __DCFG ".Target64bitEven     0   const");
 _init_csr( __DCFG ".NoSnoopEven         0   const");
@@ -28,8 +33,6 @@ _init_csr( __DCFG ".StartPaddingEven    0   const");
 _init_csr( __DCFG ".EndPaddingEven      0   const");
 _init_csr( __DCFG ".SignalOnlyEven      0   const");
 #undef __PCI
-#undef __str
-#undef __xstr
 
 /* Debug CLS ring
  */

@@ -173,12 +173,15 @@
 /** Memory declarations
  */
 _declare_resource("pktgen_cls_host island 64")
-#define ALLOC_HOST_SHARED_DATA() __alloc_resource("pktgen_cls_host pktgen_cls_host island 64")
+_declare_resource("pktgen_cls_ring island " PKTGEN_CLS_RING_SIZE__STR)
+#define ALLOC_PKTGEN_HOST() __alloc_resource("pktgen_cls_host pktgen_cls_host island 64")
+#define ALLOC_PKTGEN_RING() __alloc_resource("pktgen_cls_ring pktgen_cls_ring island " PKTGEN_CLS_RING_SIZE__STR)
 
 /** struct host_data
  */
 struct host_data {
-    struct pktgen_cls_ring cls_ring;
+    uint32_t cls_ring_base;
+    uint32_t cls_ring_item_mask;
     uint32_t cls_host_shared_data;
     uint32_t wptr;
     uint32_t rptr;
@@ -204,17 +207,6 @@ struct batch_work {
     unsigned int tx_seq:16;    /* Tx sequence for first of 8 entries */
     uint32_t     mu_base_s8;   /* 256B aligned flow script start */
     uint32_t     work_ofs;     /* Offset to script from script base */
-};
-
-/** struct flow_entry
- */
-struct flow_entry {
-    uint32_t     tx_time_lo;   /* Not sure what units... */
-    uint32_t     tx_time_hi:8; /* Top 8 bits */
-    unsigned int script_ofs:24;   /* Offset to script from script base */
-    uint32_t     mu_base_s8;   /* 256B aligned packet start */
-    unsigned int length:16;    /* Length of the packet (needed to DMA it) */
-    unsigned int flags:16;    /* */
 };
 
 /** struct tx_seq
@@ -493,7 +485,7 @@ pktgen_tx_slave(void)
  */
 __intrinsic void
 batch_dist_add_pkt_to_batch(struct batch_work *batch_work,
-                            __xread struct flow_entry *flow_entry,
+                            __xread struct pktgen_sched_entry *sched_entry,
                             __xwrite struct tx_pkt_work *tx_pkt_work_out,
                             int i,
                             SIGNAL *sig)
@@ -502,33 +494,33 @@ batch_dist_add_pkt_to_batch(struct batch_work *batch_work,
     struct tx_pkt_work tx_pkt_work;
 
     tx_seq = batch_work->tx_seq;
-    tx_pkt_work.tx_time_lo = batch_work->tx_time_lo + flow_entry->tx_time_lo;
-    tx_pkt_work.tx_time_hi = batch_work->tx_time_hi + flow_entry->tx_time_hi; /* carry */
-    tx_pkt_work.mu_base_s8 = flow_entry->mu_base_s8;
-    tx_pkt_work.script_ofs = flow_entry->script_ofs;
-    tx_pkt_work.length     = flow_entry->length;
+    tx_pkt_work.tx_time_lo = batch_work->tx_time_lo + sched_entry->tx_time_lo;
+    tx_pkt_work.tx_time_hi = batch_work->tx_time_hi + sched_entry->tx_time_hi; /* carry */
+    tx_pkt_work.mu_base_s8 = sched_entry->mu_base_s8;
+    tx_pkt_work.script_ofs = sched_entry->script_ofs;
+    tx_pkt_work.length     = sched_entry->length;
     tx_pkt_work.tx_seq     = tx_seq+i;
     tx_pkt_work_out[i] = tx_pkt_work;
     mem_workq_add_work_async(batch_desc_array[i].muq, (void *)tx_pkt_work_out,
                              sizeof(tx_pkt_work), sig);
 }
 
-/** batch_dist_distribute_flow_entries
+/** batch_dist_distribute_sched_entries
  */
 __intrinsic
-void batch_dist_distribute_flow_entries(struct batch_work *batch_work,
-                                        __xread struct flow_entry *flow_entries)
+void batch_dist_distribute_sched_entries(struct batch_work *batch_work,
+                                        __xread struct pktgen_sched_entry *sched_entries)
 {
     __xwrite struct tx_pkt_work tx_pkt_work[8];
     SIGNAL sig0, sig1, sig2, sig3, sig4, sig5, sig6, sig7;
-    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[0], &tx_pkt_work[0], 0, &sig0 );
-    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[1], &tx_pkt_work[1], 1, &sig1 );
-    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[2], &tx_pkt_work[2], 2, &sig2 );
-    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[3], &tx_pkt_work[3], 3, &sig3 );
-    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[4], &tx_pkt_work[4], 4, &sig4 );
-    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[5], &tx_pkt_work[5], 5, &sig5 );
-    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[6], &tx_pkt_work[6], 6, &sig6 );
-    batch_dist_add_pkt_to_batch(batch_work, &flow_entries[7], &tx_pkt_work[7], 7, &sig7 );
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[0], &tx_pkt_work[0], 0, &sig0 );
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[1], &tx_pkt_work[1], 1, &sig1 );
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[2], &tx_pkt_work[2], 2, &sig2 );
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[3], &tx_pkt_work[3], 3, &sig3 );
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[4], &tx_pkt_work[4], 4, &sig4 );
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[5], &tx_pkt_work[5], 5, &sig5 );
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[6], &tx_pkt_work[6], 6, &sig6 );
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[7], &tx_pkt_work[7], 7, &sig7 );
     wait_for_all(&sig0, &sig1, &sig2, &sig3, &sig4, &sig5, &sig6, &sig7);
 }
 
@@ -543,14 +535,14 @@ batch_dist_get_batch_work(struct batch_work *batch_work)
     *batch_work = batch_work_in;
 }
 
-/** batch_dist_get_flow_entries
+/** batch_dist_get_sched_entries
  */
 __intrinsic void
-batch_dist_get_flow_entries(struct batch_work *batch_work,
-                            __xread struct flow_entry flow_entries[8])
+batch_dist_get_sched_entries(struct batch_work *batch_work,
+                            __xread struct pktgen_sched_entry sched_entries[8])
 {
-    mem_read64_s8( flow_entries, batch_work->mu_base_s8,
-                   batch_work->work_ofs, sizeof(flow_entries));
+    mem_read64_s8( sched_entries, batch_work->mu_base_s8,
+                   batch_work->work_ofs, sizeof(sched_entries));
 }
 
 /** pktgen_batch_distributor
@@ -576,11 +568,11 @@ pktgen_batch_distributor(void)
     for (;;) {
         struct batch_work batch_work;
         struct ctm_pkt_desc ctm_pkt_desc;
-        __xread struct flow_entry flow_entries[8];
+        __xread struct pktgen_sched_entry sched_entries[8];
 
         batch_dist_get_batch_work(&batch_work);
-        batch_dist_get_flow_entries(&batch_work, flow_entries);
-        batch_dist_distribute_flow_entries(&batch_work, flow_entries);
+        batch_dist_get_sched_entries(&batch_work, sched_entries);
+        batch_dist_distribute_sched_entries(&batch_work, sched_entries);
     }
 }
 
@@ -595,7 +587,7 @@ tx_master_add_batch_work(struct batch_work *batch_work)
                        sizeof(batch_work));
 }
 
-/** tx_master_distribute_schedule
+/** tx_master_distribute_schedule - to do - manage backup
  * The batches are credit-managed
  *
  * Probably need to do a number of batch_works at the same time to get
@@ -668,16 +660,8 @@ host_get_cmd(struct host_data *host_data,
         }
         host_data->wptr = wptr;
     }
-    if (host_data->cls_ring.item_mask == 0) {
-        __xread struct pktgen_cls_ring cls_ring;
-        cls_read(&cls_ring,
-                 (__cls void *)addr,
-                 offsetof(struct pktgen_cls_host,cls_ring),
-                 sizeof(cls_ring));
-        host_data->cls_ring = cls_ring;
-    }
-    addr = host_data->cls_ring.base;
-    ofs = host_data->rptr & host_data->cls_ring.item_mask;
+    addr = host_data->cls_ring_base;
+    ofs = host_data->rptr & host_data->cls_ring_item_mask;
     ofs = ofs << 4;
     cls_read(host_cmd, (__cls void *)addr, ofs, 
                  sizeof(host_cmd));
@@ -712,14 +696,7 @@ host_ack_cmd(struct host_data *host_data,
  *
  * The master monitors the CLS and uses it to indicate that data is ready
  *
- * The shared structure contains:
- *
  * MU base address for script (do not know how to distribute yet)
- * MU address of batch base (do not know how to distribute yet)
- * Number of batches
- * Number of tx packets
- * Go indicator
- * Done indicator
  *
  * When started it distributes the work over the batch work queues
  *
@@ -731,9 +708,9 @@ pktgen_master(void)
     int buf_seq; /* Monotonically increasing buffer sequence number */
     int tx_seq;
 
-    host_data.cls_host_shared_data = ALLOC_HOST_SHARED_DATA();
-    host_data.cls_ring.base = 0;
-    host_data.cls_ring.item_mask = 0;
+    host_data.cls_host_shared_data = ALLOC_PKTGEN_HOST();
+    host_data.cls_ring_base = ALLOC_PKTGEN_RING();
+    host_data.cls_ring_item_mask = (PKTGEN_CLS_RING_SIZE >> 4) - 1;
     host_data.wptr = 0;
     host_data.rptr = 0;
 

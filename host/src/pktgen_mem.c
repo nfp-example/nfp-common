@@ -47,6 +47,7 @@
 #include <stdlib.h>
 #include <stdint.h> 
 #include <string.h> 
+#include <firmware/pktgen.h>
 
 /** Defines
  */
@@ -391,26 +392,8 @@ alloc_regions_with_hint(struct pktgen_mem_layout *layout,
     return 0;
 }
 
-/** patch_schedule
- *
- * Patch up a schedule's packet pointers based on alloacted memory. 
- *
- * @param layout  Memory layout previously allocated
- * @param region  Schedule region to patch
- * @param mem     Memory containing the schedule
- *
- * Invoked just prior to loading the schedule region.
- *
+/** find_data_region_allocation
  */
-struct pktgen_batch_entry {
-    uint32_t     tx_time_lo;
-    unsigned int tx_time_hi:8;
-    unsigned int script_ofs:24;
-    uint32_t     mu_base_s8;
-    unsigned int length:16;
-    unsigned int tx_seq:16;
-};
-
 static uint32_t
 find_data_region_allocation(struct pktgen_mem_layout *layout,
                             int data_region,
@@ -446,30 +429,41 @@ find_data_region_allocation(struct pktgen_mem_layout *layout,
     return alloc->mu_base_s8 + (region_offset >> 8);
 }
 
+/** patch_schedule
+ *
+ * Patch up a schedule's packet pointers based on alloacted memory. 
+ *
+ * @param layout  Memory layout previously allocated
+ * @param region  Schedule region to patch
+ * @param mem     Memory containing the schedule
+ *
+ * Invoked just prior to loading the schedule region.
+ *
+ */
 static int
 patch_schedule(struct pktgen_mem_layout *layout,
                struct pktgen_mem_region *region,
                char *mem)
 {
     int i;
-    struct pktgen_batch_entry *batch_entry;
-    for (i=64; i<region->data_size; i+=sizeof(*batch_entry)) {
+    struct pktgen_sched_entry *sched_entry;
+    for (i=64; i<region->data_size; i+=sizeof(*sched_entry)) {
         int data_region;
         uint32_t region_offset_s8;
         uint32_t mu_base_s8;
-        batch_entry = (struct pktgen_batch_entry *)(mem + i);
-        if (batch_entry->mu_base_s8 != 0) {
-            data_region   = batch_entry->mu_base_s8 >> 28;
-            region_offset_s8 = batch_entry->mu_base_s8 & 0xfffffff;
+        sched_entry = (struct pktgen_sched_entry *)(mem + i);
+        if (sched_entry->mu_base_s8 != 0) {
+            data_region   = sched_entry->mu_base_s8 >> 28;
+            region_offset_s8 = sched_entry->mu_base_s8 & 0xfffffff;
             mu_base_s8 = find_data_region_allocation(layout, data_region, region_offset_s8);
             if (mu_base_s8 == 0)
                 return 1;
             VERBOSE("%d: %d %d %08x00 %08x00\n", i,
-                   batch_entry->tx_time_lo,
-                   batch_entry->length,
-                   batch_entry->mu_base_s8,
+                   sched_entry->tx_time_lo,
+                   sched_entry->length,
+                   sched_entry->mu_base_s8,
                    mu_base_s8);
-            batch_entry->mu_base_s8 = mu_base_s8;
+            sched_entry->mu_base_s8 = mu_base_s8;
         }
     }
     return 0;

@@ -21,6 +21,26 @@
  */
 #include <stdint.h> 
 
+/** Defines
+ */
+#ifndef STRINGIFY
+#define __STRINGIFY(x) #x
+#define STRINGIFY(x) __STRINGIFY(x)
+#endif
+#define PKTGEN_CLS_RING_SIZE 1024
+#define PKTGEN_CLS_RING_SIZE__STR STRINGIFY(PKTGEN_CLS_RING_SIZE)
+
+/** struct pktgen_sched_entry
+ */
+struct pktgen_sched_entry {
+    uint32_t     tx_time_lo;   /* Not sure what units... */
+    uint32_t     tx_time_hi:8; /* Top 8 bits */
+    unsigned int script_ofs:24;   /* Offset to script from script base */
+    uint32_t     mu_base_s8;   /* 256B aligned packet start */
+    unsigned int length:16;    /* Length of the packet (needed to DMA it) */
+    unsigned int flags:16;    /* */
+};
+
 /** struct pktgen_cls_ring
  */
 struct pktgen_cls_ring {

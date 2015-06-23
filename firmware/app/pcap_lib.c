@@ -77,6 +77,7 @@
 #include <nfp/mem.h>
 #include <nfp/cls.h>
 #include <nfp/pcie.h>
+#include <nfp/types.h>
 #include <nfp.h>
 #include <nfp_override.h>
 #include "pcap_lib.h"
@@ -809,39 +810,18 @@ static void
 pkt_dma_memory_to_host(struct mu_buf_dma_desc *mu_buf_dma_desc,
                        int dma_start_offset, int dma_size, int token)
 {
-    struct nfp_pcie_dma_cmd cmd;
-    __xwrite struct nfp_pcie_dma_cmd wr_cmd;
-    SIGNAL sig;
+    uint64_32_t cpp_addr;
+    uint64_32_t pcie_addr;
 
-    while (dma_size > 0) {
-        int size_to_do; /* Size of this DMA, capped by DMA_MAX_BURST */
-        size_to_do = dma_size;
-        if (dma_size > DMA_MAX_BURST) size_to_do = DMA_MAX_BURST;
-
-        cmd.__raw[0] = 0;
-        cmd.__raw[1] = 0;
-        cmd.__raw[2] = 0;
-        cmd.__raw[3] = 0;
-        cmd.cpp_addr_lo = ((mu_buf_dma_desc->mu_base_s8 << 8) +
-                           dma_start_offset);
-        cmd.cpp_addr_hi = mu_buf_dma_desc->mu_base_s8 >> 24;
-        cmd.pcie_addr_lo = (mu_buf_dma_desc->pcie_base_low +
-                            dma_start_offset);
-        cmd.pcie_addr_hi = mu_buf_dma_desc->pcie_base_high;
-        cmd.length       = size_to_do - 1;
-         
-        cmd.cpp_token = token;
-        cmd.dma_cfg_index = PKT_CAP_PCIE_DMA_CONFIG;
-        pcie_dma_cmd_sig(&cmd, &sig);
-        wr_cmd = cmd;
-        pcie_write_int(&wr_cmd, PKT_CAP_PCIE_ISLAND,
-                       NFP_PCIE_DMA_TOPCI_HI, sizeof(wr_cmd));
-
-        dma_size -= size_to_do;
-        dma_start_offset += size_to_do;
-
-        wait_for_all(&sig);
-    }
+    cpp_addr.uint32_lo = ((mu_buf_dma_desc->mu_base_s8 << 8) +
+                          dma_start_offset);
+    cpp_addr.uint32_hi = (mu_buf_dma_desc->mu_base_s8 >> 24);
+    pcie_addr.uint32_lo = (mu_buf_dma_desc->pcie_base_low +
+                    dma_start_offset);
+    pcie_addr.uint32_hi = mu_buf_dma_desc->pcie_base_high;
+    pcie_dma_buffer(PKT_CAP_PCIE_ISLAND, pcie_addr,
+                    cpp_addr, dma_size,
+                                 NFP_PCIE_DMA_TOPCI_HI, token, PKT_CAP_PCIE_DMA_CONFIG);
 }
 
 /** pkt_dma_slave_get_desc - 20i + 300d
