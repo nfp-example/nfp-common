@@ -497,6 +497,7 @@ pktgen_tx_slave(void)
         if (tx_pkt_work.script_ofs == 0) {
             continue;
         }
+        __asm {ctx_arb[bpt]}
         tx_slave_wait_for_tx_seq(&tx_pkt_work);
         tx_slave_read_script_start(&tx_pkt_work, &script, &script_sig);
         tx_slave_alloc_pkt(&ctm_pkt_desc);
@@ -602,6 +603,7 @@ pktgen_batch_distributor(void)
 
         batch_dist_get_batch_work(&batch_work);
         batch_dist_get_sched_entries(&batch_work, sched_entries);
+        __asm {ctx_arb[bpt]}
         batch_dist_distribute_sched_entries(&batch_work, sched_entries);
     }
 }
@@ -626,7 +628,7 @@ tx_master_add_batch_work(struct batch_work *batch_work)
  * A burst of 4 at one time would be good.
  *
  */
-void
+static void
 tx_master_distribute_schedule(uint64_t base_time,
                               int total_pkts,
                               uint32_t mu_base_s8,
@@ -645,6 +647,11 @@ tx_master_distribute_schedule(uint64_t base_time,
     batch_work.num_valid_pkts = 8;
     *tx_seq = *tx_seq + total_pkts;
 
+    local_csr_write(local_csr_mailbox0, batch_work.tx_time_lo);
+    local_csr_write(local_csr_mailbox1, batch_work.tx_time_hi);
+    local_csr_write(local_csr_mailbox2, batch_work.mu_base_s8);
+    local_csr_write(local_csr_mailbox3, batch_work.tx_seq);
+    __asm {ctx_arb[bpt]}
     while (num_batches>0) {
         //if (too backed up) {
         //    me_sleep(poll_interval);
