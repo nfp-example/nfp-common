@@ -392,41 +392,49 @@ alloc_regions_with_hint(struct pktgen_mem_layout *layout,
     return 0;
 }
 
+/** pktgen_mem_get_mu
+ */
+uint64_t
+pktgen_mem_get_mu(struct pktgen_mem_layout *layout,
+                  int region,
+                  uint64_t ofs)
+{
+    struct pktgen_mem_region_allocation *alloc;
+
+    if (region >= MAX_REGIONS) {
+        ERROR("Region %d out of range when finding its allocation\n", region);
+        return 0;
+    }
+    if (layout->regions[region].data_size == 0) {
+        ERROR("Region %d empty when looking for allocation\n", region);
+        return 0;
+    }
+
+    alloc = layout->regions[region].allocations;
+    while (alloc) {
+        if (alloc->size > ofs)
+            break;
+        ofs = ofs - alloc->size;
+        alloc = alloc->next;
+    }
+    if (!alloc) {
+        ERROR("Region %d has not got enough allocation for %08lx\n",
+              region,
+              ofs);
+        return 0;
+    }
+    return (((uint64_t)alloc->mu_base_s8) << 8) + ofs;
+}
+
 /** find_data_region_allocation
  */
-static uint32_t
+static uint64_t
 find_data_region_allocation(struct pktgen_mem_layout *layout,
                             int data_region,
                             uint32_t region_offset_s8)
 {
-    struct pktgen_mem_region_allocation *alloc;
-    uint64_t region_offset;
-
     data_region += REGION_DATA;
-    if (data_region >= MAX_REGIONS) {
-        ERROR("Data region %d out of range when finding its allocation\n", data_region);
-        return 0;
-    }
-    if (layout->regions[data_region].data_size == 0) {
-        ERROR("Data region %d empty when looking for allocation\n", data_region);
-        return 0;
-    }
-
-    alloc = layout->regions[data_region].allocations;
-    region_offset = ((uint64_t) region_offset_s8) << 8;
-    while (alloc) {
-        if (alloc->size > region_offset)
-            break;
-        region_offset = region_offset - alloc->size;
-        alloc = alloc->next;
-    }
-    if (!alloc) {
-        ERROR("Data region %d has not got enough allocation for %08x00\n",
-              data_region,
-              region_offset_s8);
-        return 0;
-    }
-    return alloc->mu_base_s8 + (region_offset >> 8);
+    return pktgen_mem_get_mu(layout, data_region+REGION_DATA, region_offset_s8<<8);
 }
 
 /** patch_schedule
@@ -455,7 +463,7 @@ patch_schedule(struct pktgen_mem_layout *layout,
         if (sched_entry->mu_base_s8 != 0) {
             data_region   = sched_entry->mu_base_s8 >> 28;
             region_offset_s8 = sched_entry->mu_base_s8 & 0xfffffff;
-            mu_base_s8 = find_data_region_allocation(layout, data_region, region_offset_s8);
+            mu_base_s8 = find_data_region_allocation(layout, data_region, region_offset_s8) >> 8;
             if (mu_base_s8 == 0)
                 return 1;
             VERBOSE("%d: %d %d %08x00 %08x00\n", i,

@@ -135,3 +135,16 @@ extern int pktgen_mem_load(struct pktgen_mem_layout *layout);
  *
  */
 extern void pktgen_mem_close(struct pktgen_mem_layout *layout);
+
+/** pktgen_mem_get_mu
+ *
+ * @param layout   Memory layout previously allocated
+ * @param region   Memory region number to find mu_base of
+ * @param ofs      Offset into region to find mu_base of
+ *
+ * Return the MU address of the offset in the region
+ *
+ */
+extern uint64_t pktgen_mem_get_mu(struct pktgen_mem_layout *layout,
+                                  int region,
+                                  uint64_t ofs );

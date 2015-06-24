@@ -354,17 +354,18 @@ main(int argc, char **argv)
     }
 
     if (1) {
-
+        struct pktgen_host_cmd host_cmd;
+        int err;
         host_cmd.pkt_cmd.cmd_type = PKTGEN_HOST_CMD_PKT;
-        host_cmd.dma_cmd.base_delay = 0;
-        host_cmd.dma_cmd.total_pkts = 1;
-        host_cmd.dma_cmd.mu_base_s8 = pktgen_mem_get_mu(pktgen_nfp.mem_layout,0,0);
-        err = pktgen_issue_cmd(pktgen_nfp, &host_cmd);
+        host_cmd.pkt_cmd.base_delay = 1<<24;
+        host_cmd.pkt_cmd.total_pkts = 1;
+        host_cmd.pkt_cmd.mu_base_s8 = pktgen_mem_get_mu(pktgen_nfp.mem_layout,0,0)>>8;
+        err = pktgen_issue_cmd(&pktgen_nfp, &host_cmd);
+        err = err;
     }
 
     usleep(1000*1000);
 
-    pktgen_mem_load(pktgen_nfp.mem_layout);
     nfp_huge_free(pktgen_nfp.nfp, pktgen_nfp.pcie_base);
     nfp_shutdown(pktgen_nfp.nfp);
     return 0;

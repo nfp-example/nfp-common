@@ -603,6 +603,10 @@ pktgen_batch_distributor(void)
 
         batch_dist_get_batch_work(&batch_work);
         batch_dist_get_sched_entries(&batch_work, sched_entries);
+    local_csr_write(local_csr_mailbox0, batch_work.tx_time_lo);
+    local_csr_write(local_csr_mailbox1, batch_work.tx_time_hi);
+    local_csr_write(local_csr_mailbox2, batch_work.mu_base_s8);
+    local_csr_write(local_csr_mailbox3, batch_work.tx_seq);
         __asm {ctx_arb[bpt]}
         batch_dist_distribute_sched_entries(&batch_work, sched_entries);
     }
@@ -637,7 +641,7 @@ tx_master_distribute_schedule(uint64_t base_time,
     struct batch_work batch_work;
     int num_batches;
 
-    num_batches = (total_pkts + 7) &~ 7;
+    num_batches = (total_pkts + 7) >> 3;
 
     batch_work.tx_time_lo = (uint32_t) base_time;
     batch_work.tx_time_hi = ((uint32_t) (base_time >> 32)) & 0xff;
@@ -647,11 +651,6 @@ tx_master_distribute_schedule(uint64_t base_time,
     batch_work.num_valid_pkts = 8;
     *tx_seq = *tx_seq + total_pkts;
 
-    local_csr_write(local_csr_mailbox0, batch_work.tx_time_lo);
-    local_csr_write(local_csr_mailbox1, batch_work.tx_time_hi);
-    local_csr_write(local_csr_mailbox2, batch_work.mu_base_s8);
-    local_csr_write(local_csr_mailbox3, batch_work.tx_seq);
-    __asm {ctx_arb[bpt]}
     while (num_batches>0) {
         //if (too backed up) {
         //    me_sleep(poll_interval);
@@ -666,6 +665,7 @@ tx_master_distribute_schedule(uint64_t base_time,
         batch_work.tx_seq += 8;
         total_pkts -= 8;
         num_batches -= 1;
+    __asm {ctx_arb[kill]}
     }
 }
 
