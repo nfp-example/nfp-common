@@ -219,23 +219,28 @@ struct host_data {
 /** struct tx_pkt_work
  */
 struct tx_pkt_work {
-    uint32_t     tx_time_lo;   /* Not sure what units... */
-    uint32_t     tx_time_hi:8; /* Top 8 bits */
-    uint32_t     mu_base_s8;   /* 256B aligned packet start */
-    uint32_t     script_ofs;   /* Offset to script from script base */
-    unsigned int length:16;    /* Length of the packet (needed to DMA it) */
-    unsigned int tx_seq:16;    /* for reorder pool and to stop processing too far into the future */
+    uint32_t     tx_time_lo;    /* Not sure what units... */
+    unsigned int tx_time_hi:8;  /* Top 8 bits */
+    unsigned int mu_base_s8:24; /* 256B aligned packet start */
+    uint32_t     script_ofs;    /* Offset to script from script base */
+    unsigned int length:16;     /* Length of the packet (needed to DMA it) */
+    unsigned int tx_seq:16;     /* for reorder pool and to stop processing too far into the future */
 };
 
 /** struct batch_work
  */
 struct batch_work {
-    uint32_t     tx_time_lo;   /* Not sure what units... */
-    unsigned int tx_time_hi:8; /* Top 8 bits */
-    unsigned int num_valid_pkts:8;        /* Pad 8 bits */
-    unsigned int tx_seq:16;    /* Tx sequence for first of 8 entries */
-    uint32_t     mu_base_s8;   /* 256B aligned flow script start */
-    uint32_t     work_ofs;     /* Offset to script from script base */
+    union {
+        struct {
+            uint32_t     tx_time_lo;   /* Not sure what units... */
+            unsigned int tx_time_hi:8; /* Top 8 bits */
+            unsigned int num_valid_pkts:8;        /* Pad 8 bits */
+            unsigned int tx_seq:16;    /* Tx sequence for first of 8 entries */
+            uint32_t     mu_base_s8;   /* 256B aligned flow script start */
+            uint32_t     work_ofs;     /* Offset to script from script base */
+        };
+        uint32_t __raw[4];
+    };
 };
 
 /** struct tx_seq
@@ -541,17 +546,16 @@ __intrinsic
 void batch_dist_distribute_sched_entries(struct batch_work *batch_work,
                                         __xread struct pktgen_sched_entry *sched_entries)
 {
-    __xwrite struct tx_pkt_work tx_pkt_work[4];
+    __xwrite struct tx_pkt_work tx_pkt_work[8];
     SIGNAL sig0, sig1, sig2, sig3, sig4, sig5, sig6, sig7;
     batch_dist_add_pkt_to_batch(batch_work, &sched_entries[0], &tx_pkt_work[0], 0, &sig0 );
     batch_dist_add_pkt_to_batch(batch_work, &sched_entries[1], &tx_pkt_work[1], 1, &sig1 );
     batch_dist_add_pkt_to_batch(batch_work, &sched_entries[2], &tx_pkt_work[2], 2, &sig2 );
     batch_dist_add_pkt_to_batch(batch_work, &sched_entries[3], &tx_pkt_work[3], 3, &sig3 );
-    wait_for_all(&sig0, &sig1, &sig2, &sig3);
-    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[4], &tx_pkt_work[0], 4, &sig4 );
-    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[5], &tx_pkt_work[1], 5, &sig5 );
-    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[6], &tx_pkt_work[2], 6, &sig6 );
-    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[7], &tx_pkt_work[3], 7, &sig7 );
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[4], &tx_pkt_work[4], 4, &sig4 );
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[5], &tx_pkt_work[5], 5, &sig5 );
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[6], &tx_pkt_work[6], 6, &sig6 );
+    batch_dist_add_pkt_to_batch(batch_work, &sched_entries[7], &tx_pkt_work[7], 7, &sig7 );
     wait_for_all(&sig0, &sig1, &sig2, &sig3, &sig4, &sig5, &sig6, &sig7);
 }
 
@@ -574,6 +578,11 @@ batch_dist_get_sched_entries(struct batch_work *batch_work,
 {
     mem_read64_s8( sched_entries, batch_work->mu_base_s8,
                    batch_work->work_ofs, sizeof(sched_entries));
+    local_csr_write(local_csr_mailbox0, sched_entries[0].mu_base_s8);
+    local_csr_write(local_csr_mailbox1, sched_entries[0].script_ofs);
+    local_csr_write(local_csr_mailbox2, sched_entries[0].length);
+    local_csr_write(local_csr_mailbox3, sched_entries[0].flags);
+    __asm {ctx_arb[bpt]}
 }
 
 /** pktgen_batch_distributor
@@ -603,11 +612,6 @@ pktgen_batch_distributor(void)
 
         batch_dist_get_batch_work(&batch_work);
         batch_dist_get_sched_entries(&batch_work, sched_entries);
-    local_csr_write(local_csr_mailbox0, batch_work.tx_time_lo);
-    local_csr_write(local_csr_mailbox1, batch_work.tx_time_hi);
-    local_csr_write(local_csr_mailbox2, batch_work.mu_base_s8);
-    local_csr_write(local_csr_mailbox3, batch_work.tx_seq);
-        __asm {ctx_arb[bpt]}
         batch_dist_distribute_sched_entries(&batch_work, sched_entries);
     }
 }
@@ -620,7 +624,7 @@ tx_master_add_batch_work(struct batch_work *batch_work)
     __xwrite struct batch_work batch_work_out;
     batch_work_out = *batch_work;
     mem_workq_add_work(batch_work_muq, (void *)&batch_work_out,
-                       sizeof(batch_work));
+                       sizeof(*batch_work));
 }
 
 /** tx_master_distribute_schedule - to do - manage backup
