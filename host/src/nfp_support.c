@@ -402,12 +402,12 @@ nfp_write(struct nfp *nfp, struct nfp_cppid *cppid, int offset, void *data, ssiz
 {
     fprintf(stderr,"Writing to %08x %016lx data %02x.%02x.%02x.%02x.%02x.%02x...\n",
             cppid->cpp_id, cppid->addr+offset,
-            ((char *)data)[0],
-            ((char *)data)[1],
-            ((char *)data)[2],
-            ((char *)data)[3],
-            ((char *)data)[4],
-            ((char *)data)[5] );
+            ((unsigned char *)data)[0],
+            ((unsigned char *)data)[1],
+            ((unsigned char *)data)[2],
+            ((unsigned char *)data)[3],
+            ((unsigned char *)data)[4],
+            ((unsigned char *)data)[5] );
     if (nfp_cpp_write(nfp->cpp, cppid->cpp_id, cppid->addr+offset, data, size )==size)
         return 0;
     return -1;

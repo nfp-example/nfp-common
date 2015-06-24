@@ -221,8 +221,8 @@ struct host_data {
 struct tx_pkt_work {
     uint32_t     tx_time_lo;    /* Not sure what units... */
     unsigned int tx_time_hi:8;  /* Top 8 bits */
-    unsigned int mu_base_s8:24; /* 256B aligned packet start */
-    uint32_t     script_ofs;    /* Offset to script from script base */
+    unsigned int script_ofs:24; /* Offset to script from script base */
+    unsigned int mu_base_s8;    /* 256B aligned packet start */
     unsigned int length:16;     /* Length of the packet (needed to DMA it) */
     unsigned int tx_seq:16;     /* for reorder pool and to stop processing too far into the future */
 };
@@ -282,7 +282,7 @@ struct script_finish {
 /** Statics
  */
 __declspec(shared) static struct batch_desc batch_desc;
-__declspec(shared) static struct batch_desc batch_desc_array[8];
+__declspec(shared) uint32_t batch_desc_muq_array[8];
 __declspec(shared) static int last_seq_transmitted;
 __declspec(shared) static int poll_interval;
 __declspec(shared) uint32_t mu_script_base_s8;
@@ -499,9 +499,13 @@ pktgen_tx_slave(void)
         SIGNAL script_sig;
 
         tx_slave_get_pkt_in_batch(&tx_pkt_work);
-        if (tx_pkt_work.script_ofs == 0) {
+        if (tx_pkt_work.mu_base_s8 == 0) {
             continue;
         }
+    local_csr_write(local_csr_mailbox0, tx_pkt_work.mu_base_s8);
+    local_csr_write(local_csr_mailbox1, tx_pkt_work.tx_seq);
+    local_csr_write(local_csr_mailbox2, tx_pkt_work.length);
+    local_csr_write(local_csr_mailbox3, tx_pkt_work.script_ofs);
         __asm {ctx_arb[bpt]}
         tx_slave_wait_for_tx_seq(&tx_pkt_work);
         tx_slave_read_script_start(&tx_pkt_work, &script, &script_sig);
@@ -535,8 +539,11 @@ batch_dist_add_pkt_to_batch(struct batch_work *batch_work,
     tx_pkt_work.script_ofs = sched_entry->script_ofs;
     tx_pkt_work.length     = sched_entry->length;
     tx_pkt_work.tx_seq     = tx_seq+i;
+    if (i >= batch_work->num_valid_pkts) {
+        tx_pkt_work.mu_base_s8 = 0;
+    }
     tx_pkt_work_out[i] = tx_pkt_work;
-    mem_workq_add_work_async(batch_desc_array[i].muq, (void *)tx_pkt_work_out,
+    mem_workq_add_work_async(batch_desc_muq_array[i], (void *)tx_pkt_work_out,
                              sizeof(tx_pkt_work), sig);
 }
 
@@ -578,11 +585,6 @@ batch_dist_get_sched_entries(struct batch_work *batch_work,
 {
     mem_read64_s8( sched_entries, batch_work->mu_base_s8,
                    batch_work->work_ofs, sizeof(sched_entries));
-    local_csr_write(local_csr_mailbox0, sched_entries[0].mu_base_s8);
-    local_csr_write(local_csr_mailbox1, sched_entries[0].script_ofs);
-    local_csr_write(local_csr_mailbox2, sched_entries[0].length);
-    local_csr_write(local_csr_mailbox3, sched_entries[0].flags);
-    __asm {ctx_arb[bpt]}
 }
 
 /** pktgen_batch_distributor
@@ -650,7 +652,7 @@ tx_master_distribute_schedule(uint64_t base_time,
     batch_work.tx_time_lo = (uint32_t) base_time;
     batch_work.tx_time_hi = ((uint32_t) (base_time >> 32)) & 0xff;
     batch_work.mu_base_s8 = mu_base_s8;
-    batch_work.work_ofs = 0;
+    batch_work.work_ofs = 64;
     batch_work.tx_seq = *tx_seq;
     batch_work.num_valid_pkts = 8;
     *tx_seq = *tx_seq + total_pkts;
@@ -814,20 +816,23 @@ void pktgen_master_init(void)
 void pktgen_batch_distributor_init(void)
 {
     batch_work_muq          = MU_QUEUE_CONFIG_GET(QDEF_BATCH_WORK);
-    batch_desc_array[0].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_0);
-    batch_desc_array[1].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_1);
-    batch_desc_array[2].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_2);
-    batch_desc_array[3].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_3);
-    batch_desc_array[4].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_4);
-    batch_desc_array[5].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_5);
-    batch_desc_array[6].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_6);
-    batch_desc_array[7].muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_7);
+    batch_desc_muq_array[0] = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_0);
+    batch_desc_muq_array[1] = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_1);
+    batch_desc_muq_array[2] = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_2);
+    batch_desc_muq_array[3] = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_3);
+    batch_desc_muq_array[4] = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_4);
+    batch_desc_muq_array[5] = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_5);
+    batch_desc_muq_array[6] = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_6);
+    batch_desc_muq_array[7] = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_7);
 }
 
 /** pktgen_tx_slave_init
  */
 void pktgen_tx_slave_init(int batch)
 {
+    mu_script_base_s8 = 0;
+    batch_desc.seq_base_s8 = 0; /* MU address of last seq transmitted, to backoff tx slaves - is this necesary if we back off the batch distributor? */
+    batch_desc.seq_ofs = 0;
     switch (batch) {
     case 0:
         batch_desc.muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_0);

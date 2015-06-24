@@ -24,7 +24,7 @@
  * Tx islands is eight MEs (one par batch)
  *  All threads run packet receive
  */
-#define PKTGEN_TX_ISLANDS 2
+#define PKTGEN_TX_ISLANDS 1
 #define PKTGEN_ISLANDS (1+1+PKTGEN_TX_ISLANDS)
 
 #define PKTGEN_HOST_CTXTS 8

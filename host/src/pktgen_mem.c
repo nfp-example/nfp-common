@@ -433,7 +433,6 @@ find_data_region_allocation(struct pktgen_mem_layout *layout,
                             int data_region,
                             uint32_t region_offset_s8)
 {
-    data_region += REGION_DATA;
     return pktgen_mem_get_mu(layout, data_region+REGION_DATA, region_offset_s8<<8);
 }
 
@@ -557,6 +556,7 @@ load_region(struct pktgen_mem_layout *layout,
     char *mem;
     uint64_t offset;
     struct pktgen_mem_region_allocation *allocation;
+    int err;
 
     region = &layout->regions[region_number];
     mem = NULL;
@@ -566,14 +566,16 @@ load_region(struct pktgen_mem_layout *layout,
         if (mem == NULL)
             return 1;
 
-        patch_schedule(layout, region, mem);
+        err = patch_schedule(layout, region, mem);
+        if (err != 0) {
+            free(mem);
+            return err;
+        }
     }
 
     offset = 0;
     allocation = region->allocations;
     while (offset<region->data_size) {
-        int err;
-
         VERBOSE("Loading allocation %s %ld\n",
                 region->filename, offset);
 

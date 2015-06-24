@@ -32,6 +32,16 @@
 
 /** struct pktgen_sched_entry
  */
+#ifdef __NFCC_VERSION
+struct pktgen_sched_entry {
+    uint32_t     tx_time_lo;   /* Not sure what units... */
+    unsigned int script_ofs:24;   /* Offset to script from script base */
+    unsigned int tx_time_hi:8; /* Top 8 bits */
+    uint32_t     mu_base_s8;   /* 256B aligned packet start */
+    unsigned int flags:16;    /* */
+    unsigned int length:16;    /* Length of the packet (needed to DMA it) */
+};
+#else
 struct pktgen_sched_entry {
     uint32_t     tx_time_lo;   /* Not sure what units... */
     unsigned int tx_time_hi:8; /* Top 8 bits */
@@ -40,6 +50,7 @@ struct pktgen_sched_entry {
     unsigned int length:16;    /* Length of the packet (needed to DMA it) */
     unsigned int flags:16;    /* */
 };
+#endif
 
 /** struct pktgen_cls_ring
  */

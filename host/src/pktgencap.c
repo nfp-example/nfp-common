@@ -290,9 +290,16 @@ mem_load_callback(void *handle,
         host_cmd.dma_cmd.pcie_base_low  = pktgen_nfp->pcie_base_addr[0];
         host_cmd.dma_cmd.pcie_base_high = pktgen_nfp->pcie_base_addr[0] >> 32;
 
-        fprintf(stderr,"memcpy %p %p %ld\n",pktgen_nfp->pcie_base, mem, size_to_do);
         memcpy(pktgen_nfp->pcie_base, mem, size_to_do);
-
+        if (1) {
+            int i;
+            for (i=0; i<size_to_do; i+=4) {
+                const uint32_t *m;
+                m = (const uint32_t *)mem+i;
+                printf("%d: %08x %08x %08x %08x\n",
+                       i,m[0],m[1],m[2],m[3]);
+            }
+        }
         err = pktgen_issue_cmd(pktgen_nfp, &host_cmd);
         if (err == 0)
             err = pktgen_issue_ack_and_wait(pktgen_nfp);
