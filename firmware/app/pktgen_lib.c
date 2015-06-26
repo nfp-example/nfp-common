@@ -179,6 +179,10 @@ _declare_resource("pktgen_cls_ring island " PKTGEN_CLS_RING_SIZE__STR " pktgen_c
 #define ALLOC_PKTGEN_HOST() __alloc_resource("pktgen_cls_host pktgen_cls_host island 64")
 #define ALLOC_PKTGEN_RING() __alloc_resource("pktgen_cls_ring pktgen_cls_ring island " PKTGEN_CLS_RING_SIZE__STR)
 
+_alloc_mem("pktgen_cls_debug_res cls island 64 64")
+_declare_resource("pktgen_cls_debug island 64 pktgen_cls_debug_res")
+#define ALLOC_PKTGEN_DEBUG() __alloc_resource("pktgen_cls_debug pktgen_cls_debug island 64")
+
 /** Queue descriptors and allocations
  */
 /* Batch work queue is from pktgen_master to batch_distributor */
@@ -434,6 +438,7 @@ tx_slave_dma_pkt_start(struct tx_pkt_work *tx_pkt_work,
  *
  * 10i
  */
+#define CLS_DEBUG_JOURNAL_RING 0
 void
 tx_slave_pkt_tx(struct tx_pkt_work *tx_pkt_work,
                 struct ctm_pkt_desc *ctm_pkt_desc)
@@ -446,15 +451,25 @@ tx_slave_pkt_tx(struct tx_pkt_work *tx_pkt_work,
     uint32_t tx_pkt_length; /* Actual TX packet length */
 
     pkt_num_s16 = ctm_pkt_desc->pkt_num << 16;
-    tx_pkt_length = tx_pkt_work->length; /* Length + mod script... */
+    tx_pkt_length = tx_pkt_work->length + 64; /* Length + mod script... */
 
     local_csr_write(local_csr_cmd_indirect_ref0, sequence_info );
+    if (1) {
+        __cls void *a;
+        a = ALLOC_PKTGEN_DEBUG();
+        cls_incr(a,0);
+    }
     override  = batch_desc.override;
     override |= (((ctm_pkt_desc->mod_script_offset / 8) - 1) << 8);
     __asm {
         alu[--, --, b, override];
         mem[packet_complete_unicast, --, pkt_num_s16, tx_pkt_length], \
             indirect_ref;
+    }
+    if (1) {
+        __cls void *a;
+        a = ALLOC_PKTGEN_DEBUG();
+        cls_incr(a,0);
     }
 }
 
@@ -481,6 +496,8 @@ tx_slave_script_start(struct tx_pkt_work *tx_pkt_work,
 {
     script_finish->mod[0] = ( (1<<31) | (7<<21) ); // Null script
     script_finish->mod[1] = 0;
+    // ? script_finish->hdr[0] = (1<<31) | (tx_pkt_work->mu_base_s8>>3); no help
+    // ? script_finish->hdr[0] = (32<<26) | (ctm_pkt_desc->pkt_num<<16) | 64; no help
     script_finish->hdr[0] = 0;
     script_finish->hdr[1] = (1<<31) | (tx_pkt_work->mu_base_s8>>3);
     tx_slave_script_start_write_hdr(ctm_pkt_desc->pkt_addr,
@@ -532,11 +549,39 @@ pktgen_tx_slave(void)
         SIGNAL dma_sig;
         SIGNAL script_sig;
 
+    if (1) {
+        __cls void *a;
+        a = ALLOC_PKTGEN_DEBUG();
+        cls_incr(a,4);
+    }
         tx_slave_get_pkt_in_batch(&tx_pkt_work);
         if (tx_pkt_work.mu_base_s8 == 0) {
             continue;
         }
-        tx_slave_wait_for_tx_seq(&tx_pkt_work);
+    local_csr_write(local_csr_mailbox0, tx_pkt_work.mu_base_s8);
+    local_csr_write(local_csr_mailbox1, tx_pkt_work.tx_seq);
+    local_csr_write(local_csr_mailbox2, tx_pkt_work.length);
+    local_csr_write(local_csr_mailbox3, ctm_pkt_desc.pkt_addr);
+    if (1) {
+        __xwrite uint32_t data[4];
+        data[0] = tx_pkt_work.mu_base_s8;
+        data[1] = tx_pkt_work.tx_seq;
+        data[2] = tx_pkt_work.length;
+        data[3] = tx_pkt_work.script_ofs;
+        cls_ring_journal_rem(data, 4<<(34-8),
+                             CLS_DEBUG_JOURNAL_RING<<2, 16);
+                       }
+    if (1) {
+        __cls void *a;
+        a = ALLOC_PKTGEN_DEBUG();
+        cls_incr(a,8);
+    }
+    //tx_slave_wait_for_tx_seq(&tx_pkt_work);
+    if (1) {
+        __cls void *a;
+        a = ALLOC_PKTGEN_DEBUG();
+        cls_incr(a,12);
+    }
         tx_slave_read_script_start(&tx_pkt_work, &script, &script_sig);
         tx_slave_alloc_pkt(&ctm_pkt_desc);
         tx_slave_dma_pkt_start(&tx_pkt_work, &ctm_pkt_desc, &dma_sig);
@@ -546,10 +591,6 @@ pktgen_tx_slave(void)
         tx_slave_script_finish(&ctm_pkt_desc, &script_finish);
         tx_slave_wait_for_tx_time(&tx_pkt_work);
         tx_slave_pkt_tx(&tx_pkt_work, &ctm_pkt_desc);
-    local_csr_write(local_csr_mailbox0, tx_pkt_work.mu_base_s8);
-    local_csr_write(local_csr_mailbox1, ctm_pkt_desc.pkt_num);
-    local_csr_write(local_csr_mailbox2, tx_pkt_work.length);
-    local_csr_write(local_csr_mailbox3, ctm_pkt_desc.pkt_addr);
     }
 }
 
@@ -575,7 +616,7 @@ batch_dist_add_pkt_to_batch(struct batch_work *batch_work,
     if (i >= batch_work->num_valid_pkts) {
         tx_pkt_work.mu_base_s8 = 0;
     }
-    tx_pkt_work_out[i] = tx_pkt_work;
+    *tx_pkt_work_out = tx_pkt_work;
     mem_workq_add_work_async(batch_desc_muq_array[i], (void *)tx_pkt_work_out,
                              sizeof(tx_pkt_work), sig);
 }
@@ -584,7 +625,7 @@ batch_dist_add_pkt_to_batch(struct batch_work *batch_work,
  */
 __intrinsic
 void batch_dist_distribute_sched_entries(struct batch_work *batch_work,
-                                        __xread struct pktgen_sched_entry *sched_entries)
+                                        __xread struct pktgen_sched_entry sched_entries[8])
 {
     __xwrite struct tx_pkt_work tx_pkt_work[8];
     SIGNAL sig0, sig1, sig2, sig3, sig4, sig5, sig6, sig7;
@@ -596,6 +637,8 @@ void batch_dist_distribute_sched_entries(struct batch_work *batch_work,
     batch_dist_add_pkt_to_batch(batch_work, &sched_entries[5], &tx_pkt_work[5], 5, &sig5 );
     batch_dist_add_pkt_to_batch(batch_work, &sched_entries[6], &tx_pkt_work[6], 6, &sig6 );
     batch_dist_add_pkt_to_batch(batch_work, &sched_entries[7], &tx_pkt_work[7], 7, &sig7 );
+// No help __implicit_read(tx_pkt_work);
+// No help __implicit_read(sched_entries);
     wait_for_all(&sig0, &sig1, &sig2, &sig3, &sig4, &sig5, &sig6, &sig7);
 }
 
@@ -617,7 +660,7 @@ batch_dist_get_sched_entries(struct batch_work *batch_work,
                             __xread struct pktgen_sched_entry sched_entries[8])
 {
     mem_read64_s8( sched_entries, batch_work->mu_base_s8,
-                   batch_work->work_ofs, sizeof(sched_entries));
+                   batch_work->work_ofs, 8*sizeof(sched_entries[0]));
 }
 
 /** pktgen_batch_distributor
@@ -704,7 +747,6 @@ tx_master_distribute_schedule(uint64_t base_time,
         batch_work.tx_seq += 8;
         total_pkts -= 8;
         num_batches -= 1;
-    __asm {ctx_arb[kill]}
     }
 }
 

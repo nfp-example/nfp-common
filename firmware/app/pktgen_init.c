@@ -238,7 +238,7 @@ __intrinsic void network_init_tm_queues(int island,
     xpb_base_nbi = ( (1 <<  31) |
                      (island << 24) |
                      (0x15 << 16) |
-                     0x1000 );
+                     0x1000 ); // config=0x1000, status=0x0000
     
     queue = tmq_config->first_queue;
     entry = tmq_config->first_entry;
@@ -254,14 +254,16 @@ __intrinsic void network_init_tm_queues(int island,
 
         xpb_write(xpb_base_nbi, xpb_offset, (log2_size << 6) | enable );
 
-        head_tail = entry << 4;
+        head_tail = entry;
         head_tail = (head_tail << 14) | head_tail;
 
         head_tail_out = head_tail << 32; /* As the compiler is BE, HW is LWBE */
         nbi_write64_s8(&head_tail_out, nbi_base_s8, sram_offset, sizeof(head_tail_out));
         sram_offset += 8;
         xpb_offset  += 4;
-        entry += 1 << log2_size;
+        if (log2_size != 0) {
+            entry += 1 << log2_size;
+        }
     }
 }
 

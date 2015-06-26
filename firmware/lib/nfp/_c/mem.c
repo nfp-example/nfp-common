@@ -127,6 +127,7 @@ mem_read64(__xread void *data, __mem void *addr, const size_t size)
  * @param size     Size in bytes to write (must be multiple of 8)
  *
  */
+#include <nfp.h>
 __intrinsic void
 mem_read64_s8(__xread void *data,
               uint32_t base_s8,
@@ -136,10 +137,24 @@ mem_read64_s8(__xread void *data,
     SIGNAL sig;
     uint32_t size_in_uint64;
 
+    __ct_assert(__is_ct_const(size), "Size must be constant");
+    __ct_assert(size != 0, "Size must not be zero");
+
     size_in_uint64 = size >> 3;
-    __asm {
-        mem[read, *data, base_s8, <<8, ofs, \
-            __ct_const_val(size_in_uint64)], ctx_swap[sig];
+
+    if (size <= 64) {
+        __asm {
+            mem[read, *data, base_s8, <<8, ofs,               \
+                __ct_const_val(size_in_uint64)], ctx_swap[sig];
+        }
+    } else {
+        uint32_t override;
+        override = ((size_in_uint64-1)<<8) | (1<<7);
+        __asm {
+            alu[--, --, B, override];
+            mem[read, *data, base_s8, <<8, ofs,             \
+                __ct_const_val(size_in_uint64)], indirect_ref, ctx_swap[sig];
+        }
     }
 }
 

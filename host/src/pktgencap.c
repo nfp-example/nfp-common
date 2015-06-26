@@ -291,7 +291,7 @@ mem_load_callback(void *handle,
         host_cmd.dma_cmd.pcie_base_high = pktgen_nfp->pcie_base_addr[0] >> 32;
 
         memcpy(pktgen_nfp->pcie_base, mem, size_to_do);
-        if (1) {
+        if (0) {
             int i;
             for (i=0; i<size_to_do; i+=4) {
                 const uint32_t *m;
@@ -365,7 +365,7 @@ main(int argc, char **argv)
         int err;
         host_cmd.pkt_cmd.cmd_type = PKTGEN_HOST_CMD_PKT;
         host_cmd.pkt_cmd.base_delay = 1<<24;
-        host_cmd.pkt_cmd.total_pkts = 8;
+        host_cmd.pkt_cmd.total_pkts = 48;
         host_cmd.pkt_cmd.mu_base_s8 = pktgen_mem_get_mu(pktgen_nfp.mem_layout,0,0)>>8;
         err = pktgen_issue_cmd(&pktgen_nfp, &host_cmd);
         err = err;
