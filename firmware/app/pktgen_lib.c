@@ -276,7 +276,8 @@ struct script {
 /** struct script_finish
  */
 struct script_finish {
-    uint32_t data[4];
+    uint32_t mod[2];
+    uint32_t hdr[2];
 };
 
 /** Statics
@@ -391,16 +392,25 @@ tx_slave_read_script_start(struct tx_pkt_work *tx_pkt_work,
 }
 
 /** tx_slave_dma_pkt_start
+ *
+ * DMA packet from mu_base_s8<<8 + 64 to CTM packet + 64
+ *
+ * The +64 permits the addition in CTM of the modification script etc
+ *
+ * The +64 on both permits the overflow of the packet from CTM to MU if >192B
+ *
+ * Length to DMA is 64B for <=64B packets, 128B for 65-128B packets, and 192B for >128B packets
+ *
  */
 __intrinsic void
 tx_slave_dma_pkt_start(struct tx_pkt_work *tx_pkt_work,
                        struct ctm_pkt_desc *ctm_pkt_desc,
                        SIGNAL *sig)
 {
-    int ctm_dma_len; /* #64Bs to DMA -1 (0->64B, 1->128B etc) */
+    int ctm_dma_len; /* #64Bs to DMA -1 (0->64B, 1->128B, 2->192B) */
     uint32_t mu_base_lo;
     uint32_t mu_base_hi;
-    int len;
+    uint32_t override;
 
     ctm_dma_len = 0;
     if (tx_pkt_work->length>64)  ctm_dma_len=1;
@@ -408,10 +418,13 @@ tx_slave_dma_pkt_start(struct tx_pkt_work *tx_pkt_work,
 
     mu_base_lo = tx_pkt_work->mu_base_s8 << 8;
     mu_base_hi = tx_pkt_work->mu_base_s8 >> 24;
+    local_csr_write(local_csr_cmd_indirect_ref0, mu_base_hi);
     //bm = mu_base_hi;
     //dm/ref = ctm_pkt_desc->pkt_addr >> 3;
-    len = ctm_dma_len;
+    //len = ctm_dma_len;
+    override = (1<<7) | (ctm_dma_len<<8) |(1<<6) | ((ctm_pkt_desc->pkt_addr>>3)<<16) | ((64>>3)<<16)| (2<<3);
     __asm {
+        alu[--, --, b, override];
         mem[pe_dma_from_memory_buffer, --, mu_base_lo, 64, 1], \
             indirect_ref, sig_done[*sig];
     }
@@ -449,11 +462,31 @@ tx_slave_pkt_tx(struct tx_pkt_work *tx_pkt_work,
  * Start the script, and keep anything for the finish in script_finish
  * After this call 'script' will be disposed of
  */
-void
-tx_slave_script_start(struct ctm_pkt_desc *ctm_pkt_desc,
-                      __xread struct script *script,
-                      struct script_finish *script_finish)
+__intrinsic void
+tx_slave_script_start_write_hdr( uint32_t pkt_addr,
+                                 __xwrite uint32_t *hdr,
+                                 __xwrite uint32_t *mod )
 {
+    __asm {
+        mem[write, *hdr, pkt_addr, 0, 1];
+        mem[write, *mod, pkt_addr, 56, 1];
+    }
+}
+
+void
+tx_slave_script_start(struct tx_pkt_work *tx_pkt_work,
+                      struct ctm_pkt_desc *ctm_pkt_desc,
+                      __xread struct script *script,
+                      __xwrite struct script_finish *script_finish)
+{
+    script_finish->mod[0] = ( (1<<31) | (7<<21) ); // Null script
+    script_finish->mod[1] = 0;
+    script_finish->hdr[0] = 0;
+    script_finish->hdr[1] = (1<<31) | (tx_pkt_work->mu_base_s8>>3);
+    tx_slave_script_start_write_hdr(ctm_pkt_desc->pkt_addr,
+                                    script_finish->hdr,
+                                    script_finish->mod);
+    ctm_pkt_desc->mod_script_offset = 56;
 }
 
 /** tx_slave_script_finish
@@ -461,8 +494,9 @@ tx_slave_script_start(struct ctm_pkt_desc *ctm_pkt_desc,
  */
 void
 tx_slave_script_finish(struct ctm_pkt_desc *ctm_pkt_desc,
-                      struct script_finish *script_finish)
+                       __xwrite struct script_finish *script_finish)
 {
+    __implicit_read(script_finish);
 }
 
 /** tx_slave_wait_for_tx_time
@@ -494,7 +528,7 @@ pktgen_tx_slave(void)
         struct tx_pkt_work tx_pkt_work;
         struct ctm_pkt_desc ctm_pkt_desc;
         __xread struct script script;
-        struct script_finish script_finish;
+        __xwrite struct script_finish script_finish;
         SIGNAL dma_sig;
         SIGNAL script_sig;
 
@@ -502,21 +536,20 @@ pktgen_tx_slave(void)
         if (tx_pkt_work.mu_base_s8 == 0) {
             continue;
         }
-    local_csr_write(local_csr_mailbox0, tx_pkt_work.mu_base_s8);
-    local_csr_write(local_csr_mailbox1, tx_pkt_work.tx_seq);
-    local_csr_write(local_csr_mailbox2, tx_pkt_work.length);
-    local_csr_write(local_csr_mailbox3, tx_pkt_work.script_ofs);
-        __asm {ctx_arb[bpt]}
         tx_slave_wait_for_tx_seq(&tx_pkt_work);
         tx_slave_read_script_start(&tx_pkt_work, &script, &script_sig);
         tx_slave_alloc_pkt(&ctm_pkt_desc);
         tx_slave_dma_pkt_start(&tx_pkt_work, &ctm_pkt_desc, &dma_sig);
         wait_for_all(&script_sig);
-        tx_slave_script_start(&ctm_pkt_desc, &script, &script_finish);
+        tx_slave_script_start(&tx_pkt_work, &ctm_pkt_desc, &script, &script_finish);
         wait_for_all(&dma_sig);
         tx_slave_script_finish(&ctm_pkt_desc, &script_finish);
         tx_slave_wait_for_tx_time(&tx_pkt_work);
         tx_slave_pkt_tx(&tx_pkt_work, &ctm_pkt_desc);
+    local_csr_write(local_csr_mailbox0, tx_pkt_work.mu_base_s8);
+    local_csr_write(local_csr_mailbox1, ctm_pkt_desc.pkt_num);
+    local_csr_write(local_csr_mailbox2, tx_pkt_work.length);
+    local_csr_write(local_csr_mailbox3, ctm_pkt_desc.pkt_addr);
     }
 }
 
@@ -833,6 +866,7 @@ void pktgen_tx_slave_init(int batch)
     mu_script_base_s8 = 0;
     batch_desc.seq_base_s8 = 0; /* MU address of last seq transmitted, to backoff tx slaves - is this necesary if we back off the batch distributor? */
     batch_desc.seq_ofs = 0;
+    last_seq_transmitted = 0;
     switch (batch) {
     case 0:
         batch_desc.muq = MU_QUEUE_CONFIG_GET(QDEF_BATCH_DESC_0);

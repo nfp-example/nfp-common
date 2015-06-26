@@ -195,14 +195,15 @@ void network_init_dma(int island, int ctm_offset, int split_length)
                                      (1 << 6)) ); // Set island number and enable CTM polling
     xpb_write(xpb_base_nbi_dma, 0x20, ( (split_length << 5) |
                                         (ctm_offset << 12) |
-                                        (0 << 13)) ); /* No drop */
+                                        (1 << 13)) ); /* No drop */
+    //(0 << 13)) ); /* No drop */
 
     /* Disable all BPEs */
     for (i = 0; i < 32; i++) {
         xpb_write(xpb_base_nbi_dma, 0x40 | (i << 2), 0 );
     }
 
-    xpb_write(xpb_base_nbi_dma, 0x40, ((4 << 21) | /* CTM 4 */
+    xpb_write(xpb_base_nbi_dma, 0x40, ((5 << 21) | /* CTM 5 */
                                        (64 << 10) | /* 64 packet credits */
                                        (64 << 0)) ); /* 64 2kB buffer credits */
 
@@ -295,8 +296,8 @@ void main(void)
     network_base_init();
 
     /* Rx */
-    //network_init_npc(8);
-    //network_init_dma(8);
+    network_init_npc(8);
+    network_init_dma(8, 1, 3);
 
     /* Tx */
     network_init_tm(8);
