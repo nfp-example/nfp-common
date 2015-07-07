@@ -29,8 +29,8 @@ typedef union {
     uint64_t uint64;
     uint32_t uint32[2];
     struct {
-        uint32_t uint32_lo;
         uint32_t uint32_hi;
+        uint32_t uint32_lo;
     };
 } uint64_32_t;
 

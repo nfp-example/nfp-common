@@ -517,11 +517,44 @@ tx_slave_script_finish(struct ctm_pkt_desc *ctm_pkt_desc,
 }
 
 /** tx_slave_wait_for_tx_time
- * Should wait until the transmit time required
+ * Wait until tx_pkt_work->tx_time_lo/hi
+ *
+ * @param tx_pkt_work Transmit packet work item to wait for
  */
 void
 tx_slave_wait_for_tx_time(struct tx_pkt_work *tx_pkt_work)
 {
+    uint64_32_t time_now;
+    uint64_32_t timeout;
+
+    if (1) {
+        __xwrite uint32_t data[4];
+        time_now = me_time64();
+        data[0] = tx_pkt_work->tx_time_lo;
+        data[1] = tx_pkt_work->tx_time_hi;
+        data[2] = time_now.uint32_lo;
+        data[3] = time_now.uint32_hi;
+        cls_ring_journal_rem(data, 4<<(34-8),
+                             CLS_DEBUG_JOURNAL_RING<<2, 16);
+                       }
+    for (;;) {
+        timeout.uint32_lo = tx_pkt_work->tx_time_lo;
+        timeout.uint32_hi = tx_pkt_work->tx_time_hi;
+        time_now = me_time64();
+
+        time_now.uint32_hi = time_now.uint32_hi & 0xff;
+        timeout.uint64 -= time_now.uint64;
+        timeout.uint32_hi = timeout.uint32_hi & 0xff;
+        if (timeout.uint32_hi > 0xfe)
+            return;
+        if ((timeout.uint32_hi == 0) && (timeout.uint32_lo <= 0x1000)) {
+            if (timeout.uint32_lo > 32) {
+                me_sleep(timeout.uint32_lo);
+            }
+            return;
+        }
+        me_sleep(0xf0000); /* Longest realistic wait */
+    }
 }
 
 /** pktgen_tx_slave
@@ -562,7 +595,7 @@ pktgen_tx_slave(void)
     local_csr_write(local_csr_mailbox1, tx_pkt_work.tx_seq);
     local_csr_write(local_csr_mailbox2, tx_pkt_work.length);
     local_csr_write(local_csr_mailbox3, ctm_pkt_desc.pkt_addr);
-    if (1) {
+    if (0) {
         __xwrite uint32_t data[4];
         data[0] = tx_pkt_work.mu_base_s8;
         data[1] = tx_pkt_work.tx_seq;
@@ -590,6 +623,15 @@ pktgen_tx_slave(void)
         wait_for_all(&dma_sig);
         tx_slave_script_finish(&ctm_pkt_desc, &script_finish);
         tx_slave_wait_for_tx_time(&tx_pkt_work);
+    if (1) {
+        __xwrite uint32_t data[4];
+        data[0] = tx_pkt_work.tx_time_lo;
+        data[1] = tx_pkt_work.tx_time_hi;
+        data[2] = 0;
+        data[3] = 0;
+        cls_ring_journal_rem(data, 4<<(34-8),
+                             CLS_DEBUG_JOURNAL_RING<<2, 16);
+                       }
         tx_slave_pkt_tx(&tx_pkt_work, &ctm_pkt_desc);
     }
 }
@@ -845,6 +887,10 @@ pktgen_master(void)
             uint64_32_t time_now;
             time_now = me_time64();
             base_time = time_now.uint64 + host_cmd.pkt_cmd.base_delay;
+          local_csr_write(local_csr_mailbox0, time_now.uint32_lo);
+          local_csr_write(local_csr_mailbox1, time_now.uint32_hi);
+          local_csr_write(local_csr_mailbox2, base_time&0xffffffff);
+          local_csr_write(local_csr_mailbox3, ((base_time>>32)&0xffffffff));
             mu_base_s8 = host_cmd.pkt_cmd.mu_base_s8;
             total_pkts = host_cmd.pkt_cmd.total_pkts;
             tx_master_distribute_schedule(base_time, total_pkts,
