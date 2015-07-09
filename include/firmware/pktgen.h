@@ -66,6 +66,7 @@ struct pktgen_cls_host {
     uint32_t wptr;
     uint32_t rptr;
     uint32_t ack_data;
+    uint32_t last_tx_seq;
 };
 
 /** struct pktgen_host_cmd

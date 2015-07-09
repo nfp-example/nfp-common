@@ -306,33 +306,6 @@ tx_slave_get_pkt_in_batch(struct tx_pkt_work *tx_pkt_work)
     *tx_pkt_work = tx_pkt_work_in;
 }
 
-/** tx_slave_wait_for_tx_seq
- * 5i * 90% / 15i+150 * 10% / poll if way ahead
- *
- * = 6i+15
- */
-void
-tx_slave_wait_for_tx_seq(struct tx_pkt_work *tx_pkt_work)
-{
-
-    for (;;) {
-        __xread struct tx_seq tx_seq;
-
-        if ((tx_pkt_work->tx_seq - last_seq_transmitted) <
-            MAX_BATCH_ITEMS_IN_PROCESSING)
-            return;
-
-        mem_atomic_read_s8(&tx_seq, batch_desc.seq_base_s8, batch_desc.seq_ofs, sizeof(tx_seq));
-        last_seq_transmitted = tx_seq.last_transmitted;
-
-        if ((tx_pkt_work->tx_seq - last_seq_transmitted) <
-            MAX_BATCH_ITEMS_IN_PROCESSING)
-            return;
-
-        me_sleep(poll_interval);
-    }
-}
-
 /** tx_slave_alloc_pkt
  *
  * 8i+300 + poll if required
@@ -609,12 +582,6 @@ pktgen_tx_slave(void)
         a = ALLOC_PKTGEN_DEBUG();
         cls_incr(a,8);
     }
-    //tx_slave_wait_for_tx_seq(&tx_pkt_work);
-    if (1) {
-        __cls void *a;
-        a = ALLOC_PKTGEN_DEBUG();
-        cls_incr(a,12);
-    }
         tx_slave_read_script_start(&tx_pkt_work, &script, &script_sig);
         tx_slave_alloc_pkt(&ctm_pkt_desc);
         tx_slave_dma_pkt_start(&tx_pkt_work, &ctm_pkt_desc, &dma_sig);
@@ -633,6 +600,12 @@ pktgen_tx_slave(void)
                              CLS_DEBUG_JOURNAL_RING<<2, 16);
                        }
         tx_slave_pkt_tx(&tx_pkt_work, &ctm_pkt_desc);
+
+        if (1) {
+            uint32_t addr;
+            addr = ALLOC_PKTGEN_HOST(); // FIXME - THIS ALLOCATES LOCAL ISLAND (GRR)
+            cls_incr_rem(4<<(34-8),addr+offsetof(struct pktgen_cls_host,last_tx_seq));
+        }
     }
 }
 
@@ -756,14 +729,18 @@ tx_master_add_batch_work(struct batch_work *batch_work)
  * A burst of 4 at one time would be good.
  *
  */
+#define MAX_PKTS_IN_PROGRESS (32)
 static void
-tx_master_distribute_schedule(uint64_t base_time,
+tx_master_distribute_schedule(struct host_data *host_data,
+                              uint64_t base_time,
                               int total_pkts,
                               uint32_t mu_base_s8,
                               uint32_t *tx_seq)
 {
     struct batch_work batch_work;
+    uint32_t addr; /* Address in CLS of host data */
     int num_batches;
+    __xread uint32_t last_tx_seq;
 
     num_batches = (total_pkts + 7) >> 3;
 
@@ -775,12 +752,20 @@ tx_master_distribute_schedule(uint64_t base_time,
     batch_work.num_valid_pkts = 8;
     *tx_seq = *tx_seq + total_pkts;
 
+    addr = host_data->cls_host_shared_data;
+    cls_read(&last_tx_seq, (__cls void *)addr,
+             offsetof(struct pktgen_cls_host,last_tx_seq),
+             sizeof(uint32_t));
+
     while (num_batches>0) {
-        //if (too backed up) {
-        //    me_sleep(poll_interval);
-        //    read_backup();
-        //    continue;
-        //}
+        while ((batch_work.tx_seq - last_tx_seq) > MAX_PKTS_IN_PROGRESS) {
+            cls_read(&last_tx_seq, (__cls void *)addr,
+                     offsetof(struct pktgen_cls_host,last_tx_seq),
+                     sizeof(uint32_t));
+            if ((batch_work.tx_seq - last_tx_seq) > MAX_PKTS_IN_PROGRESS) {
+                me_sleep(poll_interval);
+            }
+        }
         if (total_pkts<8) {
             batch_work.num_valid_pkts = total_pkts;
         }
@@ -893,7 +878,8 @@ pktgen_master(void)
           local_csr_write(local_csr_mailbox3, ((base_time>>32)&0xffffffff));
             mu_base_s8 = host_cmd.pkt_cmd.mu_base_s8;
             total_pkts = host_cmd.pkt_cmd.total_pkts;
-            tx_master_distribute_schedule(base_time, total_pkts,
+            tx_master_distribute_schedule(&host_data,
+                                          base_time, total_pkts,
                                           mu_base_s8, &tx_seq);
         } else if (host_cmd.all_cmds.cmd_type == PKTGEN_HOST_CMD_DMA) {
             uint64_32_t cpp_addr;

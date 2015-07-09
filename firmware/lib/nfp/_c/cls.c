@@ -81,6 +81,21 @@ cls_incr(__cls void *addr, int ofs)
     }
 }
 
+/** cls_incr_rem
+ *
+ * @param cls_base_s8  40-bit CLS address >> 8
+ * @param ofs          Offset from base
+ *
+ */
+__intrinsic void
+cls_incr_rem(uint32_t cls_base_s8,
+             uint32_t ofs)
+{
+    __asm {
+        cls[incr, --, cls_base_s8, <<8, ofs, 1];
+    }
+}
+
 /** cls_ring_journal_rem
  *
  * @param data   Transfer registers to write

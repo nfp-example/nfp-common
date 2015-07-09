@@ -365,7 +365,7 @@ main(int argc, char **argv)
         int err;
         host_cmd.pkt_cmd.cmd_type = PKTGEN_HOST_CMD_PKT;
         host_cmd.pkt_cmd.base_delay = 1<<24;
-        host_cmd.pkt_cmd.total_pkts = 63; /* That is all the current file is!!! */
+        host_cmd.pkt_cmd.total_pkts = 57; /* That is all the current file is!!! */
         host_cmd.pkt_cmd.mu_base_s8 = pktgen_mem_get_mu(pktgen_nfp.mem_layout,0,0)>>8;
         err = pktgen_issue_cmd(&pktgen_nfp, &host_cmd);
         err = err;
