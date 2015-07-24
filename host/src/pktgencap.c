@@ -51,6 +51,11 @@ struct pktgen_nfp {
     struct pktgen_mem_layout *mem_layout;
 };
 
+/** Static variables
+ */
+static const char *shm_filename="/tmp/nfp_shm.lock";
+static int shm_key = 'x';
+
 /** pktgen_load_nfp
  *
  * Initialize NFP, load NFP firmware and retrieve symbol table
@@ -72,6 +77,7 @@ pktgen_load_nfp(struct pktgen_nfp *pktgen_nfp,
         fprintf(stderr, "Failed to open NFP\n");
         return 1;
     }
+
     if (nfp_fw_load(pktgen_nfp->nfp, nffw_filename) < 0) {
         fprintf(stderr, "Failed to load NFP firmware\n");
         return 1;
@@ -336,12 +342,22 @@ main(int argc, char **argv)
         return 4;
     }
 
-    pktgen_nfp.pcie_size = nfp_huge_malloc(pktgen_nfp.nfp,
-                                           (void **)&pktgen_nfp.pcie_base,
-                                           &pktgen_nfp.pcie_base_addr[0],
-                                           PCIE_HUGEPAGE_SIZE);
-    if (pktgen_nfp.pcie_size == 0) {
+    //pktgen_nfp.pcie_size = nfp_huge_malloc(pktgen_nfp.nfp,
+    //                                       (void **)&pktgen_nfp.pcie_base,
+    //                                       &pktgen_nfp.pcie_base_addr[0],
+    //                                       PCIE_HUGEPAGE_SIZE);
+    if (nfp_shm_alloc(pktgen_nfp.nfp,
+                      shm_filename, shm_key,
+                      PCIE_HUGEPAGE_SIZE, 1)!=0) {
         fprintf(stderr,"Failed to allocate memory\n");
+        return 4;
+    }
+
+    pktgen_nfp.pcie_base = nfp_shm_data(pktgen_nfp.nfp);
+    pktgen_nfp.pcie_base[0] = 0;
+    pktgen_nfp.pcie_base_addr[0] = nfp_huge_physical_address(pktgen_nfp.nfp, pktgen_nfp.pcie_base, 0);
+    if (pktgen_nfp.pcie_base_addr[0] == 0) {
+        fprintf(stderr, "Failed to find linux page mapping in /proc/self/pagemap\n");
         return 4;
     }
 

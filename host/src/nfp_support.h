@@ -42,7 +42,7 @@ struct nfp_cppid {
  * Returns NULL on error, otherwise an allocated NFP structure
  * Adds atexit handler to shut down NFP cleanly at exit
  *
- * @param device_num   NFP device number to attach to
+ * @param device_num   NFP device number to attach to (-1 => none)
  */
 extern struct nfp *nfp_init(int device_num);
 
@@ -87,18 +87,52 @@ extern void nfp_unload(struct nfp *nfp);
  */
 extern int nfp_fw_start(struct nfp *nfp);
 
+/** nfp_shm_alloc
+ *
+ * Allocate some shared memory, one area per NFP
+ *
+ * @param nfp           NFP structure of NFP device to allocate SHM for
+ * @param shm_filename  Filename for a shared memory 'lock' file
+ * @param shm_key       32-bit key used with filename for SHM 'key'
+ * @param size          Size in bytes of memory to allocate/use
+ * @param create        Non-zero if SHM should be created if it does not exist
+ *
+ * This function allocates shared memory of the size specified, using
+ * the shm_filename and shm_key to define a system-wide shared memory
+ * handle so that multiple processes may share the same memory.
+ *
+ */
+extern int nfp_shm_alloc(struct nfp *nfp, const char *shm_filename,
+                         int shm_key, size_t size, int create);
+
+/** nfp_shm_data
+ *
+ * Get SHM data pointer after it has been allocated
+ *
+ * @param nfp           NFP structure of NFP device to get SHM pointer of
+ *
+ */
+extern void *nfp_shm_data(struct nfp *nfp);
+
+/** nfp_shm_close
+ *
+ * Close the shared memory corresponding to the NFP device
+ *
+ * @param nfp           NFP structure of NFP device to close SHM for
+ */
+extern void nfp_shm_close(struct nfp *nfp);
+
 /** nfp_huge_malloc
  *
- * Malloc using hugepages, get physical address and void *,
- * and return number of bytes actually allocated
+ * Malloc using hugepages, and get pointer to it,
+ * and return 0 on success
  *
  * @param nfp        NFP structure already initialized
  * @param ptr        Pointer to store (virtual) allocated memory ptr in
- * @param addr       Location to store physical address of allocated memory
  * @param byte_size  Byte size to allocate
  *
  */
-extern long nfp_huge_malloc(struct nfp *nfp, void **ptr, uint64_t *addr, long byte_size);
+extern int nfp_huge_malloc(struct nfp *nfp, void **ptr, size_t byte_size);
 
 /** nfp_huge_physical_address
  *

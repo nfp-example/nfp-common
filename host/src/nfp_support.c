@@ -28,6 +28,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <hugetlbfs.h>
+#include <sys/shm.h>
+#include <sys/ipc.h>
 #include <nfp.h>
 #include <nfp_cpp.h>
 #include <nfp_nffw.h>
@@ -41,12 +43,21 @@ struct pagemap_data {
     long  huge_page_size;
 };
 
+/** struct shm_data
+ */
+struct shm_data {
+    FILE  *file;
+    int   id;
+    void  *data;
+};
+
 /** struct nfp
  */
 struct nfp {
     struct nfp *prev;
     struct nfp *next;
     struct pagemap_data pagemap;
+    struct shm_data shm;
     struct nfp_device *dev;
     struct nfp_cpp    *cpp;
     uint8_t firmware_id;
@@ -138,7 +149,7 @@ nfp_unlink(struct nfp *nfp)
  * Returns NULL on error, otherwise an allocated NFP structure
  * Adds atexit handler to shut down NFP cleanly at exit
  *
- * @param device_num   NFP device number to attach to
+ * @param device_num   NFP device number to attach to (-1 => none)
  */
 struct nfp *
 nfp_init(int device_num)
@@ -162,10 +173,12 @@ nfp_init(int device_num)
     nfp->pagemap.fd=open("/proc/self/pagemap", O_RDONLY);
     if (nfp->pagemap.fd<0) goto err;
 
-    nfp->dev=nfp_device_open(device_num);
-    if (!nfp->dev) goto err;
-    nfp->cpp=nfp_device_cpp(nfp->dev);
-    if (!nfp->cpp) goto err;
+    if (device_num >= 0) {
+        nfp->dev=nfp_device_open(device_num);
+        if (!nfp->dev) goto err;
+        nfp->cpp=nfp_device_cpp(nfp->dev);
+        if (!nfp->cpp) goto err;
+    }
                        
     return nfp;
 
@@ -194,6 +207,7 @@ nfp_shutdown(struct nfp *nfp)
         nfp->dev = NULL;
     }
     nfp_unlink(nfp);
+    nfp_shm_close(nfp);
     free(nfp);
 }
 
@@ -250,19 +264,75 @@ nfp_fw_start(struct nfp *nfp)
     return nfp_nffw_start(nfp->dev,nfp->firmware_id);
 }
 
+/** nfp_shm_alloc
+ */
+extern int
+nfp_shm_alloc(struct nfp *nfp, const char *shm_filename, int shm_key, size_t byte_size, int create)
+{
+    int shm_flags;
+    key_t key;
+
+    shm_flags =0x1ff;
+    if (create) {
+        shm_flags |= IPC_CREAT;
+        nfp->shm.file = fopen(shm_filename,"w");
+        if (!nfp->shm.file) {
+            fprintf(stderr,"Failed to open shm lock file %s\n", shm_filename);
+            return -1;
+        }
+    }
+    key = ftok(shm_filename, shm_key);
+    
+    nfp->shm.id = shmget(key, byte_size, SHM_HUGETLB | shm_flags );
+    if (nfp->shm.id == -1) {
+        fprintf(stderr,"Failed to allocate SHM id\n");
+        nfp_shm_close(nfp);
+       return -1;
+    }
+    nfp->shm.data = shmat(nfp->shm.id, NULL, 0);
+    return 0;
+}
+
+/** nfp_shm_data
+ *
+ * Get SHM data pointer after it has been allocated
+ *
+ * @param nfp           NFP structure of NFP device to get SHM pointer of
+ *
+ */
+extern void *
+nfp_shm_data(struct nfp *nfp)
+{
+    return nfp->shm.data;
+}
+
+/** nfp_shm_close
+ */
+extern void
+nfp_shm_close(struct nfp *nfp)
+{
+    if (nfp->shm.data != NULL) {
+        shmdt(nfp->shm.data);
+        nfp->shm.data = NULL;
+    }
+    if (nfp->shm.file != NULL) {
+        fclose(nfp->shm.file);
+        nfp->shm.file = NULL;
+    }
+}
+
 /** nfp_huge_malloc
  *
- * Malloc using hugepages, get physical address and void *,
- * and return number of bytes actually allocated
+ * Malloc using hugepages, and get pointer to it,
+ * and return 0 on success
  *
  * @param nfp        NFP structure already initialized
  * @param ptr        Pointer to store (virtual) allocated memory ptr in
- * @param addr       Location to store physical address of allocated memory
  * @param byte_size  Byte size to allocate
  *
  */
-long
-nfp_huge_malloc(struct nfp *nfp, void **ptr, uint64_t *addr, long byte_size)
+int
+nfp_huge_malloc(struct nfp *nfp, void **ptr, size_t byte_size)
 {
     int  num_huge_pages;
     long allocation_size;
@@ -270,20 +340,12 @@ nfp_huge_malloc(struct nfp *nfp, void **ptr, uint64_t *addr, long byte_size)
     num_huge_pages = ((byte_size-1)/nfp->pagemap.huge_page_size)+1;
     allocation_size = num_huge_pages*nfp->pagemap.huge_page_size;
 
-    *addr = 0;
     *ptr = get_huge_pages(allocation_size,GHP_DEFAULT);
     if (*ptr == NULL)
         return 0;
 
     ((uint64_t *)(*ptr))[0]=0;
 
-    *addr = nfp_huge_physical_address(nfp, *ptr, 0);
-    if (*addr == 0) {
-        fprintf(stderr, "Failed to find linux page mapping in /proc/self/pagemap\n");
-        free_huge_pages(*ptr);
-        *ptr=NULL;
-        return 0;
-    }
     return allocation_size;
 }
 
