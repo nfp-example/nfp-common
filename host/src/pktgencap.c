@@ -29,7 +29,7 @@
 
 /** Defines
  */
-#define MAX_PAGES 1
+#define MAX_PAGES 2
 #define PCIE_HUGEPAGE_SIZE (1<<20)
 
 /** struct pktgen_nfp
@@ -38,10 +38,11 @@ struct pktgen_nfp {
     struct nfp *nfp;
     struct nfp_cppid pktgen_cls_host;
     struct nfp_cppid pktgen_cls_ring;
-    char *pcie_base;
-    long pcie_size;
-    uint64_t pcie_base_addr[MAX_PAGES];
-    long s;
+    struct {
+        char *base;
+        size_t size;
+        uint64_t phys_addr[MAX_PAGES];
+    } shm;
     struct {
         uint32_t ring_mask;
         uint32_t wptr;
@@ -97,29 +98,55 @@ pktgen_load_nfp(struct pktgen_nfp *pktgen_nfp,
     return 0;
 }
 
+/** pktgen_alloc_shm
+ */
+static int
+pktgen_alloc_shm(struct pktgen_nfp *pktgen_nfp)
+{
+    pktgen_nfp->shm.size = PCIE_HUGEPAGE_SIZE * MAX_PAGES;
+    if (nfp_shm_alloc(pktgen_nfp->nfp,
+                      shm_filename, shm_key,
+                      pktgen_nfp->shm.size, 1)!=0) {
+        return -1;
+    }
+
+    pktgen_nfp->shm.base = nfp_shm_data(pktgen_nfp->nfp);
+    pktgen_nfp->shm.base[0] = 0; // Force page to be mapped
+    pktgen_nfp->shm.phys_addr[0] = nfp_huge_physical_address(pktgen_nfp->nfp,
+                                                             pktgen_nfp->shm.base,
+                                                             0);
+    if (pktgen_nfp->shm.phys_addr[0] == 0) {
+        fprintf(stderr, "Failed to find linux page mapping in /proc/self/pagemap\n");
+        return -1;
+    }
+    return 0;
+}
+
 /** pktgen_give_pcie_pcap_buffers
  */
 static int pktgen_give_pcie_pcap_buffers(struct pktgen_nfp *pktgen_nfp)
 {
-    int offset;
+    int ring_offset;
     int num_buffers;
     int err;
-    uint64_t pcie_size;
-    uint64_t pcie_base_addr;
+    uint64_t phys_offset;
 
-    offset = 0;
+    ring_offset = 0;
+    phys_offset = PCIE_HUGEPAGE_SIZE;
     num_buffers = 0;
-    pcie_base_addr = pktgen_nfp->pcie_base_addr[0];
-    pcie_size = pktgen_nfp->pcie_size;
-    while (pcie_size > 0) {
+    while (phys_offset < pktgen_nfp->shm.size) {
+        uint64_t phys_addr;
+        phys_addr = nfp_huge_physical_address(pktgen_nfp->nfp,
+                                              pktgen_nfp->shm.base,
+                                              phys_offset);
+                                              
         err = nfp_write(pktgen_nfp->nfp,
                         &pktgen_nfp->pktgen_cls_ring,
-                        offset,
-                        (void *)&pcie_base_addr, sizeof(pcie_base_addr));
+                        ring_offset,
+                        (void *)&phys_addr, sizeof(phys_addr));
         if (err) return err;
-        pcie_base_addr += 1 << 18;
-        pcie_size -= 1 << 18;
-        offset += sizeof(pcie_base_addr);
+        phys_offset += 1 << 18;
+        ring_offset += sizeof(phys_addr);
         num_buffers++;
     }
 
@@ -293,10 +320,10 @@ mem_load_callback(void *handle,
         host_cmd.dma_cmd.cmd_type = PKTGEN_HOST_CMD_DMA;
         host_cmd.dma_cmd.length = size_to_do;
         host_cmd.dma_cmd.mu_base_s8     = mu_base_s8;
-        host_cmd.dma_cmd.pcie_base_low  = pktgen_nfp->pcie_base_addr[0];
-        host_cmd.dma_cmd.pcie_base_high = pktgen_nfp->pcie_base_addr[0] >> 32;
+        host_cmd.dma_cmd.pcie_base_low  = pktgen_nfp->shm.phys_addr[0];
+        host_cmd.dma_cmd.pcie_base_high = pktgen_nfp->shm.phys_addr[0] >> 32;
 
-        memcpy(pktgen_nfp->pcie_base, mem, size_to_do);
+        memcpy(pktgen_nfp->shm.base, mem, size_to_do);
         if (0) {
             int i;
             for (i=0; i<size_to_do; i+=4) {
@@ -342,22 +369,8 @@ main(int argc, char **argv)
         return 4;
     }
 
-    //pktgen_nfp.pcie_size = nfp_huge_malloc(pktgen_nfp.nfp,
-    //                                       (void **)&pktgen_nfp.pcie_base,
-    //                                       &pktgen_nfp.pcie_base_addr[0],
-    //                                       PCIE_HUGEPAGE_SIZE);
-    if (nfp_shm_alloc(pktgen_nfp.nfp,
-                      shm_filename, shm_key,
-                      PCIE_HUGEPAGE_SIZE, 1)!=0) {
+    if (pktgen_alloc_shm(&pktgen_nfp)!=0) {
         fprintf(stderr,"Failed to allocate memory\n");
-        return 4;
-    }
-
-    pktgen_nfp.pcie_base = nfp_shm_data(pktgen_nfp.nfp);
-    pktgen_nfp.pcie_base[0] = 0;
-    pktgen_nfp.pcie_base_addr[0] = nfp_huge_physical_address(pktgen_nfp.nfp, pktgen_nfp.pcie_base, 0);
-    if (pktgen_nfp.pcie_base_addr[0] == 0) {
-        fprintf(stderr, "Failed to find linux page mapping in /proc/self/pagemap\n");
         return 4;
     }
 
@@ -389,7 +402,7 @@ main(int argc, char **argv)
 
     usleep(3*1000*1000);
 
-    nfp_huge_free(pktgen_nfp.nfp, pktgen_nfp.pcie_base);
+    //nfp_huge_free(pktgen_nfp.nfp, pktgen_nfp.pcie_base);
     nfp_shutdown(pktgen_nfp.nfp);
     return 0;
 }

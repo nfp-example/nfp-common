@@ -57,12 +57,13 @@ extern int main(int argc, char **argv)
         fprintf(stderr,"Failed to find necessary symbols\n");
         return 4;
     }
-    pcie_size = nfp_huge_malloc(nfp, (void **)&pcie_base, &pcie_base_addr, PCIE_HUGEPAGE_SIZE);
+    pcie_size = nfp_huge_malloc(nfp, (void **)&pcie_base, PCIE_HUGEPAGE_SIZE);
     if (pcie_size==0) {
         fprintf(stderr,"Failed to allocate memory\n");
         return 4;
     }
     err=0;
+    pcie_base_addr = nfp_huge_physical_address(nfp,pcie_base,0);
     p=pcie_base_addr;
     s=pcie_size;
     for (offset=0;(s>0);offset+=sizeof(p)) {
