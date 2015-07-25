@@ -16,8 +16,11 @@
 # @brief       Makefile for the individual apps
 #
 
+NETRONOME_STD_MICROC = $(NETRONOME)/components/standardlibrary/microc
+NETRONOME_PICOCODE = $(NETRONOME)/components/standardlibrary/picocode/nfp6000
+
 # Need this for local_csr_write and _exit. Can we lose this?
-NFCC_BASE_CLIBS = /opt/netronome/components/standardlibrary/microc/src/rtl.c
+NFCC_BASE_CLIBS = $(NETRONOME_STD_MICROC)/src/rtl.c
 
 # Need this to fix codeless ME assembles for initialization
 NFAS_CODELESS_FIXUP = sed -ie 's/\(\(\.%init_csr "default assembler setting"\)\|\(\.%third_party_addressing\)\|\(\.%indirect_ref_mode\)\).*//'
@@ -112,6 +115,21 @@ $(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pcap_recycle,i4.me3))
 $(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pcap_rx,i32.me0 i33.me0 i34.me0))
 $(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pktgen_tx_slave,i35.me0 i35.me1 i35.me2 i35.me3 i35.me4 i35.me5 i35.me6 i35.me7))
 $(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_init,i5.me2))
+
+$(eval $(call nffw.add_ppc,pktgencap,i8,$(NETRONOME_PICOCODE)/null/null.npfw))
+
 $(eval $(call nffw.add_rtsyms,pktgencap))
 $(eval $(call nffw.link,pktgencap))
 
+# TO make it go
+#   69  nfp-power nbi=off
+#   70  nfp-power nbi=on
+#   71  make init_mac
+#   72  make init_mac_serdes_loop
+#   74  make init_network
+#   75  make init_mac_serdes_loop
+#
+# Sequence number in mu_pkt_buf_desc is incorrect (stuck at 0x600)
+# dmas_completed appears to be 2 too few
+#
+# MU buffer contents do appear to be correct except seq number and # DMAs

@@ -757,7 +757,7 @@ void pkt_dma_to_memory(struct pkt_buf_desc *pkt_buf_desc,
 
     mu_addr_high = (pkt_buf_desc->mu_base_s8) >> 24;
     mu_addr_low  = pkt_buf_desc->mu_base_s8 << 8;
-    mu_offset    = pkt_buf_desc->mu_offset << 6;
+    mu_offset    = pkt_buf_desc->mu_offset;
     local_csr_write(local_csr_cmd_indirect_ref0, mu_addr_high); 
     size         = pkt_buf_desc->num_blocks+1;
     override = (( (2 << 3) | (1 << 6) | (1 << 7) ) | ((size - 1) << 8) |
