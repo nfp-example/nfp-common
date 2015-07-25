@@ -108,7 +108,7 @@ $(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pcap_host,i4.me2))
 $(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pcap_recycle,i4.me3))
 $(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pcap_rx,i32.me0 i33.me0 i34.me0))
 $(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pktgen_tx_slave,i35.me0 i35.me1 i35.me2 i35.me3 i35.me4 i35.me5 i35.me6 i35.me7))
-$(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pktgen_init,i5.me2))
+$(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_init,i5.me2))
 $(eval $(call nffw.add_rtsyms,pktgencap))
 $(eval $(call nffw.link,pktgencap))
 

@@ -32,13 +32,16 @@ void main(void)
     int poll_interval;
     poll_interval = 1000;
 
-    sync_state_set_stage_complete(PCAP_INIT_STAGE_PREHOST_LOAD);
+    sync_state_set_stage_complete(PCAP_INIT_STAGE_CSR_INIT);
+
     if (ctx()==0) {
         packet_capture_init_mu_buffer_recycler();
     } else {
         packet_capture_init_dma_to_host_slave();
     }
+
     sync_state_set_stage_complete(PCAP_INIT_STAGE_PREHOST_LOAD);
+
     if (ctx()==0) {
         uint32_t mu_base_s8;
         mu_base_s8 = (uint32_t)(__link_sym("emu_buffer0")>>8);
