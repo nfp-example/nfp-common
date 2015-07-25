@@ -79,8 +79,9 @@ $1__DEFS  += $(NFCC_BASE_DEFS)
 $1__FLAGS += $(NFCC_BASE_FLAGS)
 $1__CLIBS += $(NFCC_BASE_CLIBS)
 $1__LIST  += $(FW_BUILD)/$1.list
+$1__DEPENDENCIES +=
 
-$$($1__LIST): $(FIRMWARE_DIR)/$2/$3 $$($1__CLIBS)
+$$($1__LIST): $(FIRMWARE_DIR)/$2/$3 $$($1__CLIBS) $$($1__DEPENDENCIES)
 	$(NFCC) -Fo$(FW_BUILD)/ -Fe$$@ $$($1__FLAGS) $$($1__INC) $$($1__DEFS) $$($1__CLIBS) $$<
 
 endef
@@ -96,6 +97,7 @@ endef
 define micro_c.add_src_lib
 
 $1__CLIBS += $(FIRMWARE_DIR)/$2/$3.c
+$1__DEPENDENCIES += $(FIRMWARE_DIR)/$2/$3.c
 
 endef
 
@@ -162,6 +164,21 @@ endef
 define micro_c.add_flags
 
 $1__FLAGS += $2
+
+endef
+
+#f micro_c.force_include
+#
+# Force inclusion of a header file
+#
+# @param $1	object descriptor
+# @param $2	source directory
+# @param $3	source code
+#
+define micro_c.force_include
+
+$1__DEFS  += -FI$(FIRMWARE_DIR)/$2/$3.h
+$1__DEPENDENCIES += $(FIRMWARE_DIR)/$2/$3.h
 
 endef
 

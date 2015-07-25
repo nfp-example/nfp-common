@@ -364,7 +364,7 @@ main(int argc, char **argv)
         return 4;
     }
 
-    if (pktgen_load_nfp(&pktgen_nfp, 0, "firmware/nffw/pktgen.nffw")!=0) {
+    if (pktgen_load_nfp(&pktgen_nfp, 0, "firmware/nffw/pktgencap.nffw")!=0) {
         fprintf(stderr,"Failed to open and load up NFP with ME code\n");
         return 4;
     }

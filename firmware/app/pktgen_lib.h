@@ -21,7 +21,6 @@
  */
 /** Includes
  */
-#include "pktgen.h"
 #include <stdint.h>
 
 /** Defines
