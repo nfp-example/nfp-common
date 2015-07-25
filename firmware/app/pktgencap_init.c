@@ -202,13 +202,14 @@ void network_init_dma(int island, int ctm_offset, int split_length)
         xpb_write(xpb_base_nbi_dma, 0x40 | (i << 2), 0 );
     }
 
-    xpb_write(xpb_base_nbi_dma, 0x40, ((5 << 21) | /* CTM 5 */
-                                       (64 << 10) | /* 64 packet credits */
-                                       (64 << 0)) ); /* 64 2kB buffer credits */
-
-    /* Mark BPE0 is end of chain
-     */
-    xpb_write(xpb_base_nbi_dma, 0x18, (1<<0) );
+    for (i = 0; i < 3; i++) {
+        xpb_write(xpb_base_nbi_dma, 0x40 | (i << 2),
+                  (((32 + i) << 21) | /* CTM 32 */
+                   (64 << 10) | /* 64 packet credits */
+                   (64 << 0)) ); /* 64 2kB buffer credits */
+    }
+    // Mark end of chain at 'i'
+    xpb_write(xpb_base_nbi_dma, 0x18, (1 << (i-1) ) );
 
     init_dma_buffer_list(island, 0, 128, ((2LL<<38)|(28LL<<32)|0LL), 2048 );
 }
@@ -304,7 +305,7 @@ void main(void)
     network_init_tm(8);
     network_init_tm_queues(8, &tmq_config_all_disabled);
     network_init_tm_queues(8, &tmq_config_q0_16k);
-    for (i=32; i<32+PKTGENCAP_TX_ISLANDS; i++) {
+    for (i=32; i<32+PKTGENCAP_RXTX_ISLANDS; i++) {
         network_init_ctm(i, 1); /* Half of CTM for pkts */
     }
 

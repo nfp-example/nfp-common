@@ -172,12 +172,18 @@
 
 /** Memory declarations
  */
-_alloc_mem("pktgen_cls_host_res cls island 64 64")
+#define PKTGEN_CLS_HOST_ADDRESS 0
+#ifdef PKTGEN_HOST_ISLAND
+_alloc_mem("pktgen_cls_host_res cls+" STRINGIFY(PKTGEN_CLS_HOST_ADDRESS) " island 64 64")
 _alloc_mem("pktgen_cls_ring_res cls island " PKTGEN_CLS_RING_SIZE__STR " " PKTGEN_CLS_RING_SIZE__STR)
 _declare_resource("pktgen_cls_host island 64 pktgen_cls_host_res")
 _declare_resource("pktgen_cls_ring island " PKTGEN_CLS_RING_SIZE__STR " pktgen_cls_ring_res")
 #define ALLOC_PKTGEN_HOST() __alloc_resource("pktgen_cls_host pktgen_cls_host island 64")
 #define ALLOC_PKTGEN_RING() __alloc_resource("pktgen_cls_ring pktgen_cls_ring island " PKTGEN_CLS_RING_SIZE__STR)
+#else
+#define ALLOC_PKTGEN_HOST() 0
+#define ALLOC_PKTGEN_RING() 0
+#endif
 
 _alloc_mem("pktgen_cls_debug_res cls island 64 64")
 _declare_resource("pktgen_cls_debug island 64 pktgen_cls_debug_res")
@@ -187,18 +193,18 @@ _declare_resource("pktgen_cls_debug island 64 pktgen_cls_debug_res")
  */
 /* Batch work queue is from pktgen_master to batch_distributor */
 /* Currently 1k words = 256 entries = 4k packets*/
-#define QDEF_BATCH_WORK mu_workq_batch_work,10,40,emem
+#define QDEF_BATCH_WORK pktgen_mu_workq_batch_work,10,40,emem
 
 /* Batch descriptor queues are from batch_distributor to tx_slaves */
 /* Currently 1k words = 256 entries = 4k packets*/
-#define QDEF_BATCH_DESC_0 mu_workq_batch_desc_0,10,32,emem
-#define QDEF_BATCH_DESC_1 mu_workq_batch_desc_1,10,33,emem
-#define QDEF_BATCH_DESC_2 mu_workq_batch_desc_2,10,34,emem
-#define QDEF_BATCH_DESC_3 mu_workq_batch_desc_3,10,35,emem
-#define QDEF_BATCH_DESC_4 mu_workq_batch_desc_4,10,36,emem
-#define QDEF_BATCH_DESC_5 mu_workq_batch_desc_5,10,37,emem
-#define QDEF_BATCH_DESC_6 mu_workq_batch_desc_6,10,38,emem
-#define QDEF_BATCH_DESC_7 mu_workq_batch_desc_7,10,39,emem
+#define QDEF_BATCH_DESC_0 pktgen_mu_workq_batch_desc_0,10,32,emem
+#define QDEF_BATCH_DESC_1 pktgen_mu_workq_batch_desc_1,10,33,emem
+#define QDEF_BATCH_DESC_2 pktgen_mu_workq_batch_desc_2,10,34,emem
+#define QDEF_BATCH_DESC_3 pktgen_mu_workq_batch_desc_3,10,35,emem
+#define QDEF_BATCH_DESC_4 pktgen_mu_workq_batch_desc_4,10,36,emem
+#define QDEF_BATCH_DESC_5 pktgen_mu_workq_batch_desc_5,10,37,emem
+#define QDEF_BATCH_DESC_6 pktgen_mu_workq_batch_desc_6,10,38,emem
+#define QDEF_BATCH_DESC_7 pktgen_mu_workq_batch_desc_7,10,39,emem
 
 MU_QUEUE_ALLOC(QDEF_BATCH_WORK);
 MU_QUEUE_ALLOC(QDEF_BATCH_DESC_0);
@@ -603,7 +609,13 @@ pktgen_tx_slave(void)
 
         if (1) {
             uint32_t addr;
-            addr = ALLOC_PKTGEN_HOST(); // FIXME - THIS ALLOCATES LOCAL ISLAND (GRR)
+            addr = PKTGEN_CLS_HOST_ADDRESS;
+            // Basically, the resource allocation is too badly implemented in C to make it possible
+            // to do this automatically
+            // We need a symbol in the PCIe island CLS, but we cannot have one.
+            // So we have to FORCE an allocation at a fixed location and do it by hand.
+            // *sigh*
+            // (uint32_t)(((uint64_t)__link_sym("i4.pktgen_cls_host"))>>0)); // ONLY WORKS IF i4.pktgen_cls_host is at 0
             cls_incr_rem(4<<(34-8),addr+offsetof(struct pktgen_cls_host,last_tx_seq));
         }
     }

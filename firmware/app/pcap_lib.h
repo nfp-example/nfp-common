@@ -28,16 +28,6 @@
 #define PKT_CAP_PCIE_ISLAND  4
 #define PKT_CAP_PCIE_DMA_CONFIG 0 /* Must be inited to MU transfer */
 
-/** Host / Firmware interaction
- * CLS_HOST_RING_SIZE is the number of bytes used for the CLS host
- *    buffer descriptor ring
- *
- * CLS_HOST_SHARED_DATA is the number of bytes used for the CLS host
- *    shared data
- */
-#define CLS_HOST_RING_SIZE 1024
-#define CLS_HOST_SHARED_DATA 64
-
 /** packet_capture_pkt_rx_dma
  *
  * Handle packet received by CTM; claim next part of MU buffer, DMA

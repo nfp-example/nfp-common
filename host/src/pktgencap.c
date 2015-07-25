@@ -26,6 +26,7 @@
 #include "nfp_support.h"
 #include "pktgen_mem.h"
 #include "firmware/pktgen.h"
+#include "firmware/pcap.h"
 
 /** Defines
  */
@@ -38,6 +39,9 @@ struct pktgen_nfp {
     struct nfp *nfp;
     struct nfp_cppid pktgen_cls_host;
     struct nfp_cppid pktgen_cls_ring;
+    struct nfp_cppid pktgen_emu_buffer0;
+    struct nfp_cppid pcap_cls_host;
+    struct nfp_cppid pcap_cls_ring;
     struct {
         char *base;
         size_t size;
@@ -90,6 +94,15 @@ pktgen_load_nfp(struct pktgen_nfp *pktgen_nfp,
         (nfp_get_rtsym_cppid(pktgen_nfp->nfp,
                              "i4.pktgen_cls_ring",
                              &pktgen_nfp->pktgen_cls_ring) < 0) ||
+        (nfp_get_rtsym_cppid(pktgen_nfp->nfp,
+                             "pcap_cls_host_shared_data",
+                             &pktgen_nfp->pcap_cls_host) < 0) ||
+        (nfp_get_rtsym_cppid(pktgen_nfp->nfp,
+                             "pcap_cls_host_ring_base",
+                             &pktgen_nfp->pcap_cls_ring) < 0) ||
+        (nfp_get_rtsym_cppid(pktgen_nfp->nfp,
+                             "pktgen_emu_buffer0",
+                             &pktgen_nfp->pktgen_emu_buffer0) < 0) ||
         0) {
         fprintf(stderr, "Failed to find necessary symbols\n");
         return 1;
@@ -141,20 +154,23 @@ static int pktgen_give_pcie_pcap_buffers(struct pktgen_nfp *pktgen_nfp)
                                               phys_offset);
                                               
         err = nfp_write(pktgen_nfp->nfp,
-                        &pktgen_nfp->pktgen_cls_ring,
+                        &pktgen_nfp->pcap_cls_ring,
                         ring_offset,
                         (void *)&phys_addr, sizeof(phys_addr));
         if (err) return err;
         phys_offset += 1 << 18;
         ring_offset += sizeof(phys_addr);
         num_buffers++;
+        if (ring_offset >= PCAP_HOST_CLS_RING_SIZE)
+            break;
     }
 
-/*    if (nfp_write(pktgen_nfp->nfp,&pktgen_nfp->cls_wptr,0,(void *)&num_buffers,sizeof(num_buffers)) != 0) {
+    if (nfp_write(pktgen_nfp->nfp,
+                  &pktgen_nfp->pcap_cls_host,offsetof(struct pcap_cls_host,wptr),
+                  (void *)&num_buffers,sizeof(num_buffers)) != 0) {
         fprintf(stderr,"Failed to write buffers etc to NFP memory\n");
         return 1;
     }
-*/
     return 0;
 }
 
@@ -255,7 +271,7 @@ pktgen_issue_ack_and_wait(struct pktgen_nfp *pktgen_nfp)
  * for a memory requires it.
  *
  */
-static uint64_t emem0_base=(4L << 35) | 0x900000;
+static uint64_t emem0_base=0; // Was hard-coded to (4L << 35) | 0x900000;
 static int 
 mem_alloc_callback(void *handle,
                    uint64_t size,
@@ -354,6 +370,13 @@ main(int argc, char **argv)
 {
     struct pktgen_nfp pktgen_nfp;
 
+    if (pktgen_load_nfp(&pktgen_nfp, 0, "firmware/nffw/pktgencap.nffw")!=0) {
+        fprintf(stderr,"Failed to open and load up NFP with ME code\n");
+        return 4;
+    }
+    emem0_base  = ((pktgen_nfp.pktgen_emu_buffer0.cpp_id&0xff)-20L) << 35;
+    emem0_base |= pktgen_nfp.pktgen_emu_buffer0.addr;
+
     pktgen_nfp.mem_layout = pktgen_mem_alloc(&pktgen_nfp,
                                              mem_alloc_callback,
                                              mem_load_callback,
@@ -364,17 +387,12 @@ main(int argc, char **argv)
         return 4;
     }
 
-    if (pktgen_load_nfp(&pktgen_nfp, 0, "firmware/nffw/pktgencap.nffw")!=0) {
-        fprintf(stderr,"Failed to open and load up NFP with ME code\n");
-        return 4;
-    }
-
     if (pktgen_alloc_shm(&pktgen_nfp)!=0) {
         fprintf(stderr,"Failed to allocate memory\n");
         return 4;
     }
 
-    if (0 && pktgen_give_pcie_pcap_buffers(&pktgen_nfp) != 0) {
+    if (pktgen_give_pcie_pcap_buffers(&pktgen_nfp) != 0) {
         fprintf(stderr,"Failed to give PCIe pcap buffers\n");
         return 4;
     }

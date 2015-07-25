@@ -80,6 +80,7 @@
 #include <nfp/types.h>
 #include <nfp.h>
 #include <nfp_override.h>
+#include "firmware/pcap.h"
 #include "pcap_lib.h"
 
 /** Defines
@@ -134,16 +135,16 @@ _alloc_mem("mu_buf_desc_store emem global 8")
 /** Queue descriptors and allocations
  */
 /* Recycle queue is workq of mu_base_s8 */
-#define QDEF_MU_BUF_RECYCLE mu_buf_recycle,10,16,emem
+#define QDEF_MU_BUF_RECYCLE pcap_mu_buf_recycle,10,16,emem
 
 /* Buf in use is workq of mu_base_s18 */
-#define QDEF_MU_BUF_IN_USE  mu_buf_in_use,10,17,emem
+#define QDEF_MU_BUF_IN_USE  pcap_mu_buf_in_use,10,17,emem
 
 /* Buf alloc is workq of struct mu_buf_desc (8 bytes) */
-#define QDEF_MU_BUF_ALLOC   mu_buf_alloc,11,18,emem
+#define QDEF_MU_BUF_ALLOC   pcap_mu_buf_alloc,11,18,emem
 
 /* To host DMA is workq of struct mu_buf_to_host_dma_work (8 bytes) */
-#define QDEF_TO_HOST_DMA    to_host_dma,11,19,emem
+#define QDEF_TO_HOST_DMA    pcap_to_host_dma,11,19,emem
 
 MU_QUEUE_ALLOC(QDEF_MU_BUF_RECYCLE);
 MU_QUEUE_ALLOC(QDEF_MU_BUF_IN_USE);
@@ -167,8 +168,8 @@ _alloc_mem("cls_ctm_dmas cls island 8")
 #define ALLOC_RES(name,pool,scope,size) \
     __alloc_resource(STR(name) " " STR(pool) " " STR(scope) " " STR(size))
 
-ALLOC_MEM(cls_host_shared_data,cls,global,CLS_HOST_SHARED_DATA)
-ALLOC_MEM(cls_host_ring_base,  cls,global,CLS_HOST_RING_SIZE)
+ALLOC_MEM(pcap_cls_host_shared_data,cls,global,PCAP_HOST_CLS_SHARED_DATA_SIZE)
+ALLOC_MEM(pcap_cls_host_ring_base,  cls,global,PCAP_HOST_CLS_RING_SIZE)
 #endif /* PCAP_HOST_ISLAND */
 
 #define ALLOC_CLS_HOST_RING() ALLOC_RES(chr,cls_host_ring_base,island,64)
@@ -1204,9 +1205,9 @@ packet_capture_mu_buffer_recycler(int poll_interval)
     struct host_data host_data; /* Host data cached in shared registers */
     int buf_seq; /* Monotonically increasing buffer sequence number */
 
-    host_data.cls_host_shared_data = __link_sym("cls_host_shared_data");
-    host_data.cls_host_ring_base   = __link_sym("cls_host_ring_base");
-    host_data.cls_host_ring_item_mask = (CLS_HOST_RING_SIZE>>2)-1;
+    host_data.cls_host_shared_data = __link_sym("pcap_cls_host_shared_data");
+    host_data.cls_host_ring_base   = __link_sym("pcap_cls_host_ring_base");
+    host_data.cls_host_ring_item_mask = (PCAP_HOST_CLS_RING_SIZE>>2)-1;
     host_data.rptr = 0;
     host_data.wptr = 0;
 

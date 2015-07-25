@@ -17,6 +17,12 @@
  */
 SYNC_STAGE_SET_PREINIT(PKTGEN_INIT_STAGES,PKTGEN_HOST_CTXTS,PKTGEN_HOST_MES,PKTGEN_ISLANDS);
 
+/** Allocate some buffer space for the host to use for schedule/packets
+ */
+__asm {
+    .alloc_mem   pktgen_emu_buffer0    i24.mem global (2<<20) 4096;
+};
+
 /** main - Initialize, then run
  */
 void main(void)
