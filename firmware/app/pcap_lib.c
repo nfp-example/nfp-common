@@ -90,24 +90,6 @@
 
 #define CTM_PKT_OFFSET (32)
 
-/* Note that MU_BUF_TOTAL_PKTS MUST NOT exceed the 'number' field in
-   the mu_buf_desc*/
-#define MU_BUF_TOTAL_PKTS 1024
-
-/* MU_BUF_MAX_PKT must be a little less than MU_BUF_TOTAL_PKTS -
- possibly one less would be sufficient
-*/
-#define MU_BUF_MAX_PKT (MU_BUF_TOTAL_PKTS-4)
-
-/* MU_BUF_FIRST_PKT_OFFSET must be greater than
- * 64B+(MU_BUF_TOTAL_PKTS/8)+MU_BUF_MAX_PKT*sizeof(mu_pkt_buf_desc)
- * 64 + 128 + 1020*8
- *
- * Since the latter dominates, 16*MU_BUF_MAX_PKT is fine... it wastes
- * a bit of the buffer but not much
- */
-#define MU_BUF_FIRST_PKT_OFFSET (16*1024)
-
 /* MAX_CTM_DMAS_IN_PROGRESS is the maximum number of CTM DMAs that the
  * hardware supports
  *
@@ -247,53 +229,6 @@ struct pkt_buf_desc {
     uint32_t pkt_addr;
 };
 
-/** struct mu_pkt_buf_desc
- *
- * Packet buffer descriptor stored in the MU buffer.  The offset
- * is the 64B block offset from mu_base_s8.  num_blocks is the number
- * of 64B block spaces used in the MU buffer for the packet. The
- * sequence number is a 16/32-bit sequence number of the packet, as
- * supplied by the NBI Rx.
- *
- */
-struct mu_pkt_buf_desc {
-    uint32_t offset:16;
-    uint32_t num_blocks:16;
-    uint32_t seq;
-};
-
-/** struct mu_buf_hdr
- *
- *  Structure placed at start of an MU buffer
- *
- */
-struct mu_buf_hdr {
-    uint32_t buf_seq;         /* MU buffer sequence number */
-    uint32_t total_packets;   /* Valid when buffer is complete */
-    uint32_t pcie_base_low;   /* Filled at pre-allocation */
-    uint32_t pcie_base_high;  /* Filled at pre-allocation */
-};
-
-/** struct mu_buffer
- *
- * MU buffer layout, up to the packet data, which is placed at
- * MU_BUF_FIRST_PKT_OFFSET
- *
- * Note that this must be less than MU_BUF_FIRST_PKT_OFFSET in size
- * Note also that the pkt_add_mu_buf_desc clears this structure in a
- * 'knowledgeable manner', i.e. it knows the structure and offsets
- * intimately. So changing this structure requires changing that
- * function.
- */
-struct mu_buffer {
-    struct mu_buf_hdr hdr;
-    int      dmas_completed;  /* For DMA Master/slaves */
-    uint32_t pad[11];         /* Pad to 64B alignment */
-    uint32_t pkt_bitmask[MU_BUF_TOTAL_PKTS/32]; /* n*64B to pad
-                                                 * properly */
-    struct mu_pkt_buf_desc pkt_desc[MU_BUF_MAX_PKT];
-};
-
 /** struct mu_buf_desc
  *
  * MU buffer descriptor for the allocation system
@@ -386,7 +321,7 @@ nbi_give_two_buffers()
 
     /* NBI DMA is data master 2; set indirect CSR to be island+DMA
      */
-    dm = (PKT_CAP_NBI_ISLAND << 24) | (2 << 20);
+    dm = (PCAP_NBI_ISLAND << 24) | (2 << 20);
     local_csr_write(local_csr_cmd_indirect_ref0, dm);
 
     override = ((1<<1) | (1<<3)); /* Override DM, DREF */
@@ -433,7 +368,7 @@ pkt_mu_buf_desc_complete(struct mu_buf_desc *mu_buf_desc)
 
     total_packets = mu_buf_desc->number;
     mem_base_s8 = mu_buf_desc->mu_base_s18<<10;
-    mem_offset = offsetof(struct mu_buf_hdr,total_packets);
+    mem_offset = offsetof(struct pcap_buf_hdr,total_packets);
     mem_atomic_write_s8(&total_packets, mem_base_s8, mem_offset,
                         sizeof(uint32_t));
 }
@@ -459,8 +394,8 @@ pkt_mu_buf_desc_complete(struct mu_buf_desc *mu_buf_desc)
 pkt_work_enq(struct pkt_buf_desc *pkt_buf_desc)
 {
     SIGNAL sig1, sig2; /* Signals for parallel MU transactions */
-    struct mu_pkt_buf_desc mu_pkt_buf_desc;
-    __xwrite struct mu_pkt_buf_desc mu_pkt_buf_desc_out;
+    struct pcap_pkt_buf_desc pcap_pkt_buf_desc;
+    __xwrite struct pcap_pkt_buf_desc pcap_pkt_buf_desc_out;
     uint32_t mu_base_s8;     /* Base address of MU buffer >> 8 */
     uint32_t mu_desc_offset; /* Offset to pkt_buf_desc in MU buffer */
     uint32_t mu_bit_offset;  /* Offset to word in bitmask for the packet
@@ -468,20 +403,20 @@ pkt_work_enq(struct pkt_buf_desc *pkt_buf_desc)
     __xwrite uint32_t mu_bit_out; /* Bit to set in bitmask for the packet
                                      mu_num */
 
-    mu_pkt_buf_desc.offset     = pkt_buf_desc->mu_offset>>6;
-    mu_pkt_buf_desc.num_blocks = pkt_buf_desc->num_blocks;
-    mu_pkt_buf_desc.seq        = pkt_buf_desc->seq;
+    pcap_pkt_buf_desc.offset     = pkt_buf_desc->mu_offset>>6;
+    pcap_pkt_buf_desc.num_blocks = pkt_buf_desc->num_blocks;
+    pcap_pkt_buf_desc.seq        = pkt_buf_desc->seq;
 
     mu_base_s8 = pkt_buf_desc->mu_base_s8;
-    mu_bit_offset = (offsetof(struct mu_buffer,pkt_bitmask) +
+    mu_bit_offset = (offsetof(struct pcap_buffer,pkt_bitmask) +
                      ((pkt_buf_desc->mu_num / 32) << 2));
-    mu_desc_offset = (offsetof(struct mu_buffer,pkt_desc) +
-                      pkt_buf_desc->mu_num * sizeof(struct mu_pkt_buf_desc));
+    mu_desc_offset = (offsetof(struct pcap_buffer,pkt_desc) +
+                      pkt_buf_desc->mu_num * sizeof(struct pcap_pkt_buf_desc));
 
     mu_bit_out = 1 << (pkt_buf_desc->mu_num & 31);
-    mu_pkt_buf_desc_out = mu_pkt_buf_desc;
+    pcap_pkt_buf_desc_out = pcap_pkt_buf_desc;
     __asm {
-        mem[write, mu_pkt_buf_desc_out, mu_base_s8, <<8, \
+        mem[write, pcap_pkt_buf_desc_out, mu_base_s8, <<8, \
             mu_desc_offset, 1], sig_done[sig1];
         mem[set, mu_bit_out, mu_base_s8, <<8, \
             mu_bit_offset, 1], sig_done[sig2];
@@ -609,8 +544,8 @@ pkt_buffer_alloc_from_current(struct mu_buf_desc *mu_buf_desc,
         pkt_starts_okay = (mu_buf_desc->offset <= buffer_end);
         pkt_ends_okay   = ((mu_buf_desc->offset + pkt_buf_desc->num_blocks)
                            <= buffer_end);
-        pkt_num_okay    = (mu_buf_desc->number < MU_BUF_MAX_PKT);
-        pkt_num_max     = (mu_buf_desc->number == MU_BUF_MAX_PKT);
+        pkt_num_okay    = (mu_buf_desc->number < PCAP_BUF_MAX_PKT);
+        pkt_num_max     = (mu_buf_desc->number == PCAP_BUF_MAX_PKT);
 
         /* If a good allocation then return
          */
@@ -662,10 +597,10 @@ pkt_buffer_alloc_from_new(struct mu_buf_desc *mu_buf_desc,
     pkt_mu_buf_desc_taken(mu_buf_desc);
 
     pkt_buf_desc->mu_base_s8 = mu_buf_desc->mu_base_s18 << 10;
-    pkt_buf_desc->mu_offset  = MU_BUF_FIRST_PKT_OFFSET;
+    pkt_buf_desc->mu_offset  = PCAP_BUF_FIRST_PKT_OFFSET;
     pkt_buf_desc->mu_num     = mu_buf_desc->number;
 
-    mu_buf_desc->offset = ((MU_BUF_FIRST_PKT_OFFSET >> 6) +
+    mu_buf_desc->offset = ((PCAP_BUF_FIRST_PKT_OFFSET >> 6) +
                            pkt_buf_desc->num_blocks);
     mu_buf_desc->number = 1;
 
@@ -820,9 +755,13 @@ pkt_dma_memory_to_host(struct mu_buf_dma_desc *mu_buf_dma_desc,
     pcie_addr.uint32_lo = (mu_buf_dma_desc->pcie_base_low +
                     dma_start_offset);
     pcie_addr.uint32_hi = mu_buf_dma_desc->pcie_base_high;
-    pcie_dma_buffer(PKT_CAP_PCIE_ISLAND, pcie_addr,
+    local_csr_write(local_csr_mailbox0, pcie_addr.uint32_hi);
+    local_csr_write(local_csr_mailbox1, pcie_addr.uint32_lo);
+    local_csr_write(local_csr_mailbox2, cpp_addr.uint32_hi);
+    local_csr_write(local_csr_mailbox3, cpp_addr.uint32_lo);
+    pcie_dma_buffer(0 /*PCAP_PCIE_ISLAND*/, pcie_addr,
                     cpp_addr, dma_size,
-                                 NFP_PCIE_DMA_TOPCI_HI, token, PKT_CAP_PCIE_DMA_CONFIG);
+                                 NFP_PCIE_DMA_TOPCI_HI, token, PCAP_PCIE_DMA_CFG);
 }
 
 /** pkt_dma_slave_get_desc - 20i + 300d
@@ -840,10 +779,10 @@ pkt_dma_slave_get_desc(struct mu_buf_dma_desc *mu_buf_dma_desc)
     int first_packet, last_packet;
     int first_packet_ofs, last_packet_ofs;
     int start_block, end_block;
-    int mu_buf_hdr_size, mu_pkt_buf_desc_size;
+    int pcap_buf_hdr_size, pcap_pkt_buf_desc_size;
     SIGNAL sig1, sig2, sig3;
-    __xread struct mu_pkt_buf_desc first_pkt_desc, last_pkt_desc;
-    __xread struct mu_buf_hdr mu_buf_hdr;
+    __xread struct pcap_pkt_buf_desc first_pkt_desc, last_pkt_desc;
+    __xread struct pcap_buf_hdr pcap_buf_hdr;
 
     mem_workq_add_thread(muq_to_host_dma, (void *)&mu_buf_read,
                          sizeof(mu_buf_read));
@@ -855,29 +794,29 @@ pkt_dma_slave_get_desc(struct mu_buf_dma_desc *mu_buf_dma_desc)
     last_packet = (mu_buf_dma_desc->first_packet +
                    mu_buf_dma_desc->num_packets - 1);
 
-    first_packet_ofs = (offsetof(struct mu_buffer, pkt_desc) +
+    first_packet_ofs = (offsetof(struct pcap_buffer, pkt_desc) +
                         ((mu_buf_dma_desc->first_packet) *
-                         sizeof(struct mu_pkt_buf_desc)));
-    last_packet_ofs  = (offsetof(struct mu_buffer, pkt_desc) +
-                        (last_packet * sizeof(struct mu_pkt_buf_desc)));
+                         sizeof(struct pcap_pkt_buf_desc)));
+    last_packet_ofs  = (offsetof(struct pcap_buffer, pkt_desc) +
+                        (last_packet * sizeof(struct pcap_pkt_buf_desc)));
 
-    mu_pkt_buf_desc_size = (sizeof(struct mu_pkt_buf_desc) /
+    pcap_pkt_buf_desc_size = (sizeof(struct pcap_pkt_buf_desc) /
                             sizeof(uint64_t));
-    mu_buf_hdr_size      = (sizeof(struct mu_buf_hdr) /
+    pcap_buf_hdr_size      = (sizeof(struct pcap_buf_hdr) /
                             sizeof(uint64_t));
     mu_base_s8 = mu_buf_read.mu_base_s8;
     __asm {
         mem[read, first_pkt_desc, mu_base_s8, <<8, first_packet_ofs, \
-            mu_pkt_buf_desc_size], sig_done[sig1];
+            pcap_pkt_buf_desc_size], sig_done[sig1];
         mem[read, last_pkt_desc,  mu_base_s8, <<8, last_packet_ofs, \
-            mu_pkt_buf_desc_size], sig_done[sig2];
-        mem[read, mu_buf_hdr,     mu_base_s8, <<8, 0, mu_buf_hdr_size],\
+            pcap_pkt_buf_desc_size], sig_done[sig2];
+        mem[read, pcap_buf_hdr,     mu_base_s8, <<8, 0, pcap_buf_hdr_size],\
             sig_done[sig3];
     }
     wait_for_all(&sig1, &sig2, &sig3);
 
-    mu_buf_dma_desc->pcie_base_low  = mu_buf_hdr.pcie_base_low;
-    mu_buf_dma_desc->pcie_base_high = mu_buf_hdr.pcie_base_high;
+    mu_buf_dma_desc->pcie_base_low  = pcap_buf_hdr.pcie_base_low;
+    mu_buf_dma_desc->pcie_base_high = pcap_buf_hdr.pcie_base_high;
     mu_buf_dma_desc->first_block = first_pkt_desc.offset;
     mu_buf_dma_desc->end_block   = (last_pkt_desc.offset +
                                     last_pkt_desc.num_blocks);
@@ -915,15 +854,15 @@ packet_capture_dma_to_host_slave(void)
         pkt_dma_memory_to_host(&mu_buf_dma_desc, dma_start_offset,
                                dma_length, 3);
 
-        dma_start_offset = (offsetof(struct mu_buffer, pkt_desc) +
+        dma_start_offset = (offsetof(struct pcap_buffer, pkt_desc) +
                             (mu_buf_dma_desc.first_packet *
-                             sizeof(struct mu_pkt_buf_desc)));
+                             sizeof(struct pcap_pkt_buf_desc)));
         dma_length       = (mu_buf_dma_desc.num_packets * 
-                            sizeof(struct mu_pkt_buf_desc));
+                            sizeof(struct pcap_pkt_buf_desc));
         pkt_dma_memory_to_host(&mu_buf_dma_desc, dma_start_offset,
                                dma_length, 0);
 
-        mu_offset = offsetof(struct mu_buffer, dmas_completed);
+        mu_offset = offsetof(struct pcap_buffer, dmas_completed);
         mu_base_s8 = mu_buf_dma_desc.mu_base_s8;
         __asm {
             mem[incr, --, mu_base_s8, <<8, mu_offset]
@@ -954,7 +893,7 @@ dma_master_enqueue_next_pkts_ready(uint32_t mu_base_s8,
     w = first_packet >> 5;
     b = first_packet & 0x1f;
 
-    mu_offset = offsetof(struct mu_buffer, pkt_bitmask) + (w << 2);
+    mu_offset = offsetof(struct pcap_buffer, pkt_bitmask) + (w << 2);
     mem_atomic_read_s8(&bitmask[0], mu_base_s8, mu_offset,
                        sizeof(bitmask));
 
@@ -1037,8 +976,7 @@ packet_capture_dma_to_host_master(int poll_interval)
     for(;;) {
         __xread uint32_t mu_base_s18; /* MU buff addr >>18 from workq */
         uint32_t mu_base_s8;          /* MU buf addr >>8 for CPP cmd */
-        __xread struct mu_buf_hdr mu_buf_hdr_in; /* Just for total_packets */
-        __xwrite struct mu_buf_hdr mu_buf_hdr_out;
+        __xread struct pcap_buf_hdr pcap_buf_hdr_in; /* Just for total_packets */
         __xwrite uint32_t mu_base_s8_out; /* MU base for recyle workq */
         int first_packet;  /* First packet to give to next slave */
         int total_packets; /* Total packets in the MU buffer */
@@ -1050,9 +988,9 @@ packet_capture_dma_to_host_master(int poll_interval)
                              sizeof(mu_base_s18));
 
         mu_base_s8 = mu_base_s18 << 10;
-        mem_atomic_read_s8(&mu_buf_hdr_in, mu_base_s8, 0,
+        mem_atomic_read_s8(&pcap_buf_hdr_in, mu_base_s8, 0,
                            sizeof(uint32_t)*2);
-        total_packets = mu_buf_hdr_in.total_packets;
+        total_packets = pcap_buf_hdr_in.total_packets;
 
         /* Add slave DMA batches until all of MU buf is batched up
          */
@@ -1067,7 +1005,7 @@ packet_capture_dma_to_host_master(int poll_interval)
                     break;
 
                 me_sleep(poll_interval);
-                mem_atomic_read_s8(&mu_buf_hdr_in, mu_base_s8, 0,
+                mem_atomic_read_s8(&pcap_buf_hdr_in, mu_base_s8, 0,
                                    sizeof(uint32_t)*2);
             }
             else {
@@ -1082,7 +1020,7 @@ packet_capture_dma_to_host_master(int poll_interval)
             int mu_offset; /* Offset to dmas_completed in MU buf */
             __xread uint32_t dmas_completed;
 
-            mu_offset = offsetof(struct mu_buffer, dmas_completed);
+            mu_offset = offsetof(struct pcap_buffer, dmas_completed);
             mem_atomic_read_s8(&dmas_completed, mu_base_s8, mu_offset,
                                sizeof(dmas_completed));
             if (dmas_completed == total_dmas) break;
@@ -1110,17 +1048,17 @@ pkt_add_mu_buf_desc(uint32_t mu_base_s8, int buf_seq,
 {
     int c_128;       /* =128, in a register as required by assembler */
     SIGNAL sig1, sig2, sig3, sig4;         /* Completion signals */
-    __xwrite struct mu_buf_hdr mu_buf_hdr; /* MU buffer header data */
+    __xwrite struct pcap_buf_hdr pcap_buf_hdr; /* MU buffer header data */
     __xwrite uint64_t zeros[8];            /* Zeros to clear bitmask */
 
     struct mu_buf_desc mu_buf_desc; /* MU buffer descriptor for workq */
     __xwrite struct mu_buf_desc mu_buf_desc_out; /* Xfer of MU buffer
                                                     descriptor */
 
-    mu_buf_hdr.buf_seq = buf_seq;
-    mu_buf_hdr.total_packets = 0;
-    mu_buf_hdr.pcie_base_low = pcie_buf_desc->pcie_base_low;
-    mu_buf_hdr.pcie_base_high = pcie_buf_desc->pcie_base_high;
+    pcap_buf_hdr.buf_seq = buf_seq;
+    pcap_buf_hdr.total_packets = 0;
+    pcap_buf_hdr.pcie_base_low = pcie_buf_desc->pcie_base_low;
+    pcap_buf_hdr.pcie_base_high = pcie_buf_desc->pcie_base_high;
 
     zeros[0] = 0;
     zeros[1] = 0;
@@ -1132,7 +1070,7 @@ pkt_add_mu_buf_desc(uint32_t mu_base_s8, int buf_seq,
     zeros[7] = 0;
     c_128 = 128;
     __asm {
-        mem[write32,mu_buf_hdr,mu_base_s8,<<8, 0, 4], sig_done[sig1];
+        mem[write32,pcap_buf_hdr,mu_base_s8,<<8, 0, 4], sig_done[sig1];
         mem[write,zeros,mu_base_s8,<<8, 16, 6],  sig_done[sig2];
         mem[write,zeros,mu_base_s8,<<8, 64, 8],  sig_done[sig3];
         mem[write,zeros,mu_base_s8,<<8, c_128, 8], sig_done[sig4];

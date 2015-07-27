@@ -24,9 +24,6 @@
  */
 #define PKT_CAP_MU_BUF_SHIFT 18
 #define PKT_CAP_MU_BUF_SIZE (1<<PKT_CAP_MU_BUF_SHIFT)
-#define PKT_CAP_NBI_ISLAND   8
-#define PKT_CAP_PCIE_ISLAND  4
-#define PKT_CAP_PCIE_DMA_CONFIG 0 /* Must be inited to MU transfer */
 
 /** packet_capture_pkt_rx_dma
  *

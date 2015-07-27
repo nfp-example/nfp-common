@@ -64,3 +64,18 @@
 #define PCAP_INIT_STAGE_CSR_INIT      1
 #define PCAP_INIT_STAGE_PREHOST_LOAD 2
 #define PCAP_INIT_STAGE_READY_TO_RUN 4
+
+
+
+/** Defines
+ */
+#define PCIE_ISLAND 4
+/* CSR is HALF of the CFG */
+#define PKTGEN_PCIE_DMA_CFG 4
+#define PKTGEN_PCIE_DMA_CFG_CSR 2
+
+#define PCAP_NBI_ISLAND   8
+#define PCAP_PCIE_ISLAND  4
+#define PCAP_PCIE_DMA_CFG 0
+#define PCAP_PCIE_DMA_CFG_CSR 0
+

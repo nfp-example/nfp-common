@@ -32,6 +32,21 @@ _init_csr( __DCFG ".IdBasedOrderingEven 0   const");
 _init_csr( __DCFG ".StartPaddingEven    0   const");
 _init_csr( __DCFG ".EndPaddingEven      0   const");
 _init_csr( __DCFG ".SignalOnlyEven      0   const");
+#undef __DCFG
+#undef __PCI
+
+/* DMA config */
+#define __PCI "pcie:i4.PcieInternalTargets.DMAController"
+#define __DCFG __PCI ".DMADescrConfig" STRINGIFY(PCAP_PCIE_DMA_CFG_CSR)
+_init_csr( __DCFG ".CppTargetIDEven     0x7 const");
+_init_csr( __DCFG ".Target64bitEven     1   const");
+_init_csr( __DCFG ".NoSnoopEven         0   const");
+_init_csr( __DCFG ".RelaxedOrderingEven 0   const");
+_init_csr( __DCFG ".IdBasedOrderingEven 0   const");
+_init_csr( __DCFG ".StartPaddingEven    0   const");
+_init_csr( __DCFG ".EndPaddingEven      0   const");
+_init_csr( __DCFG ".SignalOnlyEven      0   const");
+#undef __DCFG
 #undef __PCI
 
 /* Debug CLS ring

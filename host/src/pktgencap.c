@@ -53,6 +53,9 @@ struct pktgen_nfp {
         uint32_t rptr;
         uint32_t ack;
     } host;
+    struct {
+        int num_buffers;
+    } pcap;
     struct pktgen_mem_layout *mem_layout;
 };
 
@@ -60,6 +63,53 @@ struct pktgen_nfp {
  */
 static const char *shm_filename="/tmp/nfp_shm.lock";
 static int shm_key = 'x';
+
+/** mem_dump
+ */
+static void mem_dump(void *addr, int size)
+{
+    int i;
+    int repetitions;
+    unsigned char text[17];
+
+    repetitions = 0;
+    for (i=0; i<size; i++) {
+        unsigned char ch;
+        int pos;
+        ch = ((unsigned char *)addr)[i];
+        pos = i % 16;
+        if (pos == 0) {
+            if (i != 0) {
+                if (repetitions == 0)
+                    printf(" : %s\n", text);
+                if (memcmp(((unsigned char *)addr)+i,
+                           ((unsigned char *)addr)+i-16,
+                           16)==0) {
+                    i+=15;
+                    repetitions++;
+                    continue;
+                }
+                if (repetitions!=0)
+                    printf("%04x: *\n", i-16);
+                repetitions = 0;
+            }
+            printf("%04x:", i);
+        }
+        printf(" %02x", ch);
+        text[pos] = ch;
+        if ((ch < 0x20) || (ch > 0x7e)) {
+            text[pos] = '.';
+        }
+        text[pos+1]=0;
+    }
+    if (repetitions==0) {
+        for (; (i % 16)!= 0; i++)
+            printf("   ");
+        printf(" : %s\n", text);
+    } else {
+        printf("%04x: *\n", i-16);
+    }
+}
 
 /** pktgen_load_nfp
  *
@@ -131,45 +181,6 @@ pktgen_alloc_shm(struct pktgen_nfp *pktgen_nfp)
     if (pktgen_nfp->shm.phys_addr[0] == 0) {
         fprintf(stderr, "Failed to find linux page mapping in /proc/self/pagemap\n");
         return -1;
-    }
-    return 0;
-}
-
-/** pktgen_give_pcie_pcap_buffers
- */
-static int pktgen_give_pcie_pcap_buffers(struct pktgen_nfp *pktgen_nfp)
-{
-    int ring_offset;
-    int num_buffers;
-    int err;
-    uint64_t phys_offset;
-
-    ring_offset = 0;
-    phys_offset = PCIE_HUGEPAGE_SIZE;
-    num_buffers = 0;
-    while (phys_offset < pktgen_nfp->shm.size) {
-        uint64_t phys_addr;
-        phys_addr = nfp_huge_physical_address(pktgen_nfp->nfp,
-                                              pktgen_nfp->shm.base,
-                                              phys_offset);
-                                              
-        err = nfp_write(pktgen_nfp->nfp,
-                        &pktgen_nfp->pcap_cls_ring,
-                        ring_offset,
-                        (void *)&phys_addr, sizeof(phys_addr));
-        if (err) return err;
-        phys_offset += 1 << 18;
-        ring_offset += sizeof(phys_addr);
-        num_buffers++;
-        if (ring_offset >= PCAP_HOST_CLS_RING_SIZE)
-            break;
-    }
-
-    if (nfp_write(pktgen_nfp->nfp,
-                  &pktgen_nfp->pcap_cls_host,offsetof(struct pcap_cls_host,wptr),
-                  (void *)&num_buffers,sizeof(num_buffers)) != 0) {
-        fprintf(stderr,"Failed to write buffers etc to NFP memory\n");
-        return 1;
     }
     return 0;
 }
@@ -247,6 +258,85 @@ pktgen_issue_ack_and_wait(struct pktgen_nfp *pktgen_nfp)
         /* Backoff ?*/
     }
     return 1;
+}
+
+/** pcap_give_pcie_buffers
+ */
+static int pcap_give_pcie_buffers(struct pktgen_nfp *pktgen_nfp)
+{
+    int ring_offset;
+    int num_buffers;
+    int err;
+    uint64_t phys_offset;
+
+    ring_offset = 0;
+    phys_offset = PCIE_HUGEPAGE_SIZE;
+    num_buffers = 0;
+    while (phys_offset < pktgen_nfp->shm.size) {
+        uint64_t phys_addr;
+        memset(pktgen_nfp->shm.base + phys_offset,0,sizeof(struct pcap_buffer));
+        phys_addr = nfp_huge_physical_address(pktgen_nfp->nfp,
+                                              pktgen_nfp->shm.base,
+                                              phys_offset);
+                                              
+        err = nfp_write(pktgen_nfp->nfp,
+                        &pktgen_nfp->pcap_cls_ring,
+                        ring_offset,
+                        (void *)&phys_addr, sizeof(phys_addr));
+        if (err) return err;
+        phys_offset += 1 << 18;
+        ring_offset += sizeof(phys_addr);
+        num_buffers++;
+        if (ring_offset >= PCAP_HOST_CLS_RING_SIZE)
+            break;
+    }
+    pktgen_nfp->pcap.num_buffers = num_buffers;
+
+    if (nfp_write(pktgen_nfp->nfp,
+                  &pktgen_nfp->pcap_cls_host,offsetof(struct pcap_cls_host,wptr),
+                  (void *)&num_buffers,sizeof(num_buffers)) != 0) {
+        fprintf(stderr,"Failed to write buffers etc to NFP memory\n");
+        return 1;
+    }
+    return 0;
+}
+
+/** pcap_dump_pcie_buffers
+ */
+static void pcap_dump_pcie_buffers(struct pktgen_nfp *pktgen_nfp)
+{
+    int i;
+    uint64_t phys_offset;
+
+    phys_offset = PCIE_HUGEPAGE_SIZE;
+    for (i=0; i<pktgen_nfp->pcap.num_buffers; i++) {
+        if (0) {
+            uint64_t phys_addr;
+            phys_addr = nfp_huge_physical_address(pktgen_nfp->nfp,
+                                                  pktgen_nfp->shm.base,
+                                                  phys_offset);
+            printf("Phys %lx\n",phys_addr);
+        }
+        if (0) {
+            mem_dump( pktgen_nfp->shm.base + phys_offset, 20000 );
+        }
+        if (1) {
+            int j;
+            struct pcap_buffer *pcap_buffer;
+            pcap_buffer = (struct pcap_buffer *)(pktgen_nfp->shm.base + phys_offset);
+            for (j=0; j<PCAP_BUF_MAX_PKT; j++) {
+                if (pcap_buffer->pkt_desc[j].offset==0)
+                    break;
+                printf("%d: %04x %04x %08x\n",j,
+                       pcap_buffer->pkt_desc[j].offset,
+                       pcap_buffer->pkt_desc[j].num_blocks,
+                       pcap_buffer->pkt_desc[j].seq
+                    );
+                mem_dump(((char *)pcap_buffer) + (pcap_buffer->pkt_desc[j].offset<<6), 64);
+            }
+        }
+        phys_offset += 1 << 18;
+    }
 }
 
 /** mem_alloc_callback
@@ -392,7 +482,7 @@ main(int argc, char **argv)
         return 4;
     }
 
-    if (pktgen_give_pcie_pcap_buffers(&pktgen_nfp) != 0) {
+    if (pcap_give_pcie_buffers(&pktgen_nfp) != 0) {
         fprintf(stderr,"Failed to give PCIe pcap buffers\n");
         return 4;
     }
@@ -419,6 +509,8 @@ main(int argc, char **argv)
     }
 
     usleep(3*1000*1000);
+
+    pcap_dump_pcie_buffers(&pktgen_nfp);
 
     //nfp_huge_free(pktgen_nfp.nfp, pktgen_nfp.pcie_base);
     nfp_shutdown(pktgen_nfp.nfp);

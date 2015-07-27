@@ -122,12 +122,32 @@ $(eval $(call nffw.add_rtsyms,pktgencap))
 $(eval $(call nffw.link,pktgencap))
 
 # TO make it go
-#   69  nfp-power nbi=off
-#   70  nfp-power nbi=on
-#   71  make init_mac
-#   72  make init_mac_serdes_loop
-#   74  make init_network
-#   75  make init_mac_serdes_loop
+make_it_go:
+	sudo chmod a+rw /dev/nfp-cpp-0
+	sudo chmod a+rw /dev/ttyUSB*
+	nfp-power =on
+	echo 20 | sudo tee /proc/sys/vm/nr_hugepages
+	nfp-reg mecsr:i4.me0.CtxEnables.CtxEnables=0
+	nfp-power nbi=off
+	nfp-power nbi=on
+	nfp-macinit -m 0 -0 /opt/netronome/share/nbi/12x10GE.json -1 /opt/netronome/share/nbi/3x40GE.json
+	nfp-macinit -m 1 -0 /opt/netronome/share/nbi/12x10GE.json -1 /opt/netronome/share/nbi/3x40GE.json
+	( cd /opt/netronome/share/nbi; USE_MAC_SERDES=CDP LD_LIBRARY_PATH=/opt/netronome/lib PHY_CONFIG_DIR=/opt/netronome/share/nbi nfp-macinit -m0 -0 1x100GE.json -r )
+	( cd /opt/netronome/share/nbi; USE_MAC_SERDES=CDP LD_LIBRARY_PATH=/opt/netronome/lib PHY_CONFIG_DIR=/opt/netronome/share/nbi nfp-macinit -m1 -0 1x100GE.json -r )
+	nfp-mactool -p 0xffffff -m0 -r
+	nfp-mactool -p 0xffffff -p0xffffff -l1 -u -m0
+	nfp-mactool -p 0xffffff -p0xffffff -l1 -u -m0
+	nfp-reg xpb:Nbi0IsldXpbMap.NbiTopXpbMap.MacGlbAdrMap.MacEthernet0.MacEthSeg0.EthCmdConfig.EthLoopBackEn=1
+	nfp-reg xpb:Nbi0IsldXpbMap.NbiTopXpbMap.MacGlbAdrMap.MacEthernet0.MacEthSeg0.EthCmdConfig.EthRxEna=1
+	(cd ~/gavin/me_test.hg; make init_network)
+	( cd /opt/netronome/share/nbi; USE_MAC_SERDES=CDP LD_LIBRARY_PATH=/opt/netronome/lib PHY_CONFIG_DIR=/opt/netronome/share/nbi nfp-macinit -m0 -0 1x100GE.json -r )
+	( cd /opt/netronome/share/nbi; USE_MAC_SERDES=CDP LD_LIBRARY_PATH=/opt/netronome/lib PHY_CONFIG_DIR=/opt/netronome/share/nbi nfp-macinit -m1 -0 1x100GE.json -r )
+	nfp-mactool -p 0xffffff -m0 -r
+	nfp-mactool -p 0xffffff -p0xffffff -l1 -u -m0
+	nfp-mactool -p 0xffffff -p0xffffff -l1 -u -m0
+	nfp-reg xpb:Nbi0IsldXpbMap.NbiTopXpbMap.MacGlbAdrMap.MacEthernet0.MacEthSeg0.EthCmdConfig.EthLoopBackEn=1
+	nfp-reg xpb:Nbi0IsldXpbMap.NbiTopXpbMap.MacGlbAdrMap.MacEthernet0.MacEthSeg0.EthCmdConfig.EthRxEna=1
+
 #
 # Sequence number in mu_pkt_buf_desc is incorrect (stuck at 0x600)
 # dmas_completed appears to be 2 too few
