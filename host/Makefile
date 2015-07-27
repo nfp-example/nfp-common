@@ -23,9 +23,14 @@ HOST_SRC_DIR   = $(HOST_DIR)/src
 HOST_BUILD_DIR = $(HOST_DIR)/build
 HOST_BIN_DIR   = $(HOST_DIR)/bin
 
-#CC=gcc
-INCLUDES=-I$(NETRONOME)/include -I$(INCLUDE_DIR)
-LIBS=-L$(NETRONOME)/lib -L/usr/lib/x86_64-linux-gnu/ -lnfp -lnfp_nffw -lhugetlbfs -ljansson
+INCLUDES = -I$(NETRONOME)/include -I$(INCLUDE_DIR)
+LIBS     = -L$(NETRONOME)/lib -L/usr/lib/x86_64-linux-gnu/ -lnfp -lnfp_nffw -lhugetlbfs -ljansson
+
+ifeq ($(DUMMY_NFP),)
+else
+INCLUDES += -DDUMMY_NFP
+LIBS = $(HOST_BUILD_DIR)/nfp_dummy.o
+endif
 
 CC=gcc $(INCLUDES) -g -Wall -Werror
 LD=gcc -g

@@ -27,7 +27,9 @@
 #include <sys/stat.h> 
 #include <fcntl.h>
 #include <unistd.h>
+#ifndef DUMMY_NFP
 #include <hugetlbfs.h>
+#endif
 
 /** struct nfp_cppid
  */

@@ -47,6 +47,7 @@
 #include <stdlib.h>
 #include <stdint.h> 
 #include <string.h> 
+#include <inttypes.h>
 #include <firmware/pktgen.h>
 
 /** Defines
@@ -223,7 +224,7 @@ region_open(struct pktgen_mem_layout *layout,
         fprintf(stderr,"Failed to open data file %s %s\n",layout->dirname, region->filename);
         return 1;
     }
-    VERBOSE("Region %s has size %ld\n", region->filename, region->data_size);
+    VERBOSE("Region %s has size %"PRIx64"\n", region->filename, region->data_size);
     return 0;
 }
 
@@ -248,7 +249,7 @@ region_load_data(struct pktgen_mem_region *region,
 {
     char *mem;
 
-    VERBOSE("Loading region data %s:%ld:%ld\n", region->filename, offset, size);
+    VERBOSE("Loading region data %s:%"PRIx64":%"PRIx64"\n", region->filename, offset, size);
     if (region->file == NULL) return NULL;
 
     if (size == 0)
@@ -309,7 +310,7 @@ add_region_allocation(struct pktgen_mem_region *region,
     if (mem_data->size == 0)
         return 0;
 
-    VERBOSE("Adding allocation for region %s of size %ld base %08x00\n", region->filename, mem_data->size, mem_data->mu_base_s8);
+    VERBOSE("Adding allocation for region %s of size %"PRIx64" base %08x00\n", region->filename, mem_data->size, mem_data->mu_base_s8);
 
     alloc = malloc(sizeof(*alloc));
     if (alloc == NULL) return 1;
@@ -418,7 +419,7 @@ pktgen_mem_get_mu(struct pktgen_mem_layout *layout,
         alloc = alloc->next;
     }
     if (!alloc) {
-        ERROR("Region %d has not got enough allocation for %08lx\n",
+        ERROR("Region %d has not got enough allocation for %08"PRIx64"\n",
               region,
               ofs);
         return 0;
@@ -500,7 +501,7 @@ load_allocation(struct pktgen_mem_layout *layout,
     uint64_t alloc_size;
 
     alloc_size = allocation->size;
-    VERBOSE("Loading allocation %s:%ld\n", region->filename, allocation->size);
+    VERBOSE("Loading allocation %s:%"PRIx64"\n", region->filename, allocation->size);
 
     while (alloc_size > 0) {
         char *mem_to_load;
@@ -576,7 +577,7 @@ load_region(struct pktgen_mem_layout *layout,
     offset = 0;
     allocation = region->allocations;
     while (offset<region->data_size) {
-        VERBOSE("Loading allocation %s %ld\n",
+        VERBOSE("Loading allocation %s %"PRIx64"\n",
                 region->filename, offset);
 
         if (allocation==NULL) {

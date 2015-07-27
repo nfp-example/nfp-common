@@ -34,6 +34,7 @@ pcap_test: $(HOST_BIN_DIR)/pcap_test
 $(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/pktgen_mem.o
 $(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/pktgencap.o
 $(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/nfp_support.o
+$(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/nfp_dummy.o
 
 $(HOST_BIN_DIR)/pktgencap:
 	$(LD) -o $(HOST_BIN_DIR)/pktgencap $(HOST_BUILD_DIR)/pktgencap.o $(HOST_BUILD_DIR)/pktgen_mem.o $(HOST_BUILD_DIR)/nfp_support.o $(LIBS)

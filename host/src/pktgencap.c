@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <stdint.h> 
 #include <string.h> 
+#include <inttypes.h>
 #include "nfp_support.h"
 #include "pktgen_mem.h"
 #include "firmware/pktgen.h"
@@ -205,7 +206,7 @@ pktgen_issue_cmd(struct pktgen_nfp *pktgen_nfp,
     ofs = ofs << 4;
 
     pktgen_nfp->host.wptr++;
-    fprintf(stderr,"%x:%d:%d:%02x, %016lx, %d\n",
+    fprintf(stderr,"%x:%d:%d:%02x, %016"PRIx64", %d\n",
             (pktgen_nfp->pktgen_cls_ring.cpp_id>>24)&0xff,
             (pktgen_nfp->pktgen_cls_ring.cpp_id>>16)&0xff,
             (pktgen_nfp->pktgen_cls_ring.cpp_id>>8)&0xff,
@@ -315,7 +316,7 @@ static void pcap_dump_pcie_buffers(struct pktgen_nfp *pktgen_nfp)
             phys_addr = nfp_huge_physical_address(pktgen_nfp->nfp,
                                                   pktgen_nfp->shm.base,
                                                   phys_offset);
-            printf("Phys %lx\n",phys_addr);
+            printf("Phys %"PRIx64"\n",phys_addr);
         }
         if (0) {
             mem_dump( pktgen_nfp->shm.base + phys_offset, 20000 );
@@ -377,7 +378,7 @@ mem_alloc_callback(void *handle,
     data[0].size = size;
     data[0].mu_base_s8 = emem0_base >> 8;
     emem0_base += size;
-    printf("Allocated memory size %ld base %08x00\n",
+    printf("Allocated memory size %"PRId64" base %08"PRIx32"00\n",
            size,
            data[0].mu_base_s8);
     return 0;
@@ -405,7 +406,7 @@ mem_load_callback(void *handle,
     const char *mem;
     int err;
 
-    printf("Load data from %p to %010lx size %ld\n",
+    printf("Load data from %p to %010"PRIx64" size %"PRId64"\n",
            data->base,
            ((uint64_t)data->mu_base_s8)<<8,
            data->size);
@@ -505,7 +506,6 @@ main(int argc, char **argv)
         host_cmd.pkt_cmd.total_pkts = 57; /* That is all the current file is!!! */
         host_cmd.pkt_cmd.mu_base_s8 = pktgen_mem_get_mu(pktgen_nfp.mem_layout,0,0)>>8;
         err = pktgen_issue_cmd(&pktgen_nfp, &host_cmd);
-        err = err;
     }
 
     usleep(3*1000*1000);

@@ -27,12 +27,17 @@
 #include <sys/stat.h> 
 #include <fcntl.h>
 #include <unistd.h>
-#include <hugetlbfs.h>
 #include <sys/shm.h>
 #include <sys/ipc.h>
+#include <inttypes.h>
+#ifndef DUMMY_NFP
+#include <hugetlbfs.h>
 #include <nfp.h>
 #include <nfp_cpp.h>
 #include <nfp_nffw.h>
+#else
+#include "nfp_dummy.h"
+#endif
 #include "nfp_support.h"
 
 /** struct pagemap_data
@@ -167,6 +172,8 @@ nfp_init(int device_num)
     nfp->pagemap.fd = -1;
     nfp->dev   = NULL;
     nfp->cpp   = NULL;
+
+    nfp->shm.file = NULL;
 
     nfp->pagemap.page_size      = getpagesize();
     nfp->pagemap.huge_page_size = gethugepagesize();
@@ -365,6 +372,7 @@ nfp_huge_physical_address(struct nfp *nfp, void *ptr, uint64_t ofs)
     uint64_t addr;
     int err;
 
+    if (nfp->pagemap.fd<0) return 0;
     /* Hack around with the internals of the pagemap file
        This is based on DPDK's huge page hacking
     */
@@ -382,7 +390,7 @@ nfp_huge_physical_address(struct nfp *nfp, void *ptr, uint64_t ofs)
     }
     addr = (linux_page_data & (-1LL>>(64-55)))*nfp->pagemap.page_size;
     addr += ((uint64_t)ptr) % nfp->pagemap.page_size;
-    fprintf(stderr,"Huge page for %p offset %lx is %lx\n",ptr,ofs,addr);
+    fprintf(stderr,"Huge page for %p offset %"PRIx64" is %"PRIx64"\n",ptr,ofs,addr);
     return addr;
 }
 
@@ -462,7 +470,7 @@ nfp_get_rtsym_cppid(struct nfp *nfp, const char *sym_name, struct nfp_cppid *cpp
 int
 nfp_write(struct nfp *nfp, struct nfp_cppid *cppid, int offset, void *data, ssize_t size)
 {
-    fprintf(stderr,"Writing to %08x %016lx data %02x.%02x.%02x.%02x.%02x.%02x...\n",
+    fprintf(stderr,"Writing to %08"PRIx32" %016"PRIx64" data %02x.%02x.%02x.%02x.%02x.%02x...\n",
             cppid->cpp_id, cppid->addr+offset,
             ((unsigned char *)data)[0],
             ((unsigned char *)data)[1],
