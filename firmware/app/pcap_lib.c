@@ -112,7 +112,7 @@ enum {
 /** Static data used globally
  */
 /* mu_buf_desc_store : struct mu_buf_desc */
-_alloc_mem("mu_buf_desc_store emem global 8")
+_alloc_mem("mu_buf_desc_store emem global 8 256")
 
 /** Queue descriptors and allocations
  */
@@ -477,6 +477,10 @@ pkt_receive(struct pkt_buf_desc *pkt_buf_desc)
             ctx_swap[sig]
             }
     pkt_buf_desc->pkt_addr = ((pkt_status[0]&0x3ff)<<8)|CTM_PKT_OFFSET;
+    local_csr_write(local_csr_mailbox0, pkt_buf_desc->pkt_num);
+    local_csr_write(local_csr_mailbox1, pkt_buf_desc->seq);
+    local_csr_write(local_csr_mailbox2, pkt_buf_desc->num_blocks);
+    local_csr_write(local_csr_mailbox3, pkt_buf_desc->pkt_addr);
 }
 
 /** pkt_buffer_alloc_from_current - 30i + 150d
@@ -755,10 +759,6 @@ pkt_dma_memory_to_host(struct mu_buf_dma_desc *mu_buf_dma_desc,
     pcie_addr.uint32_lo = (mu_buf_dma_desc->pcie_base_low +
                     dma_start_offset);
     pcie_addr.uint32_hi = mu_buf_dma_desc->pcie_base_high;
-    local_csr_write(local_csr_mailbox0, pcie_addr.uint32_hi);
-    local_csr_write(local_csr_mailbox1, pcie_addr.uint32_lo);
-    local_csr_write(local_csr_mailbox2, cpp_addr.uint32_hi);
-    local_csr_write(local_csr_mailbox3, cpp_addr.uint32_lo);
     pcie_dma_buffer(0 /*PCAP_PCIE_ISLAND*/, pcie_addr,
                     cpp_addr, dma_size,
                                  NFP_PCIE_DMA_TOPCI_HI, token, PCAP_PCIE_DMA_CFG);

@@ -26,6 +26,7 @@
 #include <inttypes.h>
 #include "nfp_support.h"
 #include "pktgen_mem.h"
+#include "nfp_ipc.h"
 #include "firmware/pktgen.h"
 #include "firmware/pcap.h"
 
@@ -33,6 +34,7 @@
  */
 #define MAX_PAGES 2
 #define PCIE_HUGEPAGE_SIZE (1<<20)
+#define MAX_NFP_IPC_CLIENTS 32
 
 /** struct pktgen_nfp
  */
@@ -47,6 +49,7 @@ struct pktgen_nfp {
         char *base;
         size_t size;
         uint64_t phys_addr[MAX_PAGES];
+        struct nfp_ipc *nfp_ipc;
     } shm;
     struct {
         uint32_t ring_mask;
@@ -170,12 +173,13 @@ pktgen_alloc_shm(struct pktgen_nfp *pktgen_nfp)
     pktgen_nfp->shm.size = PCIE_HUGEPAGE_SIZE * MAX_PAGES;
     if (nfp_shm_alloc(pktgen_nfp->nfp,
                       shm_filename, shm_key,
-                      pktgen_nfp->shm.size, 1)!=0) {
+                      pktgen_nfp->shm.size, 1)==0) {
         return -1;
     }
 
     pktgen_nfp->shm.base = nfp_shm_data(pktgen_nfp->nfp);
-    pktgen_nfp->shm.base[0] = 0; // Force page to be mapped
+    memset(pktgen_nfp->shm.base, 0, pktgen_nfp->shm.size);
+    pktgen_nfp->shm.nfp_ipc = (struct nfp_ipc *)pktgen_nfp->shm.base;
     pktgen_nfp->shm.phys_addr[0] = nfp_huge_physical_address(pktgen_nfp->nfp,
                                                              pktgen_nfp->shm.base,
                                                              0);
@@ -311,14 +315,14 @@ static void pcap_dump_pcie_buffers(struct pktgen_nfp *pktgen_nfp)
 
     phys_offset = PCIE_HUGEPAGE_SIZE;
     for (i=0; i<pktgen_nfp->pcap.num_buffers; i++) {
-        if (0) {
+        if (1) {
             uint64_t phys_addr;
             phys_addr = nfp_huge_physical_address(pktgen_nfp->nfp,
                                                   pktgen_nfp->shm.base,
                                                   phys_offset);
             printf("Phys %"PRIx64"\n",phys_addr);
         }
-        if (0) {
+        if (1) {
             mem_dump( pktgen_nfp->shm.base + phys_offset, 20000 );
         }
         if (1) {
@@ -418,7 +422,12 @@ mem_load_callback(void *handle,
 
     while (size>0) {
         uint64_t size_to_do;
+        uint64_t data_phys;
+        char     *data;
         struct pktgen_host_cmd host_cmd;
+
+        data      = pktgen_nfp->shm.base + 512*1024;
+        data_phys = pktgen_nfp->shm.phys_addr[0] + 512*1024;
 
         size_to_do = size;
         if (size_to_do > 512*1024)
@@ -427,10 +436,10 @@ mem_load_callback(void *handle,
         host_cmd.dma_cmd.cmd_type = PKTGEN_HOST_CMD_DMA;
         host_cmd.dma_cmd.length = size_to_do;
         host_cmd.dma_cmd.mu_base_s8     = mu_base_s8;
-        host_cmd.dma_cmd.pcie_base_low  = pktgen_nfp->shm.phys_addr[0];
-        host_cmd.dma_cmd.pcie_base_high = pktgen_nfp->shm.phys_addr[0] >> 32;
+        host_cmd.dma_cmd.pcie_base_low  = data_phys;
+        host_cmd.dma_cmd.pcie_base_high = data_phys >> 32;
 
-        memcpy(pktgen_nfp->shm.base, mem, size_to_do);
+        memcpy(data, mem, size_to_do);
         if (0) {
             int i;
             for (i=0; i<size_to_do; i+=4) {
@@ -498,6 +507,8 @@ main(int argc, char **argv)
         return 4;
     }
 
+    nfp_ipc_init(pktgen_nfp.shm.nfp_ipc, MAX_NFP_IPC_CLIENTS);
+
     if (1) {
         struct pktgen_host_cmd host_cmd;
         host_cmd.pkt_cmd.cmd_type = PKTGEN_HOST_CMD_PKT;
@@ -509,9 +520,12 @@ main(int argc, char **argv)
 
     usleep(3*1000*1000);
 
-    pcap_dump_pcie_buffers(&pktgen_nfp);
+    nfp_ipc_shutdown(pktgen_nfp.shm.nfp_ipc, 3*1000*1000);
 
-    //nfp_huge_free(pktgen_nfp.nfp, pktgen_nfp.pcie_base);
+    if (0) {
+        pcap_dump_pcie_buffers(&pktgen_nfp);
+    }
+
     nfp_shutdown(pktgen_nfp.nfp);
     return 0;
 }

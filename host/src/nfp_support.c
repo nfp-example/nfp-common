@@ -278,15 +278,21 @@ nfp_shm_alloc(struct nfp *nfp, const char *shm_filename, int shm_key, size_t byt
 {
     int shm_flags;
     key_t key;
+    struct shmid_ds shmid_ds;
 
     shm_flags =0x1ff;
     if (create) {
+        if (byte_size==0) {
+            return 0;
+        }
         shm_flags |= IPC_CREAT;
         nfp->shm.file = fopen(shm_filename,"w");
         if (!nfp->shm.file) {
             fprintf(stderr,"Failed to open shm lock file %s\n", shm_filename);
-            return -1;
+            return 0;
         }
+    } else {
+        byte_size = 0;
     }
     key = ftok(shm_filename, shm_key);
     
@@ -294,10 +300,15 @@ nfp_shm_alloc(struct nfp *nfp, const char *shm_filename, int shm_key, size_t byt
     if (nfp->shm.id == -1) {
         fprintf(stderr,"Failed to allocate SHM id\n");
         nfp_shm_close(nfp);
-       return -1;
+        return 0;
     }
+    if (shmctl(nfp->shm.id, IPC_STAT, &shmid_ds) != 0) {
+        fprintf(stderr,"Failed to find SHM size\n");
+        return 0;
+    }
+    byte_size = shmid_ds.shm_segsz;
     nfp->shm.data = shmat(nfp->shm.id, NULL, 0);
-    return 0;
+    return byte_size;
 }
 
 /** nfp_shm_data

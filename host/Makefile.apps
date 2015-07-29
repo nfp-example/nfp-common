@@ -38,7 +38,17 @@ $(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/nfp_dummy.o
 $(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/nfp_ipc.o
 
 $(HOST_BIN_DIR)/pktgencap:
-	$(LD) -o $(HOST_BIN_DIR)/pktgencap $(HOST_BUILD_DIR)/pktgencap.o $(HOST_BUILD_DIR)/pktgen_mem.o $(HOST_BUILD_DIR)/nfp_support.o $(LIBS)
+	$(LD) -o $(HOST_BIN_DIR)/pktgencap $(HOST_BUILD_DIR)/pktgencap.o $(HOST_BUILD_DIR)/nfp_ipc.o $(HOST_BUILD_DIR)/pktgen_mem.o $(HOST_BUILD_DIR)/nfp_support.o $(LIBS)
+
+pktgencap: $(HOST_BIN_DIR)/pktgencap
+
+$(HOST_BIN_DIR)/pktgencap_test: $(HOST_BUILD_DIR)/nfp_ipc.o
+$(HOST_BIN_DIR)/pktgencap_test: $(HOST_BUILD_DIR)/pktgencap_test.o
+
+$(HOST_BIN_DIR)/pktgencap_test:
+	$(LD) -o $(HOST_BIN_DIR)/pktgencap_test $(HOST_BUILD_DIR)/pktgencap_test.o $(HOST_BUILD_DIR)/nfp_ipc.o $(HOST_BUILD_DIR)/nfp_support.o $(LIBS)
+
+pktgencap_test: $(HOST_BIN_DIR)/pktgencap_test
 
 $(HOST_BIN_DIR)/nfp_ipc_test: $(HOST_BUILD_DIR)/nfp_ipc.o
 $(HOST_BIN_DIR)/nfp_ipc_test: $(HOST_BUILD_DIR)/nfp_ipc_test.o
@@ -46,14 +56,12 @@ $(HOST_BIN_DIR)/nfp_ipc_test: $(HOST_BUILD_DIR)/nfp_ipc_test.o
 $(HOST_BIN_DIR)/nfp_ipc_test:
 	$(LD) -o $(HOST_BIN_DIR)/nfp_ipc_test $(HOST_BUILD_DIR)/nfp_ipc_test.o $(HOST_BUILD_DIR)/nfp_ipc.o $(LIBS)
 
-all_host: pktgencap nfp_ipc_test
+nfp_ipc_test: $(HOST_BIN_DIR)/nfp_ipc_test
+
+all_host: pktgencap pktgencap_test nfp_ipc_test
 
 clean_host: clean_host__pktgencap
 
 clean_host__pktgencap:
 	rm -f $(HOST_BIN_DIR)/pktgencap
-
-pktgencap: $(HOST_BIN_DIR)/pktgencap
-
-nfp_ipc_test: $(HOST_BIN_DIR)/nfp_ipc_test
 

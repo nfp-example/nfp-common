@@ -55,12 +55,17 @@ clock_gettime(int clk, struct timespec *ts)
 static void
 timer_init(struct timer *timer, long timeout)
 {
+    long nsec;
+    long sec;
     if (timeout==0) {
         timer->timeout.tv_sec = 0;
         return;
     }
+    sec = timeout / 1000000;
+    nsec = (timeout % 1000000)*1000;
     clock_gettime(CLOCK_REALTIME, &timer->timeout);
-    timer->timeout.tv_nsec += timeout;
+    timer->timeout.tv_nsec += nsec;
+    timer->timeout.tv_sec  += sec;
     if (timer->timeout.tv_nsec > 1E9) {
         timer->timeout.tv_nsec -= 1E9;
         timer->timeout.tv_sec  += 1;
