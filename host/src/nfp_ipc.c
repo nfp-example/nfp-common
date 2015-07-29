@@ -36,6 +36,20 @@ struct timer {
     struct timespec timeout;
 };
 
+/** clock_gettime for OSX
+ */
+#ifdef __MACH__
+#define CLOCK_REALTIME 0
+static void
+clock_gettime(int clk, struct timespec *ts)
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    ts->tv_sec = tv.tv_sec;
+    ts->tv_nsec = tv.tv_usec*1000L;
+}
+#endif
+
 /** timer_init
  */
 static void
@@ -222,15 +236,25 @@ server_poll(struct nfp_ipc *nfp_ipc, struct timer *timer, struct nfp_ipc_event *
     uint64_t client_mask;
     int client;
 
+    //printf("Poll:Active %016llx\n",nfp_ipc->server.active_client_mask);
+    //printf("Poll:Doorbell %016llx\n",nfp_ipc->server.doorbell_mask);
+    //printf("Poll:Pending %016llx\n",nfp_ipc->server.pending_mask);
     for (;;) {
 
         client_mask = nfp_ipc->server.pending_mask;
-        if (client_mask == 0)
-            client_mask = nfp_ipc->server.doorbell_mask;
+        if (client_mask == 0) {
+            uint64_t *doorbell_mask;
+            doorbell_mask = &nfp_ipc->server.doorbell_mask;
+            client_mask = __atomic_fetch_and(doorbell_mask, 0, __ATOMIC_ACQ_REL);
+        }
         client_mask  &= nfp_ipc->server.active_client_mask;
-        if (client_mask != 0) {
+        nfp_ipc->server.pending_mask = client_mask;
+        if (client_mask == 0) {
+            if (timer_wait(timer) == NFP_IPC_EVENT_TIMEOUT)
+                return NFP_IPC_EVENT_TIMEOUT;
+        } else {
             client = find_first_set(client_mask);
-            client_mask &= ~(1 << client);
+            client_mask &= ~(1ULL << client);
             nfp_ipc->server.pending_mask = client_mask;
 
             if (nfp_ipc->clients[client].state == NFP_IPC_STATE_SHUTTING_DOWN) {
@@ -240,9 +264,6 @@ server_poll(struct nfp_ipc *nfp_ipc, struct timer *timer, struct nfp_ipc_event *
                 break;
             }
         }
-        nfp_ipc->server.pending_mask = client_mask;
-        if (timer_wait(timer) == NFP_IPC_EVENT_TIMEOUT)
-            return NFP_IPC_EVENT_TIMEOUT;
     }
     event->event_type = 0;
     event->nfp_ipc = nfp_ipc;
@@ -268,6 +289,7 @@ nfp_ipc_start_client(struct nfp_ipc *nfp_ipc)
 {
     int client;
 
+    //printf("Start:Active %016llx\n",nfp_ipc->server.active_client_mask);
     for (;;) {
         if (!is_alive(nfp_ipc))
             return -1;
@@ -285,7 +307,7 @@ nfp_ipc_start_client(struct nfp_ipc *nfp_ipc)
             break;
         total_clients_dec(nfp_ipc);
     }
-    memset(&nfp_ipc->clients[client], sizeof(nfp_ipc->clients[0]), 0);
+    memset(&nfp_ipc->clients[client], 0, sizeof(nfp_ipc->clients[0]));
     nfp_ipc->clients[client].state = NFP_IPC_STATE_ALIVE;
     return client;
 }
@@ -302,6 +324,7 @@ nfp_ipc_stop_client(struct nfp_ipc *nfp_ipc, int client)
 {
     nfp_ipc->clients[client].state = NFP_IPC_STATE_SHUTTING_DOWN;
     alert_server(nfp_ipc, client);
+    //printf("Stop:Active %016llx\n",nfp_ipc->server.active_client_mask);
 }
 
 /** nfp_ipc_init
@@ -309,7 +332,7 @@ nfp_ipc_stop_client(struct nfp_ipc *nfp_ipc, int client)
 void
 nfp_ipc_init(struct nfp_ipc *nfp_ipc, int max_clients)
 {
-    memset(nfp_ipc, sizeof(*nfp_ipc), 0);
+    memset(nfp_ipc, 0, sizeof(*nfp_ipc));
     if (max_clients >= NFP_IPC_MAX_CLIENTS)
         max_clients = NFP_IPC_MAX_CLIENTS;
     nfp_ipc->server.max_clients = max_clients;

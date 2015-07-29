@@ -23,6 +23,18 @@
 #include <stdlib.h>
 #include "nfp_ipc.h"
 
+/** get_rand
+ */
+static int
+get_rand(int max)
+{
+    long int r;
+    double d;
+    r = random() & ((1<<24)-1);
+    d = ((double)(max)) * r;
+    return (int)(d / (1<<24));
+}
+
 /** test_simple
  */
 static int
@@ -47,6 +59,52 @@ test_simple(int num_clients)
     return err;
 }
 
+/** test_start_stop
+ */
+static int
+test_start_stop(int num_clients, int iter)
+{
+    struct nfp_ipc nfp_ipc;
+    int err;
+    int i;
+    int clients[64];
+    struct nfp_ipc_event event;
+
+    nfp_ipc_init(&nfp_ipc, num_clients);
+    for (i=0; i<num_clients; i++) {
+        clients[i] = -1;
+    }
+    for (; iter > 0; iter--) {
+        i = get_rand(num_clients);
+        if (clients[i] < 0) {
+            clients[i] = nfp_ipc_start_client(&nfp_ipc);
+            //printf("Started %d:%d\n",i,clients[i]);
+            if (clients[i]<0) {
+                for (i=0; i<num_clients; i++) {
+                    printf("%d:%d ",i,clients[i]);
+                }
+                printf("\n");
+                return 100;
+            }
+        } else {
+            nfp_ipc_stop_client(&nfp_ipc, clients[i]);
+            //printf("Stopped %d:%d\n",i,clients[i]);
+            clients[i] = -1;
+        }
+        nfp_ipc_poll(&nfp_ipc, 0, &event);
+    }
+    for (i=0; i<num_clients; i++) {
+        if (clients[i] >= 0) {
+            nfp_ipc_stop_client(&nfp_ipc, clients[i]);
+        }
+    }
+    err = nfp_ipc_shutdown(&nfp_ipc, 1000);
+
+    return err;
+}
+
+/** TEST_RUN
+ */
 #define TEST_RUN(msg,x)                    \
     do { \
     int err = x; \
@@ -56,11 +114,18 @@ test_simple(int num_clients)
     fprintf(stderr,"Test passed: %s\n",msg); \
     } \
     } while (0);
+
+/** main
+ */
 extern int
 main(int argc, char **argv)
 {
     TEST_RUN("Simple test with 1 client",test_simple(1));
     TEST_RUN("Simple test with 8 clients",test_simple(8));
     TEST_RUN("Simple test with 64 clients",test_simple(64));
+
+    TEST_RUN("Start/stop test with 1 client",test_start_stop(1,1000));
+    TEST_RUN("Start/stop test with 8 clients",test_start_stop(8,10000));
+    TEST_RUN("Start/stop test with 64 clients",test_start_stop(64,10000));
     return 0;
 }
