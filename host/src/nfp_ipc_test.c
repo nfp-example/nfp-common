@@ -110,11 +110,17 @@ test_mem_simple(int iter)
 {
     struct nfp_ipc nfp_ipc;
     struct nfp_ipc_msg *msg;
+    struct nfp_ipc_msg *msg2;
+    struct nfp_ipc_msg *msg3;
     int err;
 
     nfp_ipc_init(&nfp_ipc, 1);
-    msg = nfp_ipc_alloc_msg(&nfp_ipc, 16);
+    msg  = nfp_ipc_alloc_msg(&nfp_ipc, 16);
+    msg2 = nfp_ipc_alloc_msg(&nfp_ipc, 16);
+    msg3 = nfp_ipc_alloc_msg(&nfp_ipc, 8100);
+    nfp_ipc_free_msg(&nfp_ipc, msg2);
     nfp_ipc_free_msg(&nfp_ipc, msg);
+    nfp_ipc_free_msg(&nfp_ipc, msg3);
     err = nfp_ipc_shutdown(&nfp_ipc, 1000);
 
     return err;

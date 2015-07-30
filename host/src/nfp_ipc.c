@@ -364,12 +364,12 @@ msg_dump(struct nfp_ipc *nfp_ipc)
     if (msg_claim_block(nfp_ipc) != 0) {
         return;
     }
-    printf("msg_dump %p\n",nfp_ipc);
+    printf("msg_dump %p : %6d\n",nfp_ipc, nfp_ipc->msg.hdr.free_list );
     msg_ofs = (char *)nfp_ipc->msg.data - (char *)&nfp_ipc->msg;
     blk = 0;
     while (msg_ofs != 0) {
         msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + msg_ofs);
-        printf("%4d @ %6d of %6dB (<%6d >%6d next_free %6d)\n",
+        printf("%4d @ %6d of %6dB (>%6d <%6d next_free %6d)\n",
                blk,
                msg_ofs,
                msg->hdr.byte_size,
@@ -494,8 +494,8 @@ nfp_ipc_alloc_msg(struct nfp_ipc *nfp_ipc, int size)
 {
     struct nfp_ipc_msg *msg;
     int byte_size;
-    int prev_free;
-    int free_list;
+    int prev_ofs;
+    int msg_ofs;
 
     if (1) msg_dump(nfp_ipc);
 
@@ -503,43 +503,46 @@ nfp_ipc_alloc_msg(struct nfp_ipc *nfp_ipc, int size)
         return NULL;
     }
 
-    prev_free = 0;
-    free_list = nfp_ipc->msg.hdr.free_list;
+    prev_ofs = 0;
+    msg_ofs = nfp_ipc->msg.hdr.free_list;
     byte_size = size + sizeof(struct nfp_ipc_msg_hdr);
 
     for (;;) {
-        if (free_list == 0) {
+        if (msg_ofs == 0) {
             msg_release_block(nfp_ipc);
             return NULL;
         }
-        msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + free_list);
+        msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + msg_ofs);
         if (msg->hdr.byte_size >= byte_size) 
             break;
-        prev_free = free_list;
-        free_list = msg->hdr.next_in_list;
+        prev_ofs = msg_ofs;
+        msg_ofs = msg->hdr.next_in_list;
     }
+
     if (msg->hdr.byte_size <= byte_size+32) {
         struct nfp_ipc_msg *prev_msg;
-        prev_msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + prev_free);
-        if (prev_free == 0) {
+        prev_msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + prev_ofs);
+        if (prev_ofs == 0) {
             nfp_ipc->msg.hdr.free_list = msg->hdr.next_free;
         } else {
             prev_msg->hdr.next_free = msg->hdr.next_free;
         }
         msg->hdr.next_free = 0;
     } else {
+        int new_msg_ofs;
         struct nfp_ipc_msg *new_msg;
         // Split into two - reduce size
         msg->hdr.byte_size -= byte_size;
-        new_msg = (struct nfp_ipc_msg *) ((char *)msg + msg->hdr.byte_size);
+        new_msg_ofs = msg_ofs + msg->hdr.byte_size;
+        new_msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + new_msg_ofs);
         new_msg->hdr.next_in_list = msg->hdr.next_in_list;
-        new_msg->hdr.prev_in_list = free_list;
+        new_msg->hdr.prev_in_list = msg_ofs;
         new_msg->hdr.byte_size = byte_size;
         new_msg->hdr.next_free = 0;
-        msg->hdr.next_in_list = free_list + msg->hdr.byte_size;
+        msg->hdr.next_in_list = new_msg_ofs;
         if (new_msg->hdr.next_in_list != 0) {
             msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + new_msg->hdr.next_in_list);
-            msg->hdr.prev_in_list = free_list + msg->hdr.byte_size;
+            msg->hdr.prev_in_list = new_msg_ofs;
         }
         msg = new_msg;
     }
@@ -557,9 +560,9 @@ nfp_ipc_alloc_msg(struct nfp_ipc *nfp_ipc, int size)
 void
 nfp_ipc_free_msg(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg)
 {
-    struct nfp_ipc_msg *msg;
-    int prev;
-    int next;
+    int msg_ofs;
+    int prev_ofs;
+    int next_ofs;
 
     if (1) msg_dump(nfp_ipc);
 
@@ -567,39 +570,72 @@ nfp_ipc_free_msg(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg)
         return;
     }
 
+    msg_ofs = (char *)nfp_ipc_msg - (char *)&nfp_ipc->msg;
     nfp_ipc_msg->hdr.next_free = 0;
 
-    prev = nfp_ipc_msg->hdr.prev_in_list;
-    if (prev) {
-        msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + prev);
-        if (msg->hdr.next_free == -1) {
+    prev_ofs = nfp_ipc_msg->hdr.prev_in_list;
+    if (prev_ofs) {
+        struct nfp_ipc_msg *prev_msg;
+        prev_msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + prev_ofs);
+        if (prev_msg->hdr.next_free == -1) {
             // Previous block is allocated, so chase back to find last free block
-            printf("********************************************************************************FIXME\n");
+            int blah_ofs;
+            struct nfp_ipc_msg *blah_msg;
+            blah_ofs = prev_msg->hdr.prev_in_list;
+            while (blah_ofs != 0) {
+                blah_msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + blah_ofs);
+                if (blah_msg->hdr.next_free != -1)
+                    break;
+                blah_ofs = blah_msg->hdr.prev_in_list;
+            }
+            if (blah_ofs != 0) {
+                blah_msg->hdr.next_free = msg_ofs;
+            } else {
+                nfp_ipc->msg.hdr.free_list = msg_ofs;
+            }
         } else {
             // Previous block is free so amalgamate
-            msg->hdr.next_in_list = nfp_ipc_msg->hdr.next_in_list;
-            msg->hdr.byte_size    = msg->hdr.byte_size + nfp_ipc_msg->hdr.byte_size;
-            nfp_ipc_msg = msg;
+            prev_msg->hdr.next_in_list = nfp_ipc_msg->hdr.next_in_list;
+            prev_msg->hdr.byte_size    = prev_msg->hdr.byte_size + nfp_ipc_msg->hdr.byte_size;
+            msg_ofs = prev_ofs;
+            nfp_ipc_msg = prev_msg;
         }
     } else {
         nfp_ipc_msg->hdr.next_free = nfp_ipc->msg.hdr.free_list;
-        nfp_ipc->msg.hdr.free_list = (char *)&nfp_ipc_msg - (char *)&nfp_ipc->msg;
+        nfp_ipc->msg.hdr.free_list = msg_ofs;
     }
 
-    next = nfp_ipc_msg->hdr.prev_in_list;
-    if (next) {
-        msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + next);
-        if (msg->hdr.next_free == -1) {
+    next_ofs = nfp_ipc_msg->hdr.next_in_list;
+    if (next_ofs) {
+        struct nfp_ipc_msg *next_msg;
+        next_msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + next_ofs);
+        if (next_msg->hdr.next_free == -1) {
+            next_msg->hdr.prev_in_list = msg_ofs;
+            int blah_ofs;
+            struct nfp_ipc_msg *blah_msg;
             // Next block is allocated, so chase forward to find next free block if needed
             if (nfp_ipc_msg->hdr.next_free == 0) {
-                printf("********************************************************************************FIXME\n");
+                blah_ofs = nfp_ipc_msg->hdr.next_in_list;
+                while (blah_ofs != 0) {
+                    blah_msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + blah_ofs);
+                    if (blah_msg->hdr.next_free != -1)
+                        break;
+                    blah_ofs = blah_msg->hdr.next_in_list;
+                }
+                nfp_ipc_msg->hdr.next_free = blah_ofs;
             }
         } else {
-            // Next block is free - just amalgamate
-            nfp_ipc_msg->hdr.next_in_list = msg->hdr.next_in_list;
-            nfp_ipc_msg->hdr.next_free    = msg->hdr.next_free;
-            nfp_ipc_msg->hdr.byte_size    = nfp_ipc_msg->hdr.byte_size + msg->hdr.byte_size;
+            nfp_ipc_msg->hdr.next_in_list = next_msg->hdr.next_in_list;
+            nfp_ipc_msg->hdr.next_free    = next_msg->hdr.next_free;
+            nfp_ipc_msg->hdr.byte_size    = nfp_ipc_msg->hdr.byte_size + next_msg->hdr.byte_size;
         }
+    }
+
+    next_ofs = nfp_ipc_msg->hdr.next_in_list;
+    if (next_ofs) {
+        struct nfp_ipc_msg *next_msg;
+        next_msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + next_ofs);
+        next_msg->hdr.prev_in_list = msg_ofs;
     }
     msg_release_block(nfp_ipc);
 
