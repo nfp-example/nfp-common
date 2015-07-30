@@ -509,18 +509,20 @@ main(int argc, char **argv)
 
     nfp_ipc_init(pktgen_nfp.shm.nfp_ipc, MAX_NFP_IPC_CLIENTS);
 
-    if (1) {
+    int i;
+    for (i=0; i<10; i++) {
         struct pktgen_host_cmd host_cmd;
         host_cmd.pkt_cmd.cmd_type = PKTGEN_HOST_CMD_PKT;
         host_cmd.pkt_cmd.base_delay = 1<<24;
         host_cmd.pkt_cmd.total_pkts = 57; /* That is all the current file is!!! */
         host_cmd.pkt_cmd.mu_base_s8 = pktgen_mem_get_mu(pktgen_nfp.mem_layout,0,0)>>8;
         (void) pktgen_issue_cmd(&pktgen_nfp, &host_cmd);
+        usleep(2*1000*1000);
     }
 
-    usleep(3*1000*1000);
 
-    nfp_ipc_shutdown(pktgen_nfp.shm.nfp_ipc, 3*1000*1000);
+    usleep(5*100*1000);
+    nfp_ipc_shutdown(pktgen_nfp.shm.nfp_ipc, 5*1000*1000);
 
     if (0) {
         pcap_dump_pcie_buffers(&pktgen_nfp);

@@ -37,8 +37,8 @@ enum {
 /** NFP_IPC_EVENT
  */
 enum {
+    NFP_IPC_EVENT_SHUTDOWN=-1,
     NFP_IPC_EVENT_TIMEOUT,
-    NFP_IPC_EVENT_SHUTDOWN,
     NFP_IPC_EVENT_MESSAGE,
 };
 
@@ -65,11 +65,42 @@ struct nfp_ipc_client_data {
     char pad[52];
 };
 
+/** struct nfp_ipc_msg_data_hdr
+ */
+struct nfp_ipc_msg_data_hdr {
+    int  locked;
+    int  free_list;
+};
+
+/** struct nfp_ipc_msg_hdr
+ */
+struct nfp_ipc_msg_hdr {
+    int  next_in_list;
+    int  prev_in_list;
+    int  next_free;
+    int  byte_size;
+};
+
+/** struct nfp_ipc_msg
+ */
+struct nfp_ipc_msg {
+    struct nfp_ipc_msg_hdr hdr;
+    char data[4];
+};
+
+/** struct nfp_ipc_msg_data
+ */
+struct nfp_ipc_msg_data {
+    struct nfp_ipc_msg_data_hdr hdr;
+    char   data[8192-sizeof(struct nfp_ipc_msg_data_hdr)];
+};
+
 /** struct nfp_ipc
  */
 struct nfp_ipc {
     struct nfp_ipc_server_data server;
     struct nfp_ipc_client_data clients[NFP_IPC_MAX_CLIENTS];
+    struct nfp_ipc_msg_data msg;
 };
 
 /** struct nfp_ipc_event
@@ -112,6 +143,18 @@ void nfp_ipc_init(struct nfp_ipc *nfp_ipc, int max_clients);
  */
 int nfp_ipc_shutdown(struct nfp_ipc *nfp_ipc, int timeout);
 
-/** nfp_ipc_poll
+/** nfp_ipc_alloc_msg
  */
-int nfp_ipc_poll(struct nfp_ipc *nfp_ipc, int timeout, struct nfp_ipc_event *event);
+struct nfp_ipc_msg *nfp_ipc_alloc_msg(struct nfp_ipc *nfp_ipc, int size);
+
+/** nfp_ipc_free_msg
+ */
+void nfp_ipc_free_msg(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg);
+
+/** nfp_ipc_server_poll
+ */
+int nfp_ipc_server_poll(struct nfp_ipc *nfp_ipc, int timeout, struct nfp_ipc_event *event);
+
+/** nfp_ipc_client_poll
+ */
+int nfp_ipc_client_poll(struct nfp_ipc *nfp_ipc, int client, int timeout, struct nfp_ipc_event *event);

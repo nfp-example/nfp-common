@@ -130,6 +130,8 @@ main(int argc, char **argv)
         return 1;
     }
 
+    usleep(10*1000*1000);
+
         if (1) {
             uint64_t phys_offset;
             phys_offset = 1<<20;
@@ -147,8 +149,6 @@ main(int argc, char **argv)
                 mem_dump(((char *)pcap_buffer) + (pcap_buffer->pkt_desc[j].offset<<6), 64);
             }
         }
-
-    usleep(1*1000*1000);
 
     nfp_ipc_stop_client(pktgen_nfp.shm.nfp_ipc, nfp_ipc_client);
 

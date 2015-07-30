@@ -91,13 +91,30 @@ test_start_stop(int num_clients, int iter)
             //printf("Stopped %d:%d\n",i,clients[i]);
             clients[i] = -1;
         }
-        nfp_ipc_poll(&nfp_ipc, 0, &event);
+        nfp_ipc_server_poll(&nfp_ipc, 0, &event);
     }
     for (i=0; i<num_clients; i++) {
         if (clients[i] >= 0) {
             nfp_ipc_stop_client(&nfp_ipc, clients[i]);
         }
     }
+    err = nfp_ipc_shutdown(&nfp_ipc, 1000);
+
+    return err;
+}
+
+/** test_mem_simple
+ **/
+static int
+test_mem_simple(int iter)
+{
+    struct nfp_ipc nfp_ipc;
+    struct nfp_ipc_msg *msg;
+    int err;
+
+    nfp_ipc_init(&nfp_ipc, 1);
+    msg = nfp_ipc_alloc_msg(&nfp_ipc, 16);
+    nfp_ipc_free_msg(&nfp_ipc, msg);
     err = nfp_ipc_shutdown(&nfp_ipc, 1000);
 
     return err;
@@ -120,6 +137,8 @@ test_start_stop(int num_clients, int iter)
 extern int
 main(int argc, char **argv)
 {
+    TEST_RUN("Simple memory test ",test_mem_simple(1));
+
     TEST_RUN("Simple test with 1 client",test_simple(1));
     TEST_RUN("Simple test with 8 clients",test_simple(8));
     TEST_RUN("Simple test with 64 clients",test_simple(64));

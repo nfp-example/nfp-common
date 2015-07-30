@@ -276,6 +276,112 @@ server_poll(struct nfp_ipc *nfp_ipc, struct timer *timer, struct nfp_ipc_event *
     return NFP_IPC_EVENT_MESSAGE;
 }
 
+/** client_poll
+ */
+static int
+client_poll(struct nfp_ipc *nfp_ipc, int client, struct timer *timer, struct nfp_ipc_event *event)
+{
+    for (;;) {
+        if (nfp_ipc->server.state != NFP_IPC_STATE_ALIVE)
+            return NFP_IPC_EVENT_SHUTDOWN;
+
+        if (nfp_ipc->clients[client].state != NFP_IPC_STATE_ALIVE)
+            return NFP_IPC_EVENT_SHUTDOWN;
+
+        if (nfp_ipc->clients[client].server_ticket == nfp_ipc->clients[client].client_ticket) {
+            if (timer_wait(timer) == NFP_IPC_EVENT_TIMEOUT)
+                return NFP_IPC_EVENT_TIMEOUT;
+        } else {
+            nfp_ipc->clients[client].client_ticket += 1;
+            break;
+        }
+    }
+    event->event_type = 0;
+    event->nfp_ipc = nfp_ipc;
+    event->client = client;
+    return NFP_IPC_EVENT_MESSAGE;
+}
+
+/** msg_init
+ */
+static void
+msg_init(struct nfp_ipc *nfp_ipc)
+{
+    int msg_ofs;
+    struct nfp_ipc_msg *msg;
+    
+    msg_ofs = (char *)nfp_ipc->msg.data - (char *)&nfp_ipc->msg;
+    nfp_ipc->msg.hdr.free_list = msg_ofs;
+
+    msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + msg_ofs);
+    msg->hdr.next_in_list = 0;
+    msg->hdr.prev_in_list = 0;
+    msg->hdr.next_free = 0;
+    msg->hdr.byte_size = sizeof(nfp_ipc->msg.data);
+}
+
+/** msg_claim_block
+ */
+static int
+msg_claim_block(struct nfp_ipc *nfp_ipc)
+{
+    int i;
+
+    i=0;
+    for (;;) {
+        int locked;
+        int *msg_locked;
+        msg_locked = &nfp_ipc->msg.hdr.locked;
+        locked = __atomic_fetch_or(msg_locked, 1, __ATOMIC_ACQ_REL);
+        if (!locked)
+            break;
+        usleep(10000);
+        if (i>100)
+            return -1;
+    }
+    return 0;
+}
+
+/** msg_release_block
+ */
+static void
+msg_release_block(struct nfp_ipc *nfp_ipc)
+{
+    int *msg_locked;
+    msg_locked = &nfp_ipc->msg.hdr.locked;
+    (void) __atomic_fetch_and(msg_locked, ~1, __ATOMIC_ACQ_REL);
+}
+
+/** msg_dump
+ */
+static void
+msg_dump(struct nfp_ipc *nfp_ipc)
+{
+    int msg_ofs;
+    int blk;
+    struct nfp_ipc_msg *msg;
+
+    if (msg_claim_block(nfp_ipc) != 0) {
+        return;
+    }
+    printf("msg_dump %p\n",nfp_ipc);
+    msg_ofs = (char *)nfp_ipc->msg.data - (char *)&nfp_ipc->msg;
+    blk = 0;
+    while (msg_ofs != 0) {
+        msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + msg_ofs);
+        printf("%4d @ %6d of %6dB (<%6d >%6d next_free %6d)\n",
+               blk,
+               msg_ofs,
+               msg->hdr.byte_size,
+               msg->hdr.next_in_list,
+               msg->hdr.prev_in_list,
+               msg->hdr.next_free);
+        msg_ofs = msg->hdr.next_in_list;
+        blk++;
+    }
+    msg_release_block(nfp_ipc);
+}
+
 /** nfp_ipc_start_client
  *
  * Start a new client
@@ -343,6 +449,8 @@ nfp_ipc_init(struct nfp_ipc *nfp_ipc, int max_clients)
     nfp_ipc->server.max_clients = max_clients;
     nfp_ipc->server.client_mask = (2ULL<<(max_clients-1)) - 1;
     nfp_ipc->server.state = NFP_IPC_STATE_ALIVE;
+
+    msg_init(nfp_ipc);
 }
 
 /** nfp_ipc_shutdown
@@ -379,16 +487,148 @@ nfp_ipc_shutdown(struct nfp_ipc *nfp_ipc, int timeout)
     return rc;
 }
 
-/** nfp_ipc_poll
+/** nfp_ipc_alloc_msg
+ */
+struct nfp_ipc_msg *
+nfp_ipc_alloc_msg(struct nfp_ipc *nfp_ipc, int size)
+{
+    struct nfp_ipc_msg *msg;
+    int byte_size;
+    int prev_free;
+    int free_list;
+
+    if (1) msg_dump(nfp_ipc);
+
+    if (msg_claim_block(nfp_ipc) != 0) {
+        return NULL;
+    }
+
+    prev_free = 0;
+    free_list = nfp_ipc->msg.hdr.free_list;
+    byte_size = size + sizeof(struct nfp_ipc_msg_hdr);
+
+    for (;;) {
+        if (free_list == 0) {
+            msg_release_block(nfp_ipc);
+            return NULL;
+        }
+        msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + free_list);
+        if (msg->hdr.byte_size >= byte_size) 
+            break;
+        prev_free = free_list;
+        free_list = msg->hdr.next_in_list;
+    }
+    if (msg->hdr.byte_size <= byte_size+32) {
+        struct nfp_ipc_msg *prev_msg;
+        prev_msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + prev_free);
+        if (prev_free == 0) {
+            nfp_ipc->msg.hdr.free_list = msg->hdr.next_free;
+        } else {
+            prev_msg->hdr.next_free = msg->hdr.next_free;
+        }
+        msg->hdr.next_free = 0;
+    } else {
+        struct nfp_ipc_msg *new_msg;
+        // Split into two - reduce size
+        msg->hdr.byte_size -= byte_size;
+        new_msg = (struct nfp_ipc_msg *) ((char *)msg + msg->hdr.byte_size);
+        new_msg->hdr.next_in_list = msg->hdr.next_in_list;
+        new_msg->hdr.prev_in_list = free_list;
+        new_msg->hdr.byte_size = byte_size;
+        new_msg->hdr.next_free = 0;
+        msg->hdr.next_in_list = free_list + msg->hdr.byte_size;
+        if (new_msg->hdr.next_in_list != 0) {
+            msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + new_msg->hdr.next_in_list);
+            msg->hdr.prev_in_list = free_list + msg->hdr.byte_size;
+        }
+        msg = new_msg;
+    }
+
+    msg->hdr.next_free = -1;
+
+    msg_release_block(nfp_ipc);
+    if (1) msg_dump(nfp_ipc);
+
+    return msg;
+}
+
+/** nfp_ipc_free_msg
+ */
+void
+nfp_ipc_free_msg(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg)
+{
+    struct nfp_ipc_msg *msg;
+    int prev;
+    int next;
+
+    if (1) msg_dump(nfp_ipc);
+
+    if (msg_claim_block(nfp_ipc) != 0) {
+        return;
+    }
+
+    nfp_ipc_msg->hdr.next_free = 0;
+
+    prev = nfp_ipc_msg->hdr.prev_in_list;
+    if (prev) {
+        msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + prev);
+        if (msg->hdr.next_free == -1) {
+            // Previous block is allocated, so chase back to find last free block
+            printf("********************************************************************************FIXME\n");
+        } else {
+            // Previous block is free so amalgamate
+            msg->hdr.next_in_list = nfp_ipc_msg->hdr.next_in_list;
+            msg->hdr.byte_size    = msg->hdr.byte_size + nfp_ipc_msg->hdr.byte_size;
+            nfp_ipc_msg = msg;
+        }
+    } else {
+        nfp_ipc_msg->hdr.next_free = nfp_ipc->msg.hdr.free_list;
+        nfp_ipc->msg.hdr.free_list = (char *)&nfp_ipc_msg - (char *)&nfp_ipc->msg;
+    }
+
+    next = nfp_ipc_msg->hdr.prev_in_list;
+    if (next) {
+        msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + next);
+        if (msg->hdr.next_free == -1) {
+            // Next block is allocated, so chase forward to find next free block if needed
+            if (nfp_ipc_msg->hdr.next_free == 0) {
+                printf("********************************************************************************FIXME\n");
+            }
+        } else {
+            // Next block is free - just amalgamate
+            nfp_ipc_msg->hdr.next_in_list = msg->hdr.next_in_list;
+            nfp_ipc_msg->hdr.next_free    = msg->hdr.next_free;
+            nfp_ipc_msg->hdr.byte_size    = nfp_ipc_msg->hdr.byte_size + msg->hdr.byte_size;
+        }
+    }
+    msg_release_block(nfp_ipc);
+
+    if (1) msg_dump(nfp_ipc);
+}
+
+/** nfp_ipc_server_poll
  */
 int
-nfp_ipc_poll(struct nfp_ipc *nfp_ipc, int timeout, struct nfp_ipc_event *event)
+nfp_ipc_server_poll(struct nfp_ipc *nfp_ipc, int timeout, struct nfp_ipc_event *event)
 {
     struct timer timer;
     if (nfp_ipc->server.state != NFP_IPC_STATE_ALIVE)
-        return -1;
+        return NFP_IPC_EVENT_SHUTDOWN;
 
     timer_init(&timer, timeout);
     return server_poll(nfp_ipc, &timer, event);
+}
+
+/** nfp_ipc_client_poll
+ */
+int
+nfp_ipc_client_poll(struct nfp_ipc *nfp_ipc, int client, int timeout, struct nfp_ipc_event *event)
+{
+    struct timer timer;
+    if (nfp_ipc->server.state != NFP_IPC_STATE_ALIVE)
+        return NFP_IPC_EVENT_SHUTDOWN;
+
+    timer_init(&timer, timeout);
+    return client_poll(nfp_ipc, client, &timer, event);
 }
 
