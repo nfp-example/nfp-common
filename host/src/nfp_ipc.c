@@ -382,6 +382,89 @@ msg_dump(struct nfp_ipc *nfp_ipc)
     msg_release_block(nfp_ipc);
 }
 
+/** msg_check_heap
+ */
+static int
+msg_check_heap(struct nfp_ipc *nfp_ipc)
+{
+    int msg_ofs;
+    int prev_ofs;
+    int total_size;
+    int free_list_found;
+    int prev_free;
+    struct nfp_ipc_msg *msg;
+    int total_errors;
+
+    if (msg_claim_block(nfp_ipc) != 0) {
+        return -1;
+    }
+
+    total_errors = 0;
+    free_list_found = 0;
+    total_size = 0;
+    prev_ofs = 0;
+    prev_free = 0;
+    msg_ofs = (char *)nfp_ipc->msg.data - (char *)&nfp_ipc->msg;
+    while (msg_ofs != 0) {
+        msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + msg_ofs);
+        if (nfp_ipc->msg.hdr.free_list == msg_ofs) {
+            free_list_found = 1;
+        }
+        if (msg->hdr.prev_in_list != prev_ofs) {
+            printf("Block at %6d has incorrect previous of %6d instead of %6d\n",
+                   msg_ofs, msg->hdr.prev_in_list, prev_ofs);
+            total_errors++;
+        }
+        if ((msg->hdr.next_in_list != 0) && (msg->hdr.next_in_list != msg_ofs + msg->hdr.byte_size)) {
+            printf("Block at %6d has mismatching next (diff of %6d) and byte size %6d\n",
+                   msg_ofs, msg->hdr.next_in_list - msg_ofs, msg->hdr.byte_size);
+            total_errors++;
+        }
+        if (prev_ofs != 0) {
+            if (prev_free && (msg->hdr.next_free != -1)) {
+                printf("Successive blocks at %6d and %d are both free\n",
+                       prev_ofs, msg_ofs);
+                total_errors++;
+            }
+            prev_free = (msg->hdr.next_free != -1);
+        }
+        total_size += msg->hdr.byte_size;
+        prev_ofs = msg_ofs;
+        msg_ofs = msg->hdr.next_in_list;
+    }
+
+    msg_ofs = nfp_ipc->msg.hdr.free_list;
+    if (msg_ofs < 0) {
+            printf("Bad free list chain %6d\n",
+                   msg_ofs);
+            msg_ofs = 0;
+    }
+    while (msg_ofs != 0) {
+        msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + msg_ofs);
+        if (msg->hdr.next_free < 0) {
+            printf("Bad free list chain at %6d (next of %6d)\n",
+                   msg_ofs, msg->hdr.next_free);
+            total_errors++;
+            msg_ofs = 0;
+        } else {
+            msg_ofs = msg->hdr.next_free;
+        }
+    }
+
+    if (!free_list_found && (nfp_ipc->msg.hdr.free_list != 0)) {
+        printf("Failed to find start of free list %6d\n",
+               nfp_ipc->msg.hdr.free_list);
+        total_errors++;
+    }
+    
+    msg_release_block(nfp_ipc);
+
+    if (total_errors>=0) {
+        msg_dump(nfp_ipc);
+    }
+    return total_errors;
+}
+
 /** nfp_ipc_start_client
  *
  * Start a new client
@@ -497,7 +580,10 @@ nfp_ipc_alloc_msg(struct nfp_ipc *nfp_ipc, int size)
     int prev_ofs;
     int msg_ofs;
 
-    if (1) msg_dump(nfp_ipc);
+    if (0) {
+        printf("alloc %d\n",size);
+        msg_check_heap(nfp_ipc);
+    }
 
     if (msg_claim_block(nfp_ipc) != 0) {
         return NULL;
@@ -506,6 +592,7 @@ nfp_ipc_alloc_msg(struct nfp_ipc *nfp_ipc, int size)
     prev_ofs = 0;
     msg_ofs = nfp_ipc->msg.hdr.free_list;
     byte_size = size + sizeof(struct nfp_ipc_msg_hdr);
+    byte_size = (byte_size + 7) & ~7;
 
     for (;;) {
         if (msg_ofs == 0) {
@@ -516,15 +603,17 @@ nfp_ipc_alloc_msg(struct nfp_ipc *nfp_ipc, int size)
         if (msg->hdr.byte_size >= byte_size) 
             break;
         prev_ofs = msg_ofs;
-        msg_ofs = msg->hdr.next_in_list;
+        msg_ofs = msg->hdr.next_free;
     }
 
+    // printf("Allocating %d\n",msg_ofs);
+    msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + msg_ofs);
     if (msg->hdr.byte_size <= byte_size+32) {
-        struct nfp_ipc_msg *prev_msg;
-        prev_msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + prev_ofs);
         if (prev_ofs == 0) {
             nfp_ipc->msg.hdr.free_list = msg->hdr.next_free;
         } else {
+            struct nfp_ipc_msg *prev_msg;
+            prev_msg = (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + prev_ofs);
             prev_msg->hdr.next_free = msg->hdr.next_free;
         }
         msg->hdr.next_free = 0;
@@ -550,7 +639,8 @@ nfp_ipc_alloc_msg(struct nfp_ipc *nfp_ipc, int size)
     msg->hdr.next_free = -1;
 
     msg_release_block(nfp_ipc);
-    if (1) msg_dump(nfp_ipc);
+
+    if (0) msg_check_heap(nfp_ipc);
 
     return msg;
 }
@@ -564,13 +654,19 @@ nfp_ipc_free_msg(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg)
     int prev_ofs;
     int next_ofs;
 
-    if (1) msg_dump(nfp_ipc);
+    if (0) {
+        printf("free %p\n",nfp_ipc_msg);
+        msg_check_heap(nfp_ipc);
+    }
 
     if (msg_claim_block(nfp_ipc) != 0) {
         return;
     }
 
     msg_ofs = (char *)nfp_ipc_msg - (char *)&nfp_ipc->msg;
+    if (0) {
+        printf("free %d\n",msg_ofs);
+    }
     nfp_ipc_msg->hdr.next_free = 0;
 
     prev_ofs = nfp_ipc_msg->hdr.prev_in_list;
@@ -639,7 +735,7 @@ nfp_ipc_free_msg(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg)
     }
     msg_release_block(nfp_ipc);
 
-    if (1) msg_dump(nfp_ipc);
+    if (0) msg_check_heap(nfp_ipc);
 }
 
 /** nfp_ipc_server_poll

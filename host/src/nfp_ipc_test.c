@@ -106,21 +106,40 @@ test_start_stop(int num_clients, int iter)
 /** test_mem_simple
  **/
 static int
-test_mem_simple(int iter)
+test_mem_simple(int iter, int max_blocks, int size_base, int size_range)
 {
+    int i;
     struct nfp_ipc nfp_ipc;
-    struct nfp_ipc_msg *msg;
-    struct nfp_ipc_msg *msg2;
-    struct nfp_ipc_msg *msg3;
+    struct nfp_ipc_msg *msg[64];
+    int size;
     int err;
 
     nfp_ipc_init(&nfp_ipc, 1);
-    msg  = nfp_ipc_alloc_msg(&nfp_ipc, 16);
-    msg2 = nfp_ipc_alloc_msg(&nfp_ipc, 16);
-    msg3 = nfp_ipc_alloc_msg(&nfp_ipc, 8100);
-    nfp_ipc_free_msg(&nfp_ipc, msg2);
-    nfp_ipc_free_msg(&nfp_ipc, msg);
-    nfp_ipc_free_msg(&nfp_ipc, msg3);
+
+    for (i=0; i<max_blocks; i++) {
+        msg[i] = NULL;
+    }
+    for (; iter > 0; iter--) {
+        i = get_rand(max_blocks);
+        if (!msg[i]) {
+            size = size_base + get_rand(size_range);
+            msg[i] = nfp_ipc_alloc_msg(&nfp_ipc, size);
+            if (!msg[i]) {
+                printf("Failed to allocate blah\n");
+                return 100;
+            }
+        } else {
+            nfp_ipc_free_msg(&nfp_ipc, msg[i]);
+            msg[i] = NULL;
+        }
+    }
+
+    for (i=0; i<max_blocks; i++) {
+        if (msg[i]) {
+            nfp_ipc_free_msg(&nfp_ipc, msg[i]);
+        }
+    }
+
     err = nfp_ipc_shutdown(&nfp_ipc, 1000);
 
     return err;
@@ -143,7 +162,9 @@ test_mem_simple(int iter)
 extern int
 main(int argc, char **argv)
 {
-    TEST_RUN("Simple memory test ",test_mem_simple(1));
+    TEST_RUN("Simple memory test ",test_mem_simple(10000,64,16,0));
+    TEST_RUN("Simple memory test of different sizes ",test_mem_simple(150000,64,16,128));
+    TEST_RUN("Simple memory test of different sizes 2 ",test_mem_simple(150000,64,16,48));
 
     TEST_RUN("Simple test with 1 client",test_simple(1));
     TEST_RUN("Simple test with 8 clients",test_simple(8));
