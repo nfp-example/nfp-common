@@ -30,6 +30,15 @@
 #include "firmware/pktgen.h"
 #include "firmware/pcap.h"
 
+enum {
+    PKTGEN_IPC_SHUTDOWN,
+    PKTGEN_IPC_HOST_CMD,
+    PKTGEN_IPC_DUMP_BUFFERS
+};
+struct pktgen_ipc_msg {
+    int reason;
+};
+
 /** Defines
  */
 #define MAX_PAGES 2
@@ -509,26 +518,34 @@ main(int argc, char **argv)
 
     nfp_ipc_init(pktgen_nfp.shm.nfp_ipc, MAX_NFP_IPC_CLIENTS);
 
-    int i;
-    for (i=0; i<10; i++) {
-        struct pktgen_host_cmd host_cmd;
-        host_cmd.pkt_cmd.cmd_type = PKTGEN_HOST_CMD_PKT;
-        host_cmd.pkt_cmd.base_delay = 1<<24;
-        host_cmd.pkt_cmd.total_pkts = 57; /* That is all the current file is!!! */
-        host_cmd.pkt_cmd.mu_base_s8 = pktgen_mem_get_mu(pktgen_nfp.mem_layout,0,0)>>8;
-        (void) pktgen_issue_cmd(&pktgen_nfp, &host_cmd);
-        usleep(2*1000*1000);
+    for (;;) {
+        int poll;
+        struct nfp_ipc_event event;
+
+        poll = nfp_ipc_server_poll(pktgen_nfp.shm.nfp_ipc, 0, &event);
+        if (poll==NFP_IPC_EVENT_SHUTDOWN)
+            break;
+
+        if (poll==NFP_IPC_EVENT_MESSAGE) {
+            struct pktgen_ipc_msg *msg;
+            msg = (struct pktgen_ipc_msg *)&event.msg->data[0];
+            if (msg->reason == PKTGEN_IPC_SHUTDOWN) {
+                break;
+            } else if (msg->reason == PKTGEN_IPC_HOST_CMD) {
+                struct pktgen_host_cmd host_cmd;
+                host_cmd.pkt_cmd.cmd_type = PKTGEN_HOST_CMD_PKT;
+                host_cmd.pkt_cmd.base_delay = 1<<24;
+                host_cmd.pkt_cmd.total_pkts = 57; /* That is all the current file is!!! */
+                host_cmd.pkt_cmd.mu_base_s8 = pktgen_mem_get_mu(pktgen_nfp.mem_layout,0,0)>>8;
+                (void) pktgen_issue_cmd(&pktgen_nfp, &host_cmd);
+            } else if (msg->reason == PKTGEN_IPC_DUMP_BUFFERS) {
+                pcap_dump_pcie_buffers(&pktgen_nfp);
+            }
+        }
     }
 
-
-    usleep(5*100*1000);
     nfp_ipc_shutdown(pktgen_nfp.shm.nfp_ipc, 5*1000*1000);
-
-    if (0) {
-        pcap_dump_pcie_buffers(&pktgen_nfp);
-    }
 
     nfp_shutdown(pktgen_nfp.nfp);
     return 0;
 }
-
