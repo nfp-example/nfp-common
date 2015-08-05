@@ -99,6 +99,66 @@ timer_wait(struct timer *timer)
     return 0;
 }
     
+/** msg_queue_init
+ */
+static void
+msg_queue_init(struct nfp_ipc_msg_queue *msgq)
+{
+    msgq->read_ptr = 0;
+    msgq->write_ptr = 0;
+}
+
+/** msg_queue_empty
+ */
+static int
+msg_queue_empty(struct nfp_ipc_msg_queue *msgq)
+{
+    return (msgq->write_ptr == msgq->read_ptr);
+}
+
+/** msg_queue_full
+ */
+static int
+msg_queue_full(struct nfp_ipc_msg_queue *msgq)
+{
+    return (msgq->write_ptr-msgq->read_ptr) >= MSGS_PER_QUEUE;
+}
+
+/** msg_queue_get
+ */
+static int
+msg_queue_get(struct nfp_ipc_msg_queue *msgq)
+{
+    int ptr;
+
+    if (msg_queue_empty(msgq))
+        return -1;
+    ptr = (msgq->read_ptr % MSGS_PER_QUEUE);
+    msgq->read_ptr++;
+    return msgq->msg_ofs[ptr];
+}
+
+/** msg_queue_put
+ *
+ * Put a message on a queue
+ *
+ * @param msgq     Message queue to add message to
+ * @param msg_ofs  Offset in to message pool of message
+ *
+ */
+static int
+msg_queue_put(struct nfp_ipc_msg_queue *msgq, int msg_ofs)
+{
+    int ptr;
+
+    if (msg_queue_full(msgq))
+        return -1;
+    ptr = (msgq->write_ptr % MSGS_PER_QUEUE);
+    msgq->write_ptr++;
+    msgq->msg_ofs[ptr] = msg_ofs;
+    return 0;
+}
+
 /** is_alive
  */
 static int
@@ -198,7 +258,7 @@ alert_server(struct nfp_ipc *nfp_ipc, int client)
 static void
 alert_client(struct nfp_ipc *nfp_ipc, int client)
 {
-    nfp_ipc->clients[client].server_ticket += 1;
+    nfp_ipc->clients[client].doorbell_mask |= 1;
 }
 
 /** alert_clients
@@ -231,75 +291,6 @@ server_client_shutdown(struct nfp_ipc *nfp_ipc, int client)
     client_mask = ~(1UL << client);
     active_client_mask = &nfp_ipc->server.active_client_mask;
     (void) __atomic_fetch_and(active_client_mask, client_mask, __ATOMIC_ACQ_REL);
-}
-
-/** server_poll
- */
-static int
-server_poll(struct nfp_ipc *nfp_ipc, struct timer *timer, struct nfp_ipc_event *event)
-{
-    uint64_t client_mask;
-    int client;
-
-    //printf("Poll:Active %016llx\n",nfp_ipc->server.active_client_mask);
-    //printf("Poll:Doorbell %016llx\n",nfp_ipc->server.doorbell_mask);
-    //printf("Poll:Pending %016llx\n",nfp_ipc->server.pending_mask);
-    for (;;) {
-
-        client_mask = nfp_ipc->server.pending_mask;
-        if (client_mask == 0) {
-            uint64_t *doorbell_mask;
-            doorbell_mask = &nfp_ipc->server.doorbell_mask;
-            client_mask = __atomic_fetch_and(doorbell_mask, 0, __ATOMIC_ACQ_REL);
-        }
-        client_mask  &= nfp_ipc->server.active_client_mask;
-        nfp_ipc->server.pending_mask = client_mask;
-        if (client_mask == 0) {
-            if (timer_wait(timer) == NFP_IPC_EVENT_TIMEOUT)
-                return NFP_IPC_EVENT_TIMEOUT;
-        } else {
-            client = find_first_set(client_mask);
-            client_mask &= ~(1ULL << client);
-            nfp_ipc->server.pending_mask = client_mask;
-
-            if (nfp_ipc->clients[client].state == NFP_IPC_STATE_SHUTTING_DOWN) {
-                server_client_shutdown(nfp_ipc, client);
-                continue;
-            } else {
-                break;
-            }
-        }
-    }
-    event->event_type = 0;
-    event->nfp_ipc = nfp_ipc;
-    event->client = client;
-    return NFP_IPC_EVENT_MESSAGE;
-}
-
-/** client_poll
- */
-static int
-client_poll(struct nfp_ipc *nfp_ipc, int client, struct timer *timer, struct nfp_ipc_event *event)
-{
-    for (;;) {
-        if (nfp_ipc->server.state != NFP_IPC_STATE_ALIVE)
-            return NFP_IPC_EVENT_SHUTDOWN;
-
-        if (nfp_ipc->clients[client].state != NFP_IPC_STATE_ALIVE)
-            return NFP_IPC_EVENT_SHUTDOWN;
-
-        if (nfp_ipc->clients[client].server_ticket == nfp_ipc->clients[client].client_ticket) {
-            if (timer_wait(timer) == NFP_IPC_EVENT_TIMEOUT)
-                return NFP_IPC_EVENT_TIMEOUT;
-        } else {
-            nfp_ipc->clients[client].client_ticket += 1;
-            break;
-        }
-    }
-    event->event_type = 0;
-    event->nfp_ipc = nfp_ipc;
-    event->client = client;
-    return NFP_IPC_EVENT_MESSAGE;
 }
 
 /** msg_init
@@ -465,6 +456,98 @@ msg_check_heap(struct nfp_ipc *nfp_ipc)
     return total_errors;
 }
 
+/** msg_get_ofs
+ */
+static int
+msg_get_ofs(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg)
+{
+    //printf("Get ofset of %p.%p is %ld\n",nfp_ipc,nfp_ipc_msg,(char *)nfp_ipc_msg - (char *)&nfp_ipc->msg);
+    return (char *)nfp_ipc_msg - (char *)&nfp_ipc->msg;
+}
+
+/** msg_get_msg
+ */
+static struct nfp_ipc_msg *
+msg_get_msg(struct nfp_ipc *nfp_ipc, int msg_ofs)
+{
+    //printf("Get msg of %p.%d is %p\n",nfp_ipc,msg_ofs,(struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + msg_ofs));
+    return (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + msg_ofs);
+}
+
+/** server_poll
+ */
+static int
+server_poll(struct nfp_ipc *nfp_ipc, struct timer *timer, struct nfp_ipc_event *event)
+{
+    uint64_t client_mask;
+    int client;
+
+    //printf("Poll:Active %016llx\n",nfp_ipc->server.active_client_mask);
+    //printf("Poll:Doorbell %016llx\n",nfp_ipc->server.doorbell_mask);
+    //printf("Poll:Pending %016llx\n",nfp_ipc->server.pending_mask);
+    for (;;) {
+
+        client_mask = nfp_ipc->server.pending_mask;
+        if (client_mask == 0) {
+            uint64_t *doorbell_mask;
+            doorbell_mask = &nfp_ipc->server.doorbell_mask;
+            client_mask = __atomic_fetch_and(doorbell_mask, 0, __ATOMIC_ACQ_REL);
+        }
+        client_mask  &= nfp_ipc->server.active_client_mask;
+        nfp_ipc->server.pending_mask = client_mask;
+        if (client_mask == 0) {
+            if (timer_wait(timer) == NFP_IPC_EVENT_TIMEOUT)
+                return NFP_IPC_EVENT_TIMEOUT;
+        } else {
+            client = find_first_set(client_mask);
+            client_mask &= ~(1ULL << client);
+            nfp_ipc->server.pending_mask = client_mask;
+
+            if (nfp_ipc->clients[client].state == NFP_IPC_STATE_SHUTTING_DOWN) {
+                server_client_shutdown(nfp_ipc, client);
+                continue;
+            } else if (!msg_queue_empty(&nfp_ipc->clients[client].to_serverq)) {
+                break;
+            }
+        }
+    }
+    event->event_type = NFP_IPC_EVENT_MESSAGE;
+    event->nfp_ipc = nfp_ipc;
+    event->client = client;
+    event->msg = msg_get_msg(nfp_ipc,msg_queue_get(&nfp_ipc->clients[client].to_serverq));
+    return NFP_IPC_EVENT_MESSAGE;
+}
+
+/** client_poll
+ */
+static int
+client_poll(struct nfp_ipc *nfp_ipc, int client, struct timer *timer, struct nfp_ipc_event *event)
+{
+    for (;;) {
+        if (nfp_ipc->server.state != NFP_IPC_STATE_ALIVE)
+            return NFP_IPC_EVENT_SHUTDOWN;
+
+        if (nfp_ipc->clients[client].state != NFP_IPC_STATE_ALIVE)
+            return NFP_IPC_EVENT_SHUTDOWN;
+
+        if (nfp_ipc->clients[client].doorbell_mask==0) {
+            if (timer_wait(timer) == NFP_IPC_EVENT_TIMEOUT)
+                return NFP_IPC_EVENT_TIMEOUT;
+        } else {
+            nfp_ipc->clients[client].doorbell_mask = 0;
+            if (!msg_queue_empty(&nfp_ipc->clients[client].to_clientq)) {
+                nfp_ipc->clients[client].doorbell_mask = 1;
+                break;
+            }
+        }
+    }
+    event->event_type = NFP_IPC_EVENT_MESSAGE;
+    event->nfp_ipc = nfp_ipc;
+    event->client = client;
+    event->msg = msg_get_msg(nfp_ipc,msg_queue_get(&nfp_ipc->clients[client].to_clientq));
+    return NFP_IPC_EVENT_MESSAGE;
+}
+
 /** nfp_ipc_start_client
  *
  * Start a new client
@@ -526,6 +609,8 @@ nfp_ipc_stop_client(struct nfp_ipc *nfp_ipc, int client)
 void
 nfp_ipc_init(struct nfp_ipc *nfp_ipc, int max_clients)
 {
+    int i;
+
     memset(nfp_ipc, 0, sizeof(*nfp_ipc));
     if (max_clients >= NFP_IPC_MAX_CLIENTS)
         max_clients = NFP_IPC_MAX_CLIENTS;
@@ -533,6 +618,12 @@ nfp_ipc_init(struct nfp_ipc *nfp_ipc, int max_clients)
     nfp_ipc->server.client_mask = (2ULL<<(max_clients-1)) - 1;
     nfp_ipc->server.state = NFP_IPC_STATE_ALIVE;
 
+    for (i=0; i<max_clients; i++) {
+        nfp_ipc->clients[i].state = NFP_IPC_STATE_INIT;
+        nfp_ipc->clients[i].doorbell_mask = 0;
+        msg_queue_init(&nfp_ipc->clients[i].to_clientq);
+        msg_queue_init(&nfp_ipc->clients[i].to_serverq);
+    }
     msg_init(nfp_ipc);
 }
 
@@ -736,6 +827,38 @@ nfp_ipc_free_msg(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg)
     msg_release_block(nfp_ipc);
 
     if (0) msg_check_heap(nfp_ipc);
+}
+
+/** nfp_ipc_server_send_msg
+ */
+int
+nfp_ipc_server_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg *msg)
+{
+    struct nfp_ipc_msg_queue *msgq;    
+    int rc;
+
+    msgq = &(nfp_ipc->clients[client].to_clientq);
+    rc = msg_queue_put(msgq, msg_get_ofs(nfp_ipc, msg));
+    if (rc == 0) {
+        alert_server(nfp_ipc, client);
+    }
+    return rc;
+}
+
+/** nfp_ipc_client_send_msg
+ */
+int
+nfp_ipc_client_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg *msg)
+{
+    struct nfp_ipc_msg_queue *msgq;
+    int rc;
+    
+    msgq = &(nfp_ipc->clients[client].to_serverq);
+    rc = msg_queue_put(msgq, msg_get_ofs(nfp_ipc, msg));
+    if (rc == 0) {
+        alert_server(nfp_ipc, client);
+    }
+    return rc;
 }
 
 /** nfp_ipc_server_poll

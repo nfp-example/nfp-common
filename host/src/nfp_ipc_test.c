@@ -145,6 +145,74 @@ test_mem_simple(int iter, int max_blocks, int size_base, int size_range)
     return err;
 }
 
+/** test_msg_simple
+ **/
+static int
+test_msg_simple(int iter, int max_clients)
+{
+    int i;
+    struct nfp_ipc nfp_ipc;
+    struct nfp_ipc_event event;
+    struct nfp_ipc_msg *msg[64];
+    int size;
+    int err;
+
+    nfp_ipc_init(&nfp_ipc, max_clients);
+
+    for (i=0; i<max_clients; i++) {
+        nfp_ipc_start_client(&nfp_ipc);
+        msg[i] = NULL;
+    }
+    for (; iter > 0; iter--) {
+        i = get_rand(max_clients);
+        if (!msg[i]) {
+            size = 64;
+            msg[i] = nfp_ipc_alloc_msg(&nfp_ipc, size);
+            if (nfp_ipc_client_send_msg(&nfp_ipc, i, msg[i])!=0) {
+                printf("Adding message %d did not succeed but it should (max 1 queue entry per client in this use case)\n",i);
+                return 100;
+            }
+        } else {
+            if (nfp_ipc_server_poll(&nfp_ipc, 0, &event)!=NFP_IPC_EVENT_MESSAGE) {
+                printf("Poll of server did not yield message but one should have been waiting\n");
+                return 100;
+            }
+            i = event.client;
+            //printf("Received message %d succeeded\n",i);
+            if (msg[i]!=event.msg) {
+                printf("Message from poll %p does not match that expected for the client %p\n",
+                       event.msg,
+                       msg[i] );
+                return 100;
+            }
+            nfp_ipc_free_msg(&nfp_ipc, msg[i]);
+            msg[i] = NULL;
+        }
+    }
+
+    while (nfp_ipc_server_poll(&nfp_ipc, 0, &event)==NFP_IPC_EVENT_MESSAGE) {
+            i = event.client;
+            if (msg[i]!=event.msg) {
+                printf("Message from poll %p does not match that expected for the client %p\n",
+                       event.msg,
+                       msg[i] );
+                return 100;
+            }
+            nfp_ipc_free_msg(&nfp_ipc, msg[i]);
+            msg[i] = NULL;
+    }
+    for (i=0; i<max_clients; i++) {
+        if (msg[i]) {
+            nfp_ipc_free_msg(&nfp_ipc, msg[i]);
+        }
+        nfp_ipc_stop_client(&nfp_ipc, i);
+    }
+
+    err = nfp_ipc_shutdown(&nfp_ipc, 1000);
+
+    return err;
+}
+
 /** TEST_RUN
  */
 #define TEST_RUN(msg,x)                    \
@@ -162,6 +230,9 @@ test_mem_simple(int iter, int max_blocks, int size_base, int size_range)
 extern int
 main(int argc, char **argv)
 {
+    TEST_RUN("Simple message test of 1 clients (1 msg per client)",test_msg_simple(150000,1));
+    TEST_RUN("Simple message test of 64 client (1 msg per client)",test_msg_simple(150000,64));
+
     TEST_RUN("Simple memory test ",test_mem_simple(10000,64,16,0));
     TEST_RUN("Simple memory test of different sizes ",test_mem_simple(150000,64,16,128));
     TEST_RUN("Simple memory test of different sizes 2 ",test_mem_simple(150000,64,16,48));

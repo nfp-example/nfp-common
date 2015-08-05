@@ -24,6 +24,7 @@
 /** Defines
  */
 #define NFP_IPC_MAX_CLIENTS 64
+#define MSGS_PER_QUEUE 8
 
 /** NFP_IPC_STATE
  */
@@ -56,13 +57,22 @@ struct nfp_ipc_server_data {
     char pad[16];
 };
 
+/** struct nfp_ipc_msg_queue
+ */
+struct nfp_ipc_msg_queue
+{
+    int write_ptr;
+    int read_ptr;
+    int msg_ofs[MSGS_PER_QUEUE];
+};
+
 /** struct nfp_ipc_client_data
  */
 struct nfp_ipc_client_data {
     int     state;
-    int     server_ticket;
-    int     client_ticket;
-    char pad[52];
+    int     doorbell_mask; /* Server sets bit in here to wake client */
+    struct  nfp_ipc_msg_queue to_serverq;
+    struct  nfp_ipc_msg_queue to_clientq;
 };
 
 /** struct nfp_ipc_msg_data_hdr
@@ -109,6 +119,7 @@ struct nfp_ipc_event {
     struct nfp_ipc *nfp_ipc;
     int event_type;
     int client;
+    struct nfp_ipc_msg *msg;
 };
 
 /** nfp_ipc_start_client
@@ -150,6 +161,14 @@ struct nfp_ipc_msg *nfp_ipc_alloc_msg(struct nfp_ipc *nfp_ipc, int size);
 /** nfp_ipc_free_msg
  */
 void nfp_ipc_free_msg(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg);
+
+/** nfp_ipc_server_send_msg
+ */
+int nfp_ipc_server_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg *msg);
+
+/** nfp_ipc_client_send_msg
+ */
+int nfp_ipc_client_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg *msg);
 
 /** nfp_ipc_server_poll
  */
