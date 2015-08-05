@@ -29,15 +29,7 @@
 #include "nfp_ipc.h"
 #include "firmware/pktgen.h"
 #include "firmware/pcap.h"
-
-enum {
-    PKTGEN_IPC_SHUTDOWN,
-    PKTGEN_IPC_HOST_CMD,
-    PKTGEN_IPC_DUMP_BUFFERS
-};
-struct pktgen_ipc_msg {
-    int reason;
-};
+#include "pktgencap.h"
 
 /** Defines
  */
