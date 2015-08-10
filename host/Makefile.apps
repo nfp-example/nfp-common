@@ -50,6 +50,7 @@ $(HOST_BIN_DIR)/pktgencap_test:
 
 pktgencap_test: $(HOST_BIN_DIR)/pktgencap_test
 
+$(HOST_BIN_DIR)/nfp_ipc_test: $(HOST_BUILD_DIR)/nfp_dummy.o
 $(HOST_BIN_DIR)/nfp_ipc_test: $(HOST_BUILD_DIR)/nfp_ipc.o
 $(HOST_BIN_DIR)/nfp_ipc_test: $(HOST_BUILD_DIR)/nfp_ipc_test.o
 

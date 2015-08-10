@@ -562,7 +562,7 @@ client_poll(struct nfp_ipc *nfp_ipc, int client, struct timer *timer, struct nfp
  *
  */
 int
-nfp_ipc_start_client(struct nfp_ipc *nfp_ipc, struct nfp_ipc_client_desc *desc)
+nfp_ipc_start_client(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_client_desc *desc)
 {
     int client;
 
@@ -615,7 +615,7 @@ nfp_ipc_size(void)
 /** nfp_ipc_init
  */
 void
-nfp_ipc_init(struct nfp_ipc *nfp_ipc, struct nfp_ipc_server_desc *desc)
+nfp_ipc_init(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_server_desc *desc)
 {
     int max_clients;
     int i;
