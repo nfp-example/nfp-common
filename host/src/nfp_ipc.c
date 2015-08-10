@@ -562,7 +562,7 @@ client_poll(struct nfp_ipc *nfp_ipc, int client, struct timer *timer, struct nfp
  *
  */
 int
-nfp_ipc_start_client(struct nfp_ipc *nfp_ipc)
+nfp_ipc_start_client(struct nfp_ipc *nfp_ipc, struct nfp_ipc_client_desc *desc)
 {
     int client;
 
@@ -604,13 +604,23 @@ nfp_ipc_stop_client(struct nfp_ipc *nfp_ipc, int client)
     //printf("Stop:Active %016llx\n",nfp_ipc->server.active_client_mask);
 }
 
+/** nfp_ipc_size
+ */
+int
+nfp_ipc_size(void)
+{
+    return sizeof(struct nfp_ipc);
+}
+
 /** nfp_ipc_init
  */
 void
-nfp_ipc_init(struct nfp_ipc *nfp_ipc, int max_clients)
+nfp_ipc_init(struct nfp_ipc *nfp_ipc, struct nfp_ipc_server_desc *desc)
 {
+    int max_clients;
     int i;
 
+    max_clients = desc->max_clients;
     memset(nfp_ipc, 0, sizeof(*nfp_ipc));
     if (max_clients >= NFP_IPC_MAX_CLIENTS)
         max_clients = NFP_IPC_MAX_CLIENTS;

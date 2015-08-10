@@ -105,6 +105,21 @@ struct nfp_ipc_msg_data {
     char   data[8192-sizeof(struct nfp_ipc_msg_data_hdr)];
 };
 
+/** struct nfp_ipc_client_desc
+ */
+struct nfp_ipc_client_desc {
+    int version;
+    const char *name;
+};
+
+/** struct nfp_ipc_server_desc
+ */
+struct nfp_ipc_server_desc {
+    int version;
+    int max_clients;
+    const char *name;
+};
+
 /** struct nfp_ipc
  */
 struct nfp_ipc {
@@ -135,7 +150,7 @@ struct nfp_ipc_event {
  * If all clients are busy, of the nfp_ipc is shutting down, then fail.
  *
  */
-int nfp_ipc_start_client(struct nfp_ipc *nfp_ipc);
+int nfp_ipc_start_client(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_client_desc *desc);
 
 /** nfp_ipc_stop_client
  *
@@ -146,9 +161,13 @@ int nfp_ipc_start_client(struct nfp_ipc *nfp_ipc);
  */
 void nfp_ipc_stop_client(struct nfp_ipc *nfp_ipc, int client);
 
+/** nfp_ipc_size
+ */
+int nfp_ipc_size(void);
+
 /** nfp_ipc_init
  */
-void nfp_ipc_init(struct nfp_ipc *nfp_ipc, int max_clients);
+void nfp_ipc_init(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_server_desc *desc);
 
 /** nfp_ipc_shutdown
  */

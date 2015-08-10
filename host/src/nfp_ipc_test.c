@@ -40,22 +40,26 @@ get_rand(int max)
 static int
 test_simple(int num_clients)
 {
-    struct nfp_ipc nfp_ipc;
+    struct nfp_ipc *nfp_ipc;
+    struct nfp_ipc_server_desc server_desc;
+    struct nfp_ipc_client_desc client_desc;
     int err;
     int i;
     int clients[64];
 
-    nfp_ipc_init(&nfp_ipc, num_clients);
+    server_desc.max_clients = num_clients;
+    nfp_ipc = malloc(nfp_ipc_size());
+    nfp_ipc_init(nfp_ipc, &server_desc);
     for (i=0; i<num_clients; i++) {
-        clients[i] = nfp_ipc_start_client(&nfp_ipc);
+        clients[i] = nfp_ipc_start_client(nfp_ipc, &client_desc);
         if (clients[i]<0)
             return i+100;
     }
     for (i=0; i<num_clients; i++) {
-        nfp_ipc_stop_client(&nfp_ipc, clients[i]);
+        nfp_ipc_stop_client(nfp_ipc, clients[i]);
     }
-    err = nfp_ipc_shutdown(&nfp_ipc, 1000);
-
+    err = nfp_ipc_shutdown(nfp_ipc, 1000);
+    free(nfp_ipc);
     return err;
 }
 
@@ -64,20 +68,24 @@ test_simple(int num_clients)
 static int
 test_start_stop(int num_clients, int iter)
 {
-    struct nfp_ipc nfp_ipc;
+    struct nfp_ipc *nfp_ipc;
+    struct nfp_ipc_server_desc server_desc;
+    struct nfp_ipc_client_desc client_desc;
     int err;
     int i;
     int clients[64];
     struct nfp_ipc_event event;
 
-    nfp_ipc_init(&nfp_ipc, num_clients);
+    server_desc.max_clients = num_clients;
+    nfp_ipc = malloc(nfp_ipc_size());
+    nfp_ipc_init(nfp_ipc, &server_desc);
     for (i=0; i<num_clients; i++) {
         clients[i] = -1;
     }
     for (; iter > 0; iter--) {
         i = get_rand(num_clients);
         if (clients[i] < 0) {
-            clients[i] = nfp_ipc_start_client(&nfp_ipc);
+            clients[i] = nfp_ipc_start_client(nfp_ipc, &client_desc);
             //printf("Started %d:%d\n",i,clients[i]);
             if (clients[i]<0) {
                 for (i=0; i<num_clients; i++) {
@@ -87,19 +95,19 @@ test_start_stop(int num_clients, int iter)
                 return 100;
             }
         } else {
-            nfp_ipc_stop_client(&nfp_ipc, clients[i]);
+            nfp_ipc_stop_client(nfp_ipc, clients[i]);
             //printf("Stopped %d:%d\n",i,clients[i]);
             clients[i] = -1;
         }
-        nfp_ipc_server_poll(&nfp_ipc, 0, &event);
+        nfp_ipc_server_poll(nfp_ipc, 0, &event);
     }
     for (i=0; i<num_clients; i++) {
         if (clients[i] >= 0) {
-            nfp_ipc_stop_client(&nfp_ipc, clients[i]);
+            nfp_ipc_stop_client(nfp_ipc, clients[i]);
         }
     }
-    err = nfp_ipc_shutdown(&nfp_ipc, 1000);
-
+    err = nfp_ipc_shutdown(nfp_ipc, 1000);
+    free(nfp_ipc);
     return err;
 }
 
@@ -109,12 +117,16 @@ static int
 test_mem_simple(int iter, int max_blocks, int size_base, int size_range)
 {
     int i;
-    struct nfp_ipc nfp_ipc;
+    struct nfp_ipc *nfp_ipc;
+    struct nfp_ipc_server_desc server_desc;
     struct nfp_ipc_msg *msg[64];
     int size;
     int err;
 
-    nfp_ipc_init(&nfp_ipc, 1);
+    server_desc.max_clients = 1;
+
+    nfp_ipc = malloc(nfp_ipc_size());
+    nfp_ipc_init(nfp_ipc, &server_desc);
 
     for (i=0; i<max_blocks; i++) {
         msg[i] = NULL;
@@ -123,24 +135,24 @@ test_mem_simple(int iter, int max_blocks, int size_base, int size_range)
         i = get_rand(max_blocks);
         if (!msg[i]) {
             size = size_base + get_rand(size_range);
-            msg[i] = nfp_ipc_alloc_msg(&nfp_ipc, size);
+            msg[i] = nfp_ipc_alloc_msg(nfp_ipc, size);
             if (!msg[i]) {
                 printf("Failed to allocate blah\n");
                 return 100;
             }
         } else {
-            nfp_ipc_free_msg(&nfp_ipc, msg[i]);
+            nfp_ipc_free_msg(nfp_ipc, msg[i]);
             msg[i] = NULL;
         }
     }
 
     for (i=0; i<max_blocks; i++) {
         if (msg[i]) {
-            nfp_ipc_free_msg(&nfp_ipc, msg[i]);
+            nfp_ipc_free_msg(nfp_ipc, msg[i]);
         }
     }
 
-    err = nfp_ipc_shutdown(&nfp_ipc, 1000);
+    err = nfp_ipc_shutdown(nfp_ipc, 1000);
 
     return err;
 }
@@ -151,29 +163,34 @@ static int
 test_msg_simple(int iter, int max_clients)
 {
     int i;
-    struct nfp_ipc nfp_ipc;
+    struct nfp_ipc *nfp_ipc;
+    struct nfp_ipc_client_desc client_desc;
+    struct nfp_ipc_server_desc server_desc;
     struct nfp_ipc_event event;
     struct nfp_ipc_msg *msg[64];
     int size;
     int err;
 
-    nfp_ipc_init(&nfp_ipc, max_clients);
+    server_desc.max_clients = max_clients;
+
+    nfp_ipc = malloc(nfp_ipc_size());
+    nfp_ipc_init(nfp_ipc, &server_desc);
 
     for (i=0; i<max_clients; i++) {
-        nfp_ipc_start_client(&nfp_ipc);
+        nfp_ipc_start_client(nfp_ipc, &client_desc);
         msg[i] = NULL;
     }
     for (; iter > 0; iter--) {
         i = get_rand(max_clients);
         if (!msg[i]) {
             size = 64;
-            msg[i] = nfp_ipc_alloc_msg(&nfp_ipc, size);
-            if (nfp_ipc_client_send_msg(&nfp_ipc, i, msg[i])!=0) {
+            msg[i] = nfp_ipc_alloc_msg(nfp_ipc, size);
+            if (nfp_ipc_client_send_msg(nfp_ipc, i, msg[i])!=0) {
                 printf("Adding message %d did not succeed but it should (max 1 queue entry per client in this use case)\n",i);
                 return 100;
             }
         } else {
-            if (nfp_ipc_server_poll(&nfp_ipc, 0, &event)!=NFP_IPC_EVENT_MESSAGE) {
+            if (nfp_ipc_server_poll(nfp_ipc, 0, &event)!=NFP_IPC_EVENT_MESSAGE) {
                 printf("Poll of server did not yield message but one should have been waiting\n");
                 return 100;
             }
@@ -185,12 +202,12 @@ test_msg_simple(int iter, int max_clients)
                        msg[i] );
                 return 100;
             }
-            nfp_ipc_free_msg(&nfp_ipc, msg[i]);
+            nfp_ipc_free_msg(nfp_ipc, msg[i]);
             msg[i] = NULL;
         }
     }
 
-    while (nfp_ipc_server_poll(&nfp_ipc, 0, &event)==NFP_IPC_EVENT_MESSAGE) {
+    while (nfp_ipc_server_poll(nfp_ipc, 0, &event)==NFP_IPC_EVENT_MESSAGE) {
             i = event.client;
             if (msg[i]!=event.msg) {
                 printf("Message from poll %p does not match that expected for the client %p\n",
@@ -198,17 +215,18 @@ test_msg_simple(int iter, int max_clients)
                        msg[i] );
                 return 100;
             }
-            nfp_ipc_free_msg(&nfp_ipc, msg[i]);
+            nfp_ipc_free_msg(nfp_ipc, msg[i]);
             msg[i] = NULL;
     }
     for (i=0; i<max_clients; i++) {
         if (msg[i]) {
-            nfp_ipc_free_msg(&nfp_ipc, msg[i]);
+            nfp_ipc_free_msg(nfp_ipc, msg[i]);
         }
-        nfp_ipc_stop_client(&nfp_ipc, i);
+        nfp_ipc_stop_client(nfp_ipc, i);
     }
 
-    err = nfp_ipc_shutdown(&nfp_ipc, 1000);
+    err = nfp_ipc_shutdown(nfp_ipc, 1000);
+    free(nfp_ipc);
 
     return err;
 }
