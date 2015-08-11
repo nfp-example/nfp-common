@@ -332,6 +332,10 @@ nfp_shm_close(struct nfp *nfp)
     if (nfp->shm.data != NULL) {
         shmdt(nfp->shm.data);
         nfp->shm.data = NULL;
+        if (nfp->shm.file != NULL) {
+            struct shmid_ds shmid_ds;
+            shmctl(nfp->shm.id, IPC_RMID, &shmid_ds);
+        }
     }
     if (nfp->shm.file != NULL) {
         fclose(nfp->shm.file);

@@ -53,4 +53,5 @@ enum {
  */
 struct pktgen_ipc_msg {
     int reason;
+    int ack;
 };

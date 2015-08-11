@@ -40,6 +40,12 @@ help:
 	@echo "To build some things without a real NFP library"
 	@echo "  make DUMMY_NFP=y"
 	@echo ""
+	@echo "To find shared memory segments"
+	@echo "  ipcs"
+	@echo ""
+	@echo "To remove a shared memory segment"
+	@echo "  ipcrm -m <shmid>"
+	@echo ""
 
 include $(FIRMWARE_DIR)/Makefile
 include $(HOST_DIR)/Makefile

@@ -524,6 +524,8 @@ main(int argc, char **argv)
             struct pktgen_ipc_msg *msg;
             msg = (struct pktgen_ipc_msg *)&event.msg->data[0];
             if (msg->reason == PKTGEN_IPC_SHUTDOWN) {
+                msg->ack = 1;
+                nfp_ipc_server_send_msg(pktgen_nfp.shm.nfp_ipc, event.client, event.msg);
                 break;
             } else if (msg->reason == PKTGEN_IPC_HOST_CMD) {
                 struct pktgen_host_cmd host_cmd;
@@ -534,7 +536,10 @@ main(int argc, char **argv)
                 (void) pktgen_issue_cmd(&pktgen_nfp, &host_cmd);
             } else if (msg->reason == PKTGEN_IPC_DUMP_BUFFERS) {
                 pcap_dump_pcie_buffers(&pktgen_nfp);
+            } else {
             }
+            msg->ack = 1;
+            nfp_ipc_server_send_msg(pktgen_nfp.shm.nfp_ipc, event.client, event.msg);
         }
     }
 

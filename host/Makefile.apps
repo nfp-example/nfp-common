@@ -42,6 +42,14 @@ $(HOST_BIN_DIR)/pktgencap:
 
 pktgencap: $(HOST_BIN_DIR)/pktgencap
 
+$(HOST_BIN_DIR)/pktgencap_ctl: $(HOST_BUILD_DIR)/nfp_ipc.o
+$(HOST_BIN_DIR)/pktgencap_ctl: $(HOST_BUILD_DIR)/pktgencap_ctl.o
+
+$(HOST_BIN_DIR)/pktgencap_ctl:
+	$(LD) -o $(HOST_BIN_DIR)/pktgencap_ctl $(HOST_BUILD_DIR)/pktgencap_ctl.o $(HOST_BUILD_DIR)/nfp_ipc.o $(HOST_BUILD_DIR)/nfp_support.o $(LIBS)
+
+pktgencap_ctl: $(HOST_BIN_DIR)/pktgencap_ctl
+
 $(HOST_BIN_DIR)/pktgencap_test: $(HOST_BUILD_DIR)/nfp_ipc.o
 $(HOST_BIN_DIR)/pktgencap_test: $(HOST_BUILD_DIR)/pktgencap_test.o
 
@@ -64,7 +72,7 @@ clean_host__nfp_ipc_test:
 
 clean_host: clean_host__nfp_ipc_test
 
-all_host: pktgencap pktgencap_test nfp_ipc_test
+all_host: pktgencap pktgencap_ctl pktgencap_test nfp_ipc_test
 
 clean_host: clean_host__pktgencap
 
