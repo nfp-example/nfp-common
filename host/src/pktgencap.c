@@ -508,7 +508,9 @@ main(int argc, char **argv)
         return 4;
     }
 
-    nfp_ipc_init(pktgen_nfp.shm.nfp_ipc, MAX_NFP_IPC_CLIENTS);
+    struct nfp_ipc_server_desc nfp_ipc_server_desc;
+    nfp_ipc_server_desc.max_clients = MAX_NFP_IPC_CLIENTS;
+    nfp_ipc_init(pktgen_nfp.shm.nfp_ipc, &nfp_ipc_server_desc);
 
     for (;;) {
         int poll;

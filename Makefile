@@ -29,6 +29,18 @@ ALL:
 
 clean:
 
+help:
+	@echo "To make for a Starfighter, use:"
+	@echo "  make CHIP=NFP-624A-0C-A0"
+	@echo "or similar"
+	@echo ""
+	@echo "If the tools are not installed in /opt/netronome"
+	@echo "  make NETRONOME=/path/to/tools"
+	@echo ""
+	@echo "To build some things without a real NFP library"
+	@echo "  make DUMMY_NFP=y"
+	@echo ""
+
 include $(FIRMWARE_DIR)/Makefile
 include $(HOST_DIR)/Makefile
 include $(SCRIPTS_DIR)/Makefile
