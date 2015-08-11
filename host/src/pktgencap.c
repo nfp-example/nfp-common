@@ -530,8 +530,8 @@ main(int argc, char **argv)
             } else if (msg->reason == PKTGEN_IPC_HOST_CMD) {
                 struct pktgen_host_cmd host_cmd;
                 host_cmd.pkt_cmd.cmd_type = PKTGEN_HOST_CMD_PKT;
-                host_cmd.pkt_cmd.base_delay = 1<<24;
-                host_cmd.pkt_cmd.total_pkts = 57; /* That is all the current file is!!! */
+                host_cmd.pkt_cmd.base_delay = msg->generate.base_delay;
+                host_cmd.pkt_cmd.total_pkts = msg->generate.total_pkts;
                 host_cmd.pkt_cmd.mu_base_s8 = pktgen_mem_get_mu(pktgen_nfp.mem_layout,0,0)>>8;
                 (void) pktgen_issue_cmd(&pktgen_nfp, &host_cmd);
             } else if (msg->reason == PKTGEN_IPC_DUMP_BUFFERS) {

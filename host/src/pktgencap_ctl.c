@@ -119,6 +119,12 @@ main(int argc, char **argv)
             pktgen_msg->reason = PKTGEN_IPC_DUMP_BUFFERS;
             pktgen_msg->ack = 0;
             nfp_ipc_client_send_msg(pktgen_nfp.shm.nfp_ipc, nfp_ipc_client, msg);
+        } else if (!strcmp(argv[i],"gen")) {
+            pktgen_msg->reason = PKTGEN_IPC_HOST_CMD;
+            pktgen_msg->ack = 0;
+            pktgen_msg->generate.base_delay = 1<<24;
+            pktgen_msg->generate.total_pkts = 57;
+            nfp_ipc_client_send_msg(pktgen_nfp.shm.nfp_ipc, nfp_ipc_client, msg);
         } else {
             usage();
             break;

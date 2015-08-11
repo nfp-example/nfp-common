@@ -49,9 +49,19 @@ enum {
     PKTGEN_IPC_DUMP_BUFFERS
 };
 
-/** pktgen_ipc_msg
+/** struct msg_generate
+ */
+struct msg_generate {
+    uint64_t base_delay;
+    int      total_pkts;
+};
+
+/** struct pktgen_ipc_msg
  */
 struct pktgen_ipc_msg {
     int reason;
     int ack;
+    union {
+        struct msg_generate generate;
+    };
 };
