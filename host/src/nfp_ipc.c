@@ -29,6 +29,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <time.h>
+#include <inttypes.h>
 
 /** struct timer
  */
@@ -482,9 +483,9 @@ server_poll(struct nfp_ipc *nfp_ipc, struct timer *timer, struct nfp_ipc_event *
     uint64_t client_mask;
     int client;
 
-    //printf("Poll:Active %016llx\n",nfp_ipc->server.active_client_mask);
-    //printf("Poll:Doorbell %016llx\n",nfp_ipc->server.doorbell_mask);
-    //printf("Poll:Pending %016llx\n",nfp_ipc->server.pending_mask);
+    //printf("Poll:Active   %016"PRIx64"\n",nfp_ipc->server.active_client_mask);
+    //printf("Poll:Doorbell %016"PRIx64"\n",nfp_ipc->server.doorbell_mask);
+    //printf("Poll:Pending  %016"PRIx64"\n",nfp_ipc->server.pending_mask);
     for (;;) {
 
         client_mask = nfp_ipc->server.pending_mask;
@@ -495,6 +496,7 @@ server_poll(struct nfp_ipc *nfp_ipc, struct timer *timer, struct nfp_ipc_event *
         }
         client_mask  &= nfp_ipc->server.active_client_mask;
         nfp_ipc->server.pending_mask = client_mask;
+        //printf("Poll:Client   %016"PRIx64"\n",client_mask);
         if (client_mask == 0) {
             if (timer_wait(timer) == NFP_IPC_EVENT_TIMEOUT)
                 return NFP_IPC_EVENT_TIMEOUT;
@@ -849,8 +851,9 @@ nfp_ipc_server_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg 
 
     msgq = &(nfp_ipc->clients[client].to_clientq);
     rc = msg_queue_put(msgq, msg_get_ofs(nfp_ipc, msg));
+    //printf("Send message to client %d msg %p yields rc %d\n",client,msg,rc);
     if (rc == 0) {
-        alert_server(nfp_ipc, client);
+        alert_client(nfp_ipc, client);
     }
     return rc;
 }

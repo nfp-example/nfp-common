@@ -231,6 +231,104 @@ test_msg_simple(int iter, int max_clients)
     return err;
 }
 
+/** test_msg_bounce
+ **/
+static int
+test_msg_bounce(int iter, int max_clients)
+{
+    int i;
+    struct nfp_ipc *nfp_ipc;
+    struct nfp_ipc_client_desc client_desc;
+    struct nfp_ipc_server_desc server_desc;
+    struct nfp_ipc_event event;
+    struct nfp_ipc_msg *msg[64];
+    int msg_state[64];
+    int size;
+    int err;
+
+    server_desc.max_clients = max_clients;
+
+    nfp_ipc = malloc(nfp_ipc_size());
+    nfp_ipc_init(nfp_ipc, &server_desc);
+
+    for (i=0; i<max_clients; i++) {
+        nfp_ipc_start_client(nfp_ipc, &client_desc);
+        msg[i] = NULL;
+        msg_state[i] = 0;
+    }
+    for (; iter > 0; iter--) {
+        i = get_rand(max_clients);
+        if (msg_state[i]==0) {
+            size = 64;
+            msg[i] = nfp_ipc_alloc_msg(nfp_ipc, size);
+            if (nfp_ipc_client_send_msg(nfp_ipc, i, msg[i])!=0) {
+                printf("Adding message %d did not succeed but it should (max 1 queue entry per client in this use case)\n",i);
+                return 100;
+            }
+            msg_state[i] = 1;
+        } else if (msg_state[i]==1) {
+            if (nfp_ipc_server_poll(nfp_ipc, 0, &event)!=NFP_IPC_EVENT_MESSAGE) {
+                printf("Poll of server did not yield message but one should have been waiting\n");
+                return 100;
+            }
+            i = event.client;
+            if (msg[i]!=event.msg) {
+                printf("Message from poll %p does not match that expected for the client %p\n",
+                       event.msg,
+                       msg[i] );
+                return 100;
+            }
+            if (nfp_ipc_server_send_msg(nfp_ipc, i, msg[i])!=0) {
+                printf("Adding message %d to client did not succeed but it should (max 1 queue entry per client in this use case)\n",i);
+                return 100;
+            }
+            msg_state[i] = 2;
+        } else {
+            if (nfp_ipc_client_poll(nfp_ipc, i, 0, &event)!=NFP_IPC_EVENT_MESSAGE) {
+                printf("Poll of client did not yield message but one should have been waiting\n");
+                return 100;
+            }
+            if (msg[i]!=event.msg) {
+                printf("Message from poll %p does not match that expected for the client %p\n",
+                       event.msg,
+                       msg[i] );
+                return 100;
+            }
+            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            msg[i] = NULL;
+            msg_state[i] = 0;
+        }
+    }
+
+    while (nfp_ipc_server_poll(nfp_ipc, 0, &event)==NFP_IPC_EVENT_MESSAGE) {
+            i = event.client;
+            if (msg[i]!=event.msg) {
+                printf("Message from poll %p does not match that expected for the client %p\n",
+                       event.msg,
+                       msg[i] );
+                return 100;
+            }
+            // check msg_state[i]==1
+            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            msg[i] = NULL;
+    }
+    for (i=0; i<max_clients; i++) {
+        if (msg[i]) {
+            if (msg_state[i]!=2) {
+                printf("Message state expected to be 2 if msg[i] exists and not for server\n");
+                return 100;
+            }
+            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+        }
+        nfp_ipc_stop_client(nfp_ipc, i);
+    }
+
+    err = nfp_ipc_shutdown(nfp_ipc, 1000);
+    free(nfp_ipc);
+
+    return err;
+}
+
 /** TEST_RUN
  */
 #define TEST_RUN(msg,x)                    \
@@ -250,6 +348,9 @@ main(int argc, char **argv)
 {
     TEST_RUN("Simple message test of 1 clients (1 msg per client)",test_msg_simple(150000,1));
     TEST_RUN("Simple message test of 64 client (1 msg per client)",test_msg_simple(150000,64));
+
+    TEST_RUN("Bounce message test of 1 clients (1 msg per client)",test_msg_bounce(150000,1));
+    TEST_RUN("Bounce message test of 1 clients (1 msg per client)",test_msg_bounce(150000,64));
 
     TEST_RUN("Simple memory test ",test_mem_simple(10000,64,16,0));
     TEST_RUN("Simple memory test of different sizes ",test_mem_simple(150000,64,16,128));

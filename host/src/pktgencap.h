@@ -46,7 +46,8 @@
 enum {
     PKTGEN_IPC_SHUTDOWN,
     PKTGEN_IPC_HOST_CMD,
-    PKTGEN_IPC_DUMP_BUFFERS
+    PKTGEN_IPC_DUMP_BUFFERS,
+    PKTGEN_IPC_LOAD,
 };
 
 /** struct msg_generate

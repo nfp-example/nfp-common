@@ -470,24 +470,17 @@ extern int
 main(int argc, char **argv)
 {
     struct pktgen_nfp pktgen_nfp;
+    int pktgen_loaded;
 
     if (pktgen_load_nfp(&pktgen_nfp, 0, "firmware/nffw/pktgencap.nffw")!=0) {
         fprintf(stderr,"Failed to open and load up NFP with ME code\n");
         return 4;
     }
-    emem0_base  = ((pktgen_nfp.pktgen_emu_buffer0.cpp_id&0xff)-20L) << 35;
-    emem0_base |= pktgen_nfp.pktgen_emu_buffer0.addr;
 
     pktgen_nfp.mem_layout = pktgen_mem_alloc(&pktgen_nfp,
                                              mem_alloc_callback,
                                              mem_load_callback,
                                              NULL );
-    if (pktgen_mem_open_directory(pktgen_nfp.mem_layout,
-                                  "../pktgen_data/") != 0) {
-        fprintf(stderr,"Failed to load packet generation data\n");
-        return 4;
-    }
-
     if (pktgen_alloc_shm(&pktgen_nfp)!=0) {
         fprintf(stderr,"Failed to allocate memory\n");
         return 4;
@@ -503,10 +496,7 @@ main(int argc, char **argv)
         return 4;
     }
 
-    if (pktgen_mem_load(pktgen_nfp.mem_layout) != 0) {
-        fprintf(stderr,"Failed to load generator memory\n");
-        return 4;
-    }
+    pktgen_loaded = 0;
 
     struct nfp_ipc_server_desc nfp_ipc_server_desc;
     nfp_ipc_server_desc.max_clients = MAX_NFP_IPC_CLIENTS;
@@ -527,18 +517,39 @@ main(int argc, char **argv)
                 msg->ack = 1;
                 nfp_ipc_server_send_msg(pktgen_nfp.shm.nfp_ipc, event.client, event.msg);
                 break;
+            } else if (msg->reason == PKTGEN_IPC_LOAD) {
+                pktgen_loaded = 0;
+                emem0_base  = ((pktgen_nfp.pktgen_emu_buffer0.cpp_id&0xff)-20L) << 35;
+                emem0_base |= pktgen_nfp.pktgen_emu_buffer0.addr;
+                if (pktgen_mem_open_directory(pktgen_nfp.mem_layout,
+                                              "../pktgen_data/") != 0) {
+                    fprintf(stderr,"ERROR: Failed to load packet generation data\n");
+                    msg->ack = -2;
+                } else if (pktgen_mem_load(pktgen_nfp.mem_layout) != 0) {
+                    fprintf(stderr,"ERROR: Failed to load generator memory\n");
+                    msg->ack = -3;
+                } else {
+                    pktgen_loaded = 1;
+                }
             } else if (msg->reason == PKTGEN_IPC_HOST_CMD) {
-                struct pktgen_host_cmd host_cmd;
-                host_cmd.pkt_cmd.cmd_type = PKTGEN_HOST_CMD_PKT;
-                host_cmd.pkt_cmd.base_delay = msg->generate.base_delay;
-                host_cmd.pkt_cmd.total_pkts = msg->generate.total_pkts;
-                host_cmd.pkt_cmd.mu_base_s8 = pktgen_mem_get_mu(pktgen_nfp.mem_layout,0,0)>>8;
-                (void) pktgen_issue_cmd(&pktgen_nfp, &host_cmd);
+                if (!pktgen_loaded) {
+                    fprintf(stderr,"ERROR: Attempt to generate packets when not loaded\n");
+                    msg->ack = -2;
+                } else {
+                    msg->ack = 1;
+                    struct pktgen_host_cmd host_cmd;
+                    host_cmd.pkt_cmd.cmd_type = PKTGEN_HOST_CMD_PKT;
+                    host_cmd.pkt_cmd.base_delay = msg->generate.base_delay;
+                    host_cmd.pkt_cmd.total_pkts = msg->generate.total_pkts;
+                    host_cmd.pkt_cmd.mu_base_s8 = pktgen_mem_get_mu(pktgen_nfp.mem_layout,0,0)>>8;
+                    (void) pktgen_issue_cmd(&pktgen_nfp, &host_cmd);
+                }
             } else if (msg->reason == PKTGEN_IPC_DUMP_BUFFERS) {
                 pcap_dump_pcie_buffers(&pktgen_nfp);
+                msg->ack = 1;
             } else {
+                msg->ack = -1;
             }
-            msg->ack = 1;
             nfp_ipc_server_send_msg(pktgen_nfp.shm.nfp_ipc, event.client, event.msg);
         }
     }

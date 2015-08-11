@@ -119,6 +119,10 @@ main(int argc, char **argv)
             pktgen_msg->reason = PKTGEN_IPC_DUMP_BUFFERS;
             pktgen_msg->ack = 0;
             nfp_ipc_client_send_msg(pktgen_nfp.shm.nfp_ipc, nfp_ipc_client, msg);
+        } else if (!strcmp(argv[i],"load")) {
+            pktgen_msg->reason = PKTGEN_IPC_LOAD;
+            pktgen_msg->ack = 0;
+            nfp_ipc_client_send_msg(pktgen_nfp.shm.nfp_ipc, nfp_ipc_client, msg);
         } else if (!strcmp(argv[i],"gen")) {
             pktgen_msg->reason = PKTGEN_IPC_HOST_CMD;
             pktgen_msg->ack = 0;
@@ -131,10 +135,17 @@ main(int argc, char **argv)
         }
         for (;;) {
             poll = nfp_ipc_client_poll(pktgen_nfp.shm.nfp_ipc, nfp_ipc_client, timeout, &event);
-            if (poll==NFP_IPC_EVENT_SHUTDOWN)
+            if (poll==NFP_IPC_EVENT_SHUTDOWN) {
                 i = argc;
                 break;
+            }
             if (poll==NFP_IPC_EVENT_MESSAGE) {
+                struct pktgen_ipc_msg *msg;
+                msg = (struct pktgen_ipc_msg *)&event.msg->data[0];
+                if (msg->ack < 0) {
+                    fprintf(stderr,"Error returned by pktgencap (%d) for command %s\n",msg->ack,argv[i]);
+                    i = argc;
+                }
                 break;
             }
         }
