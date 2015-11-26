@@ -12,34 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# @file        host/Makefile
+# @file        host/Makefile.apps
 # @brief       Makefile for the host applications
 #
-ALL: all_host
 
-clean: clean_host
+$(HOST_BIN_DIR)/nfp_ipc_test: $(HOST_BUILD_DIR)/nfp_dummy.o
+$(HOST_BIN_DIR)/nfp_ipc_test: $(HOST_BUILD_DIR)/nfp_ipc.o
+$(HOST_BIN_DIR)/nfp_ipc_test: $(HOST_BUILD_DIR)/nfp_ipc_test.o
 
-HOST_SRC_DIR   = $(HOST_DIR)/src
-HOST_BUILD_DIR = $(HOST_DIR)/build
-HOST_BIN_DIR   = $(HOST_DIR)/bin
+$(HOST_BIN_DIR)/nfp_ipc_test:
+	$(LD) -o $(HOST_BIN_DIR)/nfp_ipc_test $(HOST_BUILD_DIR)/nfp_ipc_test.o $(HOST_BUILD_DIR)/nfp_ipc.o $(LIBS)
 
-INCLUDES = -I$(NETRONOME)/include -I$(INCLUDE_DIR)
-LIBS     = -L$(NETRONOME)/lib -L/usr/lib/x86_64-linux-gnu/ -lnfp -lnfp_nffw -lhugetlbfs -ljansson
+nfp_ipc_test: $(HOST_BIN_DIR)/nfp_ipc_test
 
-ifeq ($(DUMMY_NFP),)
-else
-INCLUDES += -DDUMMY_NFP
-LIBS = $(HOST_BUILD_DIR)/nfp_dummy.o
-endif
+clean_host__nfp_ipc_test:
+	rm -f $(HOST_BIN_DIR)/nfp_ipc_test
 
-CC=gcc $(INCLUDES) -g -Wall -Werror
-LD=gcc -g
+clean_host: clean_host__nfp_ipc_test
 
-include $(HOST_DIR)/Makefile.templates
-include $(HOST_DIR)/Makefile.apps
+all_host: nfp_ipc_test
 
-clean_host:
-	rm -f $(HOST_BUILD_DIR)/*.o
-
-$(HOST_BUILD_DIR)/%.o: $(HOST_SRC_DIR)/%.c
-	$(CC) -c -o $@ -I$(HOST_DIR)/src $<
