@@ -21,8 +21,7 @@
  */
 #include "ctm.h"
 #include <stdint.h>
-#include <me.h>
-#include <pkt.h>
+#include "me.h"
 
 /** ctm_get_packet_address
  * 

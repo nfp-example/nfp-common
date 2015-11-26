@@ -13,16 +13,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * @file          firmware/lib/nfp/lib_nfp.c
- * @brief         Basic NFP functions to abstract access to the hardware
+ * @file          firmware/lib/nfp/types.h
+ * @brief         Types required throughout the NFP library
  *
+ * This is a library of functions used by application firmware to
+ * utilize various ME features in a uniform manner
+ * 
  */
+#ifndef _NFP__TYPES_H_
+#define _NFP__TYPES_H_
 
-/** Includes
+/** uint64_32_t
  */
-#include "_c/cls.c"
-#include "_c/ctm.c"
-#include "_c/me.c"
-#include "_c/mem.c"
-#include "_c/pcie.c"
-#include "_c/xpb.c"
+typedef union {
+    uint64_t uint64;
+    uint32_t uint32[2];
+    struct {
+        uint32_t uint32_hi;
+        uint32_t uint32_lo;
+    };
+} uint64_32_t;
+
+/** Close guard
+ */
+#endif /*_NFP__TYPES_H_ */

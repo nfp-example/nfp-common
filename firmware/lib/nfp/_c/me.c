@@ -88,3 +88,17 @@ me_sleep(unsigned int cycles)
     local_csr_write(local_csr_active_future_count_signal, sig_num);
     wait_for_all(&sig);
 }
+
+/** me_time64
+ *
+ * Get 64-bit current time
+ *
+ */
+__intrinsic uint64_32_t
+me_time64(void)
+{
+    uint64_32_t ts;
+    ts.uint32_lo = local_csr_read(local_csr_timestamp_low);
+    ts.uint32_hi = local_csr_read(local_csr_timestamp_high);
+    return ts;
+}

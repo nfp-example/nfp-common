@@ -25,6 +25,7 @@
 
 /** Includes required
  */
+#include "types.h"
 
 /** me_clear_all_signals
  *
@@ -63,6 +64,13 @@ __intrinsic void me_poll_sleep(unsigned int cycles);
  *
  */
 __intrinsic void me_sleep(unsigned int cycles);
+
+/** me_time64
+ *
+ * Get 64-bit current time
+ *
+ */
+__intrinsic uint64_32_t me_time64(void);
 
 /** Close guard
  */

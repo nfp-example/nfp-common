@@ -52,19 +52,17 @@ struct nfp_pcie_dma_cmd {
             unsigned int trans_class:3;
             unsigned int pcie_addr_hi:8;
         };
+        struct {
+            unsigned int pad_0:32;
+            unsigned int signal:17;
+            unsigned int dma_mode_signal:1;
+            unsigned int pad_1:14;
+            unsigned int pad_2:32;
+            unsigned int pad_3:32;
+        };
         unsigned int __raw[4];
     };
 };
-
-/** pcie_dma_cmd_sig
- *
- * Sets signal for a DMA command for caller ME/context
- *
- * @param cmd   DMA command to set signal to
- * @param sig   Signal to include in DMA command
- *
- */
-__intrinsic void pcie_dma_cmd_sig(struct nfp_pcie_dma_cmd *cmd, SIGNAL *sig);
 
 /** pcie_read_int
  *
@@ -85,6 +83,41 @@ __intrinsic void pcie_read_int(__xread void *data, int pcie, uint32_t offset, in
  *
  */
 __intrinsic void pcie_write_int(__xwrite void *data, int pcie, uint32_t offset, int size );
+
+/** pcie_dma_enqueue
+ *
+ * Enqueue a PCIe DMA command to a queue in an island
+ *
+ * @param island  PCIe island number
+ * @param cmd     DMA command to enqueue
+ * @param queue   Queue number to use
+ *
+ */
+__intrinsic void pcie_dma_enqueue(int island,
+                                  __xwrite struct nfp_pcie_dma_cmd *cmd,
+                                  int queue);
+
+/** pcie_dma_buffer
+ *
+ * DMA a buffer to/from PCIe from/to CPP of any length
+ *
+ * @param island  PCIe island number
+ * @param cmd     DMA command to enqueue
+ * @param queue   Queue number to use
+ *
+ * The PCIe address of the buffer and CPP address must not cross a 4GB
+ * boundary.
+ *
+ * Only a single DMA is used at any one time - this is slower than
+ * necessary, if many PCIe DMA queue entries were used. However, it
+ * permits many instances of this function to be called across the
+ * chip simultaneously (subject to PCIe DMA credits)
+ *
+ */
+__intrinsic void pcie_dma_buffer(int island, uint64_32_t pcie_addr,
+                                 uint64_32_t cpp_addr, int length,
+                                 int queue, int token, int dma_config);
+
 /** Close guard
  */
 #endif /*_NFP__PCIE_H_ */
