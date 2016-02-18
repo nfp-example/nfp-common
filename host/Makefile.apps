@@ -78,4 +78,3 @@ clean_host: clean_host__pktgencap
 
 clean_host__pktgencap:
 	rm -f $(HOST_BIN_DIR)/pktgencap
-
