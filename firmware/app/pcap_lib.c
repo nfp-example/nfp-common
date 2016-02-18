@@ -88,7 +88,7 @@
 #define U32_LINK_SYM(symname,shift) \
     ((uint32_t)(((uint64_t)__link_sym(#symname))>>shift))
 
-#define CTM_PKT_OFFSET (32)
+#define CTM_PKT_OFFSET (64)
 
 /* MAX_CTM_DMAS_IN_PROGRESS is the maximum number of CTM DMAs that the
  * hardware supports
@@ -208,9 +208,13 @@ struct ctm_pkt_hdr {
     unsigned int pad:2;
     unsigned int mu_base_s11:29;
 
-    unsigned int buf_pool:8; /* From metadata */
-    unsigned int pad2:8;
     unsigned int seq:16;
+    unsigned int pad2:8;
+    unsigned int buf_pool:8; /* From metadata */
+
+    unsigned int word3; /* CTM packet hdr is ALWAYS 6 32-bit words at least */
+    unsigned int word4; /* CTM packet hdr is ALWAYS 6 32-bit words at least */
+    unsigned int word5; /* CTM packet hdr is ALWAYS 6 32-bit words at least */
 };
 
 /** struct pkt_buf_desc
