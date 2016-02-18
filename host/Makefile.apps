@@ -37,6 +37,8 @@ $(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/nfp_support.o
 $(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/nfp_dummy.o
 $(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/nfp_ipc.o
 
+$(HOST_LIB_DIR)/nfpipc_lib: $(HOST_BUILD_DIR)/nfp_ipc.o $(HOST_BUILD_DIR)/nfp_support.o
+
 $(HOST_BIN_DIR)/pktgencap:
 	$(LD) -o $(HOST_BIN_DIR)/pktgencap $(HOST_BUILD_DIR)/pktgencap.o $(HOST_BUILD_DIR)/nfp_ipc.o $(HOST_BUILD_DIR)/pktgen_mem.o $(HOST_BUILD_DIR)/nfp_support.o $(LIBS)
 

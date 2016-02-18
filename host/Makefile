@@ -22,6 +22,7 @@ clean: clean_host
 HOST_SRC_DIR   = $(HOST_DIR)/src
 HOST_BUILD_DIR = $(HOST_DIR)/build
 HOST_BIN_DIR   = $(HOST_DIR)/bin
+HOST_LIB_DIR   = $(HOST_DIR)/lib
 
 INCLUDES = -I$(NETRONOME)/include -I$(INCLUDE_DIR)
 LIBS     = -L$(NETRONOME)/lib -L/usr/lib/x86_64-linux-gnu/ -lnfp -lnfp_nffw -lhugetlbfs -ljansson
@@ -32,7 +33,7 @@ INCLUDES += -DDUMMY_NFP
 LIBS = $(HOST_BUILD_DIR)/nfp_dummy.o
 endif
 
-CC=gcc $(INCLUDES) -g -Wall -Werror
+CC=gcc $(INCLUDES) -g -Wall -Werror -fpic
 LD=gcc -g
 
 include $(HOST_DIR)/Makefile.templates
