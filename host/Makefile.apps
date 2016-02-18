@@ -16,6 +16,48 @@
 # @brief       Makefile for the host applications
 #
 
+$(HOST_BIN_DIR)/pcap_test: $(HOST_BUILD_DIR)/pcap_test.o
+$(HOST_BIN_DIR)/pcap_test: $(HOST_BUILD_DIR)/nfp_support.o
+
+$(HOST_BIN_DIR)/pcap_test:
+	$(LD) -o $(HOST_BIN_DIR)/pcap_test $(HOST_BUILD_DIR)/pcap_test.o $(HOST_BUILD_DIR)/nfp_support.o $(LIBS)
+
+all_host: pcap_test
+
+clean_host: clean_host__pcap_test
+
+clean_host__pcap_test:
+	rm -f $(HOST_BIN_DIR)/pcap_test
+
+pcap_test: $(HOST_BIN_DIR)/pcap_test
+
+$(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/pktgen_mem.o
+$(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/pktgencap.o
+$(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/nfp_support.o
+$(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/nfp_dummy.o
+$(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/nfp_ipc.o
+
+$(HOST_BIN_DIR)/pktgencap:
+	$(LD) -o $(HOST_BIN_DIR)/pktgencap $(HOST_BUILD_DIR)/pktgencap.o $(HOST_BUILD_DIR)/nfp_ipc.o $(HOST_BUILD_DIR)/pktgen_mem.o $(HOST_BUILD_DIR)/nfp_support.o $(LIBS)
+
+pktgencap: $(HOST_BIN_DIR)/pktgencap
+
+$(HOST_BIN_DIR)/pktgencap_ctl: $(HOST_BUILD_DIR)/nfp_ipc.o
+$(HOST_BIN_DIR)/pktgencap_ctl: $(HOST_BUILD_DIR)/pktgencap_ctl.o
+
+$(HOST_BIN_DIR)/pktgencap_ctl:
+	$(LD) -o $(HOST_BIN_DIR)/pktgencap_ctl $(HOST_BUILD_DIR)/pktgencap_ctl.o $(HOST_BUILD_DIR)/nfp_ipc.o $(HOST_BUILD_DIR)/nfp_support.o $(LIBS)
+
+pktgencap_ctl: $(HOST_BIN_DIR)/pktgencap_ctl
+
+$(HOST_BIN_DIR)/pktgencap_test: $(HOST_BUILD_DIR)/nfp_ipc.o
+$(HOST_BIN_DIR)/pktgencap_test: $(HOST_BUILD_DIR)/pktgencap_test.o
+
+$(HOST_BIN_DIR)/pktgencap_test:
+	$(LD) -o $(HOST_BIN_DIR)/pktgencap_test $(HOST_BUILD_DIR)/pktgencap_test.o $(HOST_BUILD_DIR)/nfp_ipc.o $(HOST_BUILD_DIR)/nfp_support.o $(LIBS)
+
+pktgencap_test: $(HOST_BIN_DIR)/pktgencap_test
+
 $(HOST_BIN_DIR)/nfp_ipc_test: $(HOST_BUILD_DIR)/nfp_dummy.o
 $(HOST_BIN_DIR)/nfp_ipc_test: $(HOST_BUILD_DIR)/nfp_ipc.o
 $(HOST_BIN_DIR)/nfp_ipc_test: $(HOST_BUILD_DIR)/nfp_ipc_test.o
@@ -30,5 +72,9 @@ clean_host__nfp_ipc_test:
 
 clean_host: clean_host__nfp_ipc_test
 
-all_host: nfp_ipc_test
+all_host: pktgencap pktgencap_ctl pktgencap_test nfp_ipc_test
 
+clean_host: clean_host__pktgencap
+
+clean_host__pktgencap:
+	rm -f $(HOST_BIN_DIR)/pktgencap

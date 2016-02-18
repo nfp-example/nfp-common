@@ -34,13 +34,37 @@ $1__FLAGS += $(NFAS_BASE_FLAGS)
 $1__FLAGS += $4
 $1__LIST  = $(FW_BUILD)/$1.list
 
-$($1__LIST): $(FIRMWARE_DIR)/$2/$3.uc
-	$(NFAS) $($1__FLAGS) $($1__DEFS) $($1__INC) -o $@ $<
+$$($1__LIST): $(FIRMWARE_DIR)/$2/$3
+	$(NFAS) $$($1__FLAGS) $$($1__DEFS) $$($1__INC) -o $$@ $$<
+
+endef
+
+#f microcode.assemble_init
+#
+# Assembler a microcode file into the firmware build directory
+#
+# @param $1	object descriptor
+# @param $2 source directory
+# @param $3 source code
+# @param $4 assembly flags
+#
+define microcode.assemble_init
+
+$1__INC   += $(NFAS_BASE_INC)
+$1__DEFS  += $(NFAS_BASE_DEFS)
+$1__FLAGS += $(NFAS_BASE_FLAGS)
+$1__FLAGS += $4
+$1__FLAGS += --codeless
+$1__LIST  = $(FW_BUILD)/$1.list
+
+$$($1__LIST): $(FIRMWARE_DIR)/$2/$3
+	$(NFAS) $$($1__FLAGS) $$($1__DEFS) $$($1__INC) -o $$@ $$<
+	$(NFAS_CODELESS_FIXUP) $$@
 
 endef
 
 #a Micro-c templates
-#f microc.compile
+#f micro_c.compile
 #
 # Compile a micro-c file into the firmware build directory
 #
@@ -48,16 +72,17 @@ endef
 # @param $2	source directory
 # @param $3	source code
 #
-define compile.micro_c
+define micro_c.compile
 
 $1__INC   += $(NFCC_BASE_INC)
 $1__DEFS  += $(NFCC_BASE_DEFS)
 $1__FLAGS += $(NFCC_BASE_FLAGS)
 $1__CLIBS += $(NFCC_BASE_CLIBS)
-$1__LIST  = $(FW_BUILD)/$1.list
+$1__LIST  += $(FW_BUILD)/$1.list
+$1__DEPENDENCIES +=
 
-$($1__LIST): $(FIRMWARE_DIR)/$2/$3 $($1__CLIBS)
-	$(NFCC) -Fo$(FW_BUILD)/ -Fe$@ $($1__FLAGS) $($1__INC) $($1__DEFS) $($1__CLIBS) $<
+$$($1__LIST): $(FIRMWARE_DIR)/$2/$3 $$($1__CLIBS) $$($1__DEPENDENCIES)
+	$(NFCC) -Fo$(FW_BUILD)/ -Fe$$@ $$($1__FLAGS) $$($1__INC) $$($1__DEFS) $$($1__CLIBS) $$<
 
 endef
 
@@ -72,6 +97,7 @@ endef
 define micro_c.add_src_lib
 
 $1__CLIBS += $(FIRMWARE_DIR)/$2/$3.c
+$1__DEPENDENCIES += $(FIRMWARE_DIR)/$2/$3.c
 
 endef
 
@@ -96,9 +122,9 @@ endef
 # @param $1	object descriptor
 # @param $2	list of library names
 #
-define compile.micro_c.add_fw_libs
+define micro_c.add_fw_libs
 
-$(foreach lib,$2,$(eval $(call compile.micro_c.add_fw_lib,$1,$(lib))))
+$(foreach lib,$2,$(eval $(call micro_c.add_fw_lib,$1,$(lib))))
 
 endef
 
@@ -109,9 +135,9 @@ endef
 # @param $1	object descriptor
 # @param $2	define (i.e. the bit after '-D')
 #
-define compile.micro_c.add_define
+define micro_c.add_define
 
-$1__DEFS  += -D$(2)
+$1__DEFS  += -D$2
 
 endef
 
@@ -124,7 +150,7 @@ endef
 #
 define micro_c.add_defines
 
-$(foreach define,$2,$(eval $(call compile.micro_c.add_define,$1,$(define))))
+$(foreach define,$2,$(eval $(call micro_c.add_define,$1,$(define))))
 
 endef
 
@@ -135,9 +161,24 @@ endef
 # @param $1	object descriptor
 # @param $2	flags
 #
-define compile.micro_c.add_flags
+define micro_c.add_flags
 
 $1__FLAGS += $2
+
+endef
+
+#f micro_c.force_include
+#
+# Force inclusion of a header file
+#
+# @param $1	object descriptor
+# @param $2	source directory
+# @param $3	source code
+#
+define micro_c.force_include
+
+$1__DEFS  += -FI$(FIRMWARE_DIR)/$2/$3.h
+$1__DEPENDENCIES += $(FIRMWARE_DIR)/$2/$3.h
 
 endef
 
@@ -150,16 +191,32 @@ endef
 #
 define nffw.link
 
-$1__NFFW = $(FW_NFFW)/$1.nffw
-$1__MAP  = $(FW_BUILD)/$1.map
+$1__NFFW := $(FW_NFFW)/$1.nffw
+$1__MAP  := $(FW_BUILD)/$1.map
 
-$($1__NFFW): $($1__LINK_DEPENDENCIES)
-	$(NFLD) $(NFLD_BASE_FLAGS) $($1__LINK_FLAGS) -o $@ -map $($1__MAP) $($1__ME_LOADS)  $($1__PPC_LOADS)
+$$($1__NFFW): $$($1__LINK_DEPENDENCIES)
+	$(NFLD) $(NFLD_BASE_FLAGS) $$($1__LINK_FLAGS) -o $$@ -map $$($1__MAP) $$($1__ME_LOADS) $$($1__PPC_LOADS)
 
-all_nffw: $($1__NFFW)
+$1__NFFW: $$($1__NFFW)
 
-load_$1:
-	nfp-nffw $($1__NFFW) load
+all_nffw: $1__NFFW
+
+load_$1: $$($1__NFFW)
+	nfp-nffw $$($1__NFFW) load
+
+endef
+
+#f nffw.add_init_obj
+#
+# Add an initial CSR object descriptor (list file) to an nffw
+#
+# @param $1	firmware name
+# @param $2 object descriptor
+#
+define nffw.add_init_obj
+
+$1__LINK_DEPENDENCIES += $$($2__LIST)
+$1__ME_LOADS          += -L $$($2__LIST)
 
 endef
 
@@ -173,8 +230,8 @@ endef
 #
 define nffw.add_obj
 
-$1__LINK_DEPENDENCIES += $($2__LIST)
-$1__ME_LOADS          += -u $3 $($2__LIST)
+$1__LINK_DEPENDENCIES += $$($2__LIST)
+$1__ME_LOADS          += -u $3 $$($2__LIST)
 
 endef
 

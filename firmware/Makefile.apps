@@ -15,3 +15,165 @@
 # @file        firmware/Makefile.apps
 # @brief       Makefile for the individual apps
 #
+
+NETRONOME_STD_MICROC = $(NETRONOME)/components/standardlibrary/microc
+NETRONOME_PICOCODE = $(NETRONOME)/components/standardlibrary/picocode/nfp6000
+
+# Need this for local_csr_write and _exit. Can we lose this?
+NFCC_BASE_CLIBS = $(NETRONOME_STD_MICROC)/src/rtl.c
+
+# Need this to fix codeless ME assembles for initialization
+NFAS_CODELESS_FIXUP = sed -ie 's/\(\(\.%init_csr "default assembler setting"\)\|\(\.%third_party_addressing\)\|\(\.%indirect_ref_mode\)\).*//'
+
+#a Packet capture firmware
+$(eval $(call micro_c.force_include,pcap_rx,app,pcap_config))
+$(eval $(call micro_c.add_src_lib,pcap_rx,app,pcap_lib))
+$(eval $(call micro_c.add_fw_libs,pcap_rx,nfp sync))
+$(eval $(call micro_c.add_define,pcap_rx,PCAP_RX_ISLAND))
+$(eval $(call micro_c.compile,pcap_rx,app,pcap_rx.c))
+
+$(eval $(call micro_c.force_include,pcap_host,app,pcap_config))
+$(eval $(call micro_c.add_src_lib,pcap_host,app,pcap_lib))
+$(eval $(call micro_c.add_fw_libs,pcap_host,nfp sync))
+$(eval $(call micro_c.compile,pcap_host,app,pcap_host.c))
+
+$(eval $(call micro_c.force_include,pcap_recycle,app,pcap_config))
+$(eval $(call micro_c.add_src_lib,pcap_recycle,app,pcap_lib))
+$(eval $(call micro_c.add_fw_libs,pcap_recycle,nfp sync))
+$(eval $(call micro_c.add_define,pcap_recycle,PCAP_HOST_ISLAND))
+$(eval $(call micro_c.compile,pcap_recycle,app,pcap_recycle.c))
+
+$(eval $(call microcode.assemble_init,pcap_init,app,pcap_init.uc))
+
+$(eval $(call nffw.add_obj_with_mes,pcap,pcap_host,i4.me2))
+$(eval $(call nffw.add_obj_with_mes,pcap,pcap_recycle,i4.me3))
+$(eval $(call nffw.add_obj_with_mes,pcap,pcap_rx,i32.me0 i33.me0 i34.me0))
+$(eval $(call nffw.add_init_obj,pcap,pcap_init))
+$(eval $(call nffw.link,pcap))
+
+#a Packet generator firmware
+$(eval $(call micro_c.force_include,pktgen_host,app,pktgen_config))
+$(eval $(call micro_c.add_src_lib,pktgen_host,app,pktgen_lib))
+$(eval $(call micro_c.add_fw_libs,pktgen_host,nfp sync))
+$(eval $(call micro_c.add_define,pktgencap_pktgen_host,PKTGEN_HOST_ISLAND))
+$(eval $(call micro_c.compile,pktgen_host,app,pktgen_host.c))
+
+$(eval $(call micro_c.force_include,pktgen_tx_slave,app,pktgen_config))
+$(eval $(call micro_c.add_src_lib,pktgen_tx_slave,app,pktgen_lib))
+$(eval $(call micro_c.add_fw_libs,pktgen_tx_slave,nfp sync))
+$(eval $(call micro_c.compile,pktgen_tx_slave,app,pktgen_tx_slave.c))
+
+$(eval $(call micro_c.force_include,pktgen_init,app,pktgen_config))
+$(eval $(call micro_c.add_fw_libs,pktgen_init,nfp sync))
+$(eval $(call micro_c.compile,pktgen_init,app,pktgen_init.c))
+
+# Changing the MEs requires changing the sync startup stuff
+$(eval $(call nffw.add_obj_with_mes,pktgen,pktgen_host,i4.me2))
+#$(eval $(call nffw.add_obj_with_mes,pktgen,pktgen_tx_slave,i32.me0 i32.me1 i32.me2 i32.me3 i32.me4 i32.me5 i32.me6 i32.me7 i33.me0 i33.me1 i33.me2 i33.me3 i33.me4 i33.me5 i33.me6 i33.me7))
+$(eval $(call nffw.add_obj_with_mes,pktgen,pktgen_tx_slave,i32.me0 i32.me1 i32.me2 i32.me3 i32.me4 i32.me5 i32.me6 i32.me7))
+$(eval $(call nffw.add_obj_with_mes,pktgen,pktgen_init,i5.me2))
+$(eval $(call nffw.add_rtsyms,pktgen))
+$(eval $(call nffw.link,pktgen))
+
+#a Packet generator+capture firmware
+$(eval $(call micro_c.force_include,pktgencap_pcap_rx,app,pktgencap_config))
+$(eval $(call micro_c.add_src_lib,pktgencap_pcap_rx,app,pcap_lib))
+$(eval $(call micro_c.add_fw_libs,pktgencap_pcap_rx,nfp sync))
+$(eval $(call micro_c.add_define,pktgencap_pcap_rx,PCAP_RX_ISLAND))
+$(eval $(call micro_c.compile,pktgencap_pcap_rx,app,pcap_rx.c))
+
+$(eval $(call micro_c.force_include,pktgencap_pcap_host,app,pktgencap_config))
+$(eval $(call micro_c.add_src_lib,pktgencap_pcap_host,app,pcap_lib))
+$(eval $(call micro_c.add_fw_libs,pktgencap_pcap_host,nfp sync))
+$(eval $(call micro_c.add_define,pktgencap_pcap_host,PCAP_HOST_ISLAND))
+$(eval $(call micro_c.compile,pktgencap_pcap_host,app,pcap_host.c))
+
+$(eval $(call micro_c.force_include,pktgencap_pcap_recycle,app,pktgencap_config))
+$(eval $(call micro_c.add_src_lib,pktgencap_pcap_recycle,app,pcap_lib))
+$(eval $(call micro_c.add_fw_libs,pktgencap_pcap_recycle,nfp sync))
+$(eval $(call micro_c.add_define,pktgencap_pcap_recycle,PCAP_HOST_ISLAND))
+$(eval $(call micro_c.compile,pktgencap_pcap_recycle,app,pcap_recycle.c))
+
+$(eval $(call micro_c.force_include,pktgencap_pktgen_host,app,pktgencap_config))
+$(eval $(call micro_c.add_src_lib,pktgencap_pktgen_host,app,pktgen_lib))
+$(eval $(call micro_c.add_fw_libs,pktgencap_pktgen_host,nfp sync))
+$(eval $(call micro_c.add_define,pktgencap_pktgen_host,PKTGEN_HOST_ISLAND))
+$(eval $(call micro_c.compile,pktgencap_pktgen_host,app,pktgen_host.c))
+
+$(eval $(call micro_c.force_include,pktgencap_pktgen_tx_slave,app,pktgencap_config))
+$(eval $(call micro_c.add_src_lib,pktgencap_pktgen_tx_slave,app,pktgen_lib))
+$(eval $(call micro_c.add_fw_libs,pktgencap_pktgen_tx_slave,nfp sync))
+$(eval $(call micro_c.compile,pktgencap_pktgen_tx_slave,app,pktgen_tx_slave.c))
+
+$(eval $(call micro_c.force_include,pktgencap_init,app,pktgencap_config))
+$(eval $(call micro_c.add_fw_libs,pktgencap_init,nfp sync))
+$(eval $(call micro_c.compile,pktgencap_init,app,pktgencap_init.c))
+
+$(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pktgen_host,i4.me0))
+$(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pcap_host,i4.me2))
+$(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pcap_recycle,i4.me3))
+$(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pcap_rx,i32.me0 i33.me0 i34.me0))
+$(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pktgen_tx_slave,i35.me0 i35.me1 i35.me2 i35.me3 i35.me4 i35.me5 i35.me6 i35.me7))
+$(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_init,i5.me2))
+
+$(eval $(call nffw.add_ppc,pktgencap,i8,$(NETRONOME_PICOCODE)/null/null.npfw))
+
+$(eval $(call nffw.add_rtsyms,pktgencap))
+$(eval $(call nffw.link,pktgencap))
+
+# TO make it go
+make_it_go:
+	sudo chmod a+rw /dev/nfp-cpp-0
+	sudo chmod a+rw /dev/ttyUSB*
+	nfp-power =on
+	echo 20 | sudo tee /proc/sys/vm/nr_hugepages
+	nfp-reg mecsr:i4.me0.CtxEnables.CtxEnables=0
+	nfp-power nbi=off
+	nfp-power nbi=on
+	nfp-macinit -0 /opt/netronome/share/nbi/sf1-2x40GE.json -p /opt/netronome/share/nbi/nfp_nbi_phy_tuning_SF.json -m0 
+	nfp -m mac -e set port rx 0 0 enable
+	nfp -m mac -e set port rx 0 4 enable
+	#12x10GE.json -1 /opt/netronome/share/nbi/3x40GE.json
+	#nfp-macinit -m 1 -0 /opt/netronome/share/nbi/12x10GE.json -1 /opt/netronome/share/nbi/3x40GE.json
+	#( cd /opt/netronome/share/nbi; USE_MAC_SERDES=CDP LD_LIBRARY_PATH=/opt/netronome/lib PHY_CONFIG_DIR=/opt/netronome/share/nbi nfp-macinit -m0 -0 1x100GE.json -r )
+	#( cd /opt/netronome/share/nbi; USE_MAC_SERDES=CDP LD_LIBRARY_PATH=/opt/netronome/lib PHY_CONFIG_DIR=/opt/netronome/share/nbi nfp-macinit -m1 -0 1x100GE.json -r )
+	#nfp-mactool -p 0xffffff -m0 -r
+	#nfp-mactool -p 0xffffff -p0xffffff -l1 -u -m0
+	#nfp-mactool -p 0xffffff -p0xffffff -l1 -u -m0
+	##nfp-reg xpb:Nbi0IsldXpbMap.NbiTopXpbMap.MacGlbAdrMap.MacEthernet0.MacEthSeg0.EthCmdConfig.EthLoopBackEn=1
+	##nfp-reg xpb:Nbi0IsldXpbMap.NbiTopXpbMap.MacGlbAdrMap.MacEthernet0.MacEthSeg0.EthCmdConfig.EthRxEna=1
+	(cd ~/gavin/me_test.hg; make init_network)
+	#( cd /opt/netronome/share/nbi; USE_MAC_SERDES=CDP LD_LIBRARY_PATH=/opt/netronome/lib PHY_CONFIG_DIR=/opt/netronome/share/nbi nfp-macinit -m0 -0 1x100GE.json -r )
+	#( cd /opt/netronome/share/nbi; USE_MAC_SERDES=CDP LD_LIBRARY_PATH=/opt/netronome/lib PHY_CONFIG_DIR=/opt/netronome/share/nbi nfp-macinit -m1 -0 1x100GE.json -r )
+	##nfp-mactool -p 0xffffff -m0 -r
+	##nfp-mactool -p 0xffffff -p0xffffff -l1 -u -m0
+	##nfp-mactool -p 0xffffff -p0xffffff -l1 -u -m0
+	nfp-mactool -p 0xffffff -m0 -r
+	##nfp-mactool -p 0xffffff -p0xffffff -l0 -u -m0
+	##nfp-mactool -p 0xffffff -p0xffffff -l0 -u -m0
+	##nfp-reg xpb:Nbi0IsldXpbMap.NbiTopXpbMap.MacGlbAdrMap.MacEthernet0.MacEthSeg0.EthCmdConfig.EthLoopBackEn=1
+	nfp-macinit -0 /opt/netronome/share/nbi/sf1-2x40GE.json -p /opt/netronome/share/nbi/nfp_nbi_phy_tuning_SF.json -m0 
+	nfp -m mac -e set port rx 0 0 enable
+	nfp -m mac -e set port rx 0 4 enable
+	nfp-reg xpb:Nbi0IsldXpbMap.NbiTopXpbMap.MacGlbAdrMap.MacEthernet0.MacEthSeg0.EthCmdConfig.EthRxEna=1
+
+make_it_go2:
+	sudo chmod a+rw /dev/nfp-cpp-0
+	sudo chmod a+rw /dev/ttyUSB*
+	nfp-power =on
+	echo 20 | sudo tee /proc/sys/vm/nr_hugepages
+	nfp-reg mecsr:i4.me0.CtxEnables.CtxEnables=0
+	nfp-power nbi=off fpc_0=off fpc_1=off fpc_2=off fpc_3=off
+	sleep 1
+	nfp-power nbi=on fpc_0=on fpc_1=on fpc_2=on fpc_3=on
+	(cd ~/gavin/me_test.hg; make init_network)
+	nfp-macinit -0 /opt/netronome/share/nbi/sf1-2x40GE.json -p /opt/netronome/share/nbi/nfp_nbi_phy_tuning_SF.json -m0 
+	nfp -m mac -e set port rx 0 0 enable
+	nfp -m mac -e set port rx 0 4 enable
+	##nfp-reg xpb:Nbi0IsldXpbMap.NbiTopXpbMap.MacGlbAdrMap.MacEthernet0.MacEthSeg0.EthCmdConfig.EthRxEna=1
+
+#
+# Sequence number in mu_pkt_buf_desc is incorrect (stuck at 0x600)
+# dmas_completed appears to be 2 too few
+#
+# MU buffer contents do appear to be correct except seq number and # DMAs

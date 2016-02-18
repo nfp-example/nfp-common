@@ -21,14 +21,33 @@ NETRONOME = /opt/netronome
 
 SCRIPTS_DIR   = $(NFP_COMMON)/scripts
 FIRMWARE_DIR  = $(NFP_COMMON)/firmware
+INCLUDE_DIR   = $(NFP_COMMON)/include
 HOST_DIR      = $(NFP_COMMON)/host
 DOCS_DIR      = $(NFP_COMMON)/docs
+
+ALL:
+
+clean:
+
+help:
+	@echo "To make for a Starfighter, use:"
+	@echo "  make CHIP=NFP-624A-0C-A0"
+	@echo "or similar"
+	@echo ""
+	@echo "If the tools are not installed in /opt/netronome"
+	@echo "  make NETRONOME=/path/to/tools"
+	@echo ""
+	@echo "To build some things without a real NFP library"
+	@echo "  make DUMMY_NFP=y"
+	@echo ""
+	@echo "To find shared memory segments"
+	@echo "  ipcs"
+	@echo ""
+	@echo "To remove a shared memory segment"
+	@echo "  ipcrm -m <shmid>"
+	@echo ""
 
 include $(FIRMWARE_DIR)/Makefile
 include $(HOST_DIR)/Makefile
 include $(SCRIPTS_DIR)/Makefile
 #include $(DOCS_DIR)/Makefile
-
-ALL: firmware_all
-
-clean: firmware_clean
