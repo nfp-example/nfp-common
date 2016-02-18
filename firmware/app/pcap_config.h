@@ -23,13 +23,14 @@
  * Rx islands is single ME
  *  All threads run packet receive
  */
-#define PCAP_ISLANDS (1+3)
-
 #define PCAP_HOST_CTXTS 8
 #define PCAP_HOST_MES 2
 
 #define PCAP_RX_CTXTS 8
 #define PCAP_RX_MES 1
+#define PCAP_RX_ISLANDS    3
+
+#define PCAP_ISLANDS (1+PCAP_RX_ISLANDS)
 
 #define PCAP_INIT_STAGES 3
 #define PCAP_INIT_STAGE_CSR_INIT      1

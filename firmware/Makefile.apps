@@ -39,7 +39,7 @@ $(eval $(call micro_c.compile,pcap_host,app,pcap_host.c))
 
 $(eval $(call micro_c.force_include,pcap_recycle,app,pcap_config))
 $(eval $(call micro_c.add_src_lib,pcap_recycle,app,pcap_lib))
-$(eval $(call micro_c.add_fw_libs,pcap_recycle,nfp sync))
+$(eval $(call micro_c.add_fw_libs,pcap_recycle,nfp sync network))
 $(eval $(call micro_c.add_define,pcap_recycle,PCAP_HOST_ISLAND))
 $(eval $(call micro_c.compile,pcap_recycle,app,pcap_recycle.c))
 
@@ -90,7 +90,7 @@ $(eval $(call micro_c.compile,pktgencap_pcap_host,app,pcap_host.c))
 
 $(eval $(call micro_c.force_include,pktgencap_pcap_recycle,app,pktgencap_config))
 $(eval $(call micro_c.add_src_lib,pktgencap_pcap_recycle,app,pcap_lib))
-$(eval $(call micro_c.add_fw_libs,pktgencap_pcap_recycle,nfp sync))
+$(eval $(call micro_c.add_fw_libs,pktgencap_pcap_recycle,nfp sync network))
 $(eval $(call micro_c.add_define,pktgencap_pcap_recycle,PCAP_HOST_ISLAND))
 $(eval $(call micro_c.compile,pktgencap_pcap_recycle,app,pcap_recycle.c))
 
