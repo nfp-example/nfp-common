@@ -48,6 +48,7 @@ enum {
     PKTGEN_IPC_HOST_CMD,
     PKTGEN_IPC_DUMP_BUFFERS,
     PKTGEN_IPC_LOAD,
+    PKTGEN_IPC_RETURN_BUFFERS,
 };
 
 /** struct msg_generate
@@ -57,6 +58,13 @@ struct msg_generate {
     int      total_pkts;
 };
 
+/** struct msg_return_buffers
+ */
+struct msg_return_buffers {
+    int buffers_to_claim;
+    int buffers[2];
+};
+
 /** struct pktgen_ipc_msg
  */
 struct pktgen_ipc_msg {
@@ -64,5 +72,6 @@ struct pktgen_ipc_msg {
     int ack;
     union {
         struct msg_generate generate;
+        struct msg_return_buffers return_buffers;
     };
 };

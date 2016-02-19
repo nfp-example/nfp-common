@@ -43,3 +43,12 @@ trace_packets_in:
 	@echo "Note that these counters are clear-on-read"
 	$(DBGQ)nfp-reg xpb:Nbi0IsldXpbMap.NBITopXpbMap.NbiDmaXpb.NbiDmaCsr.NbiDmaByteCntLo
 	$(DBGQ)nfp-reg xpb:Nbi0IsldXpbMap.NBITopXpbMap.NbiDmaXpb.NbiDmaCsr.NbiDmaDropByteCntLo
+
+mailboxes:
+	nfp-reg mecsr:i4.me0.Mailbox0 mecsr:i4.me0.Mailbox1 mecsr:i4.me0.Mailbox2 mecsr:i4.me0.Mailbox3
+	nfp-reg mecsr:i4.me1.Mailbox0 mecsr:i4.me1.Mailbox1 mecsr:i4.me1.Mailbox2 mecsr:i4.me1.Mailbox3
+	nfp-reg mecsr:i4.me2.Mailbox0 mecsr:i4.me2.Mailbox1 mecsr:i4.me2.Mailbox2 mecsr:i4.me2.Mailbox3
+	nfp-reg mecsr:i4.me3.Mailbox0 mecsr:i4.me3.Mailbox1 mecsr:i4.me3.Mailbox2 mecsr:i4.me3.Mailbox3
+	nfp-reg mecsr:i32.me0.Mailbox0 mecsr:i32.me0.Mailbox1 mecsr:i32.me0.Mailbox2 mecsr:i32.me0.Mailbox3
+	nfp-reg mecsr:i33.me0.Mailbox0 mecsr:i33.me0.Mailbox1 mecsr:i33.me0.Mailbox2 mecsr:i33.me0.Mailbox3
+	nfp-reg mecsr:i34.me0.Mailbox0 mecsr:i34.me0.Mailbox1 mecsr:i34.me0.Mailbox2 mecsr:i34.me0.Mailbox3

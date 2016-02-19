@@ -159,14 +159,14 @@ make_it_go:
 
 make_it_go2:
 	sudo chmod a+rw /dev/nfp-cpp-0
-	sudo chmod a+rw /dev/ttyUSB*
+	#sudo chmod a+rw /dev/ttyUSB*
 	nfp-power =on
-	echo 20 | sudo tee /proc/sys/vm/nr_hugepages
+	#echo 20 | sudo tee /proc/sys/vm/nr_hugepages
 	nfp-reg mecsr:i4.me0.CtxEnables.CtxEnables=0
 	nfp-power nbi=off fpc_0=off fpc_1=off fpc_2=off fpc_3=off
 	sleep 1
 	nfp-power nbi=on fpc_0=on fpc_1=on fpc_2=on fpc_3=on
-	(cd ~/gavin/me_test.hg; make init_network)
+	#(cd ~/gavin/me_test.hg; make init_network)
 	nfp-macinit -0 /opt/netronome/share/nbi/sf1-2x40GE.json -p /opt/netronome/share/nbi/nfp_nbi_phy_tuning_SF.json -m0 
 	nfp -m mac -e set port rx 0 0 enable
 	nfp -m mac -e set port rx 0 4 enable

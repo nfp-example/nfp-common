@@ -25,7 +25,7 @@ HOST_BIN_DIR   = $(HOST_DIR)/bin
 HOST_LIB_DIR   = $(HOST_DIR)/lib
 
 INCLUDES = -I$(NETRONOME)/include -I$(INCLUDE_DIR)
-LIBS     = -L$(NETRONOME)/lib -L/usr/lib/x86_64-linux-gnu/ -lnfp -lnfp_nffw -lhugetlbfs -ljansson
+LIBS     = -L$(NETRONOME)/lib -L/usr/lib/x86_64-linux-gnu/ -lnfp -lhugetlbfs -ljansson
 
 ifeq ($(DUMMY_NFP),)
 else

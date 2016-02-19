@@ -852,6 +852,10 @@ packet_capture_dma_to_host_slave(void)
 
         pkt_dma_slave_get_desc(&mu_buf_dma_desc);
 
+        if (mu_buf_dma_desc.num_packets==0) {
+            pkt_dma_memory_to_host(&mu_buf_dma_desc, 0, 64, 0);
+            return;
+        }
         dma_start_offset = (mu_buf_dma_desc.first_block << 6);
         dma_length       = ((mu_buf_dma_desc.end_block << 6) -
                             dma_start_offset);
@@ -945,6 +949,24 @@ dma_master_enqueue_next_pkts_ready(uint32_t mu_base_s8,
     return n;
 }
 
+/** dma_master_enqueue_buffer_complete
+ */
+static void
+dma_master_enqueue_buffer_complete(uint32_t mu_base_s8)
+{
+    struct mu_buf_to_host_dma_work mu_buf_to_host_dma;
+    __xwrite struct mu_buf_to_host_dma_work mu_buf_to_host_dma_out;
+
+    /* Build DMA work for 'n' packets from first_packet
+     */
+    mu_buf_to_host_dma.mu_base_s8   = mu_base_s8;
+    mu_buf_to_host_dma.num_packets  = 0;
+    mu_buf_to_host_dma_out = mu_buf_to_host_dma;
+
+    mem_workq_add_work(muq_to_host_dma, (void *)&mu_buf_to_host_dma_out,
+                       sizeof(mu_buf_to_host_dma));
+}
+
 /** packet_capture_dma_to_host_master
  *
  * This thread takes control of an MU buffer after it starts to be
@@ -999,6 +1021,7 @@ packet_capture_dma_to_host_master(int poll_interval)
         /* Add slave DMA batches until all of MU buf is batched up
          */
         first_packet = 0;
+        total_dmas = 0;
         for (;;) {
             int num_pkts; /* Number of packets enqueued to slave */
             num_pkts = dma_master_enqueue_next_pkts_ready(mu_base_s8,
@@ -1011,8 +1034,8 @@ packet_capture_dma_to_host_master(int poll_interval)
                 me_sleep(poll_interval);
                 mem_atomic_read_s8(&pcap_buf_hdr_in, mu_base_s8, 0,
                                    sizeof(uint32_t)*2);
-            }
-            else {
+                total_packets = pcap_buf_hdr_in.total_packets;
+            } else {
                 total_dmas += 1;
                 first_packet += num_pkts;
             }
@@ -1030,6 +1053,10 @@ packet_capture_dma_to_host_master(int poll_interval)
             if (dmas_completed == total_dmas) break;
             me_sleep(poll_interval);
         }
+
+        /*b DMA a completion of an MU buf
+         */
+        dma_master_enqueue_buffer_complete(mu_base_s8);
 
         /*b Recycle the MU buf
          */
@@ -1166,6 +1193,10 @@ packet_capture_mu_buffer_recycler(int poll_interval)
                              sizeof(mu_base_s8));
         pkt_add_mu_buf_desc(mu_base_s8, buf_seq, &pcie_buf_desc);
         buf_seq++;
+        local_csr_write(local_csr_mailbox0, buf_seq);
+        local_csr_write(local_csr_mailbox1, mu_base_s8);
+        local_csr_write(local_csr_mailbox2, pcie_buf_desc.pcie_base_low);
+        local_csr_write(local_csr_mailbox3, pcie_buf_desc.pcie_base_high);
     }
 }
 
