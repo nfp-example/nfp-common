@@ -63,7 +63,7 @@ struct pktgen_nfp {
         int ring_wptr;
         int ring_entries;
         int ring_rptr;
-        int buffers_given[PCAP_HOST_CLS_RING_SIZE/sizeof(uint64_t)];
+        int buffers_given[PCAP_HOST_CLS_RING_SIZE_ENTRIES];
     } pcap;
     struct pktgen_mem_layout *mem_layout;
 };
@@ -166,7 +166,7 @@ pktgen_load_nfp(struct pktgen_nfp *pktgen_nfp,
         fprintf(stderr, "Failed to find necessary symbols\n");
         return 1;
     }
-    pktgen_nfp->host.ring_mask = (PKTGEN_CLS_RING_SIZE >> 4) - 1;
+    pktgen_nfp->host.ring_mask = (PKTGEN_CLS_RING_SIZE >> 4) - 1;// packet GEN ring is 16B per entry
     return 0;
 }
 
@@ -285,7 +285,7 @@ static int pcap_give_pcie_buffer(struct pktgen_nfp *pktgen_nfp, int buffer)
     }
     offset = PCIE_HUGEPAGE_SIZE;
     offset += buffer << 18;
-    ring_offset = pktgen_nfp->pcap.ring_wptr;
+    ring_offset = pktgen_nfp->pcap.ring_wptr % (PCAP_HOST_CLS_RING_SIZE_ENTRIES);
 
     memset(pktgen_nfp->shm.base+offset,0,sizeof(struct pcap_buffer));
     phys_addr = nfp_huge_physical_address(pktgen_nfp->nfp,
@@ -301,9 +301,8 @@ static int pcap_give_pcie_buffer(struct pktgen_nfp *pktgen_nfp, int buffer)
         return err;
 
     pktgen_nfp->pcap.buffers_given[ring_offset] = buffer;
-    ring_offset = (ring_offset+1) % (PCAP_HOST_CLS_RING_SIZE/sizeof(uint64_t));
 
-    pktgen_nfp->pcap.ring_wptr = ring_offset;
+    pktgen_nfp->pcap.ring_wptr++;
     pktgen_nfp->pcap.ring_entries++;
     return 0;
 }
@@ -385,6 +384,30 @@ static void pcap_dump_pcie_buffers(struct pktgen_nfp *pktgen_nfp)
                     );
                 mem_dump(((char *)pcap_buffer) + (pcap_buffer->pkt_desc[j].offset<<6), 64);
             }
+        }
+        phys_offset += 1 << 18;
+    }
+}
+
+/** pcap_show_pcie_buffer_headers
+ */
+static void pcap_show_pcie_buffer_headers(struct pktgen_nfp *pktgen_nfp)
+{
+    int i;
+    uint64_t phys_offset;
+
+    phys_offset = PCIE_HUGEPAGE_SIZE;
+    printf("Showing PCIe buffers (total %d)\n",pktgen_nfp->pcap.num_buffers);
+    for (i=0; i<pktgen_nfp->pcap.num_buffers; i++) {
+        if (1) {
+            uint64_t phys_addr;
+            phys_addr = nfp_huge_physical_address(pktgen_nfp->nfp,
+                                                  pktgen_nfp->shm.base,
+                                                  phys_offset);
+            printf("Phys %"PRIx64"\n",phys_addr);
+        }
+        if (1) {
+            mem_dump( pktgen_nfp->shm.base + phys_offset, 1024 );
         }
         phys_offset += 1 << 18;
     }
@@ -591,6 +614,9 @@ main(int argc, char **argv)
                 }
             } else if (msg->reason == PKTGEN_IPC_DUMP_BUFFERS) {
                 pcap_dump_pcie_buffers(&pktgen_nfp);
+                msg->ack = 1;
+            } else if (msg->reason == PKTGEN_IPC_SHOW_BUFFER_HEADERS) {
+                pcap_show_pcie_buffer_headers(&pktgen_nfp);
                 msg->ack = 1;
             } else if (msg->reason == PKTGEN_IPC_RETURN_BUFFERS) {
                 if (msg->return_buffers.buffers[0]>=0) {

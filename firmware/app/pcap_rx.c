@@ -25,7 +25,7 @@ void main(void)
     int poll_interval;
     poll_interval = 1000;
 
-    sync_state_set_stage_complete(PCAP_INIT_STAGE_PREHOST_LOAD);
+    sync_state_set_stage_complete(PCAP_INIT_STAGE_CSR_INIT);
     packet_capture_init_pkt_rx_dma();
     sync_state_set_stage_complete(PCAP_INIT_STAGE_READY_TO_RUN);
     packet_capture_pkt_rx_dma(poll_interval);

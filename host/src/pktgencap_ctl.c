@@ -119,6 +119,10 @@ main(int argc, char **argv)
             pktgen_msg->reason = PKTGEN_IPC_DUMP_BUFFERS;
             pktgen_msg->ack = 0;
             nfp_ipc_client_send_msg(pktgen_nfp.shm.nfp_ipc, nfp_ipc_client, msg);
+        } else if (!strcmp(argv[i],"bufshow")) {
+            pktgen_msg->reason = PKTGEN_IPC_SHOW_BUFFER_HEADERS;
+            pktgen_msg->ack = 0;
+            nfp_ipc_client_send_msg(pktgen_nfp.shm.nfp_ipc, nfp_ipc_client, msg);
         } else if (!strcmp(argv[i],"load")) {
             pktgen_msg->reason = PKTGEN_IPC_LOAD;
             pktgen_msg->ack = 0;

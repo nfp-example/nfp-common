@@ -128,10 +128,14 @@ _alloc_mem("mu_buf_desc_store emem global 8 256")
 /* To host DMA is workq of struct mu_buf_to_host_dma_work (8 bytes) */
 #define QDEF_TO_HOST_DMA    pcap_to_host_dma,11,19,emem
 
+/* Debugging journal */
+#define QDEF_DEBUG_JOURNAL  pcap_debug_journal,16,20,emem
+
 MU_QUEUE_ALLOC(QDEF_MU_BUF_RECYCLE);
 MU_QUEUE_ALLOC(QDEF_MU_BUF_IN_USE);
 MU_QUEUE_ALLOC(QDEF_MU_BUF_ALLOC);
 MU_QUEUE_ALLOC(QDEF_TO_HOST_DMA);
+MU_QUEUE_ALLOC(QDEF_DEBUG_JOURNAL)
 
 /** Memory allocation for packet receive threads
  */
@@ -175,6 +179,9 @@ static __declspec(shared) uint32_t muq_mu_buf_in_use;
 
 /* muq_to_host_dma is used by DMA master and slaves */
 static __declspec(shared) uint32_t muq_to_host_dma;
+
+/* muq_debug_journal is used by various debug points */
+static __declspec(shared) uint32_t muq_debug_journal;
 
 /** struct cls_ctm_dma_credit
  *
@@ -763,6 +770,14 @@ pkt_dma_memory_to_host(struct mu_buf_dma_desc *mu_buf_dma_desc,
     pcie_addr.uint32_lo = (mu_buf_dma_desc->pcie_base_low +
                     dma_start_offset);
     pcie_addr.uint32_hi = mu_buf_dma_desc->pcie_base_high;
+    if (1) {
+        __xwrite uint32_t data[4];
+        data[0] = mu_buf_dma_desc->mu_base_s8;
+        data[1] = mu_buf_dma_desc->pcie_base_low;
+        data[2] = dma_size;
+        data[3] = dma_start_offset;
+        mem_ring_journal(muq_debug_journal,data,sizeof(data));
+    }
     pcie_dma_buffer(0 /*PCAP_PCIE_ISLAND*/, pcie_addr,
                     cpp_addr, dma_size,
                                  NFP_PCIE_DMA_TOPCI_HI, token, PCAP_PCIE_DMA_CFG);
@@ -854,7 +869,7 @@ packet_capture_dma_to_host_slave(void)
 
         if (mu_buf_dma_desc.num_packets==0) {
             pkt_dma_memory_to_host(&mu_buf_dma_desc, 0, 64, 0);
-            return;
+            continue;
         }
         dma_start_offset = (mu_buf_dma_desc.first_block << 6);
         dma_length       = ((mu_buf_dma_desc.end_block << 6) -
@@ -923,8 +938,11 @@ dma_master_enqueue_next_pkts_ready(uint32_t mu_base_s8,
 
     /* If the rest of the packets in bitmask[0] are ready, try
      * bitmask[1] too
+     * Note that bitmask[1] is NOT valid if mu_offset means we read
+     * 'over the end' of the 64B cache line
      */
-    if ((n + b) == 32) {
+    if ( ((mu_offset&0x3f)<=56) &&
+         ((n + b) == 32) ) {
         x = ~bitmask[1];
         if (x == 0) {
             n += 32;
@@ -1022,6 +1040,10 @@ packet_capture_dma_to_host_master(int poll_interval)
          */
         first_packet = 0;
         total_dmas = 0;
+        local_csr_write(local_csr_mailbox0, 0);
+        local_csr_write(local_csr_mailbox1, 0);
+        local_csr_write(local_csr_mailbox2, 0);
+        local_csr_write(local_csr_mailbox3, 0);
         for (;;) {
             int num_pkts; /* Number of packets enqueued to slave */
             num_pkts = dma_master_enqueue_next_pkts_ready(mu_base_s8,
@@ -1039,6 +1061,10 @@ packet_capture_dma_to_host_master(int poll_interval)
                 total_dmas += 1;
                 first_packet += num_pkts;
             }
+            local_csr_write(local_csr_mailbox0, first_packet);
+            local_csr_write(local_csr_mailbox1, total_dmas);
+            local_csr_write(local_csr_mailbox2, total_packets);
+            local_csr_write(local_csr_mailbox3, 0);
         }
 
         /* Poll the 'dmas_completed' element until it matches total_dmas
@@ -1050,6 +1076,10 @@ packet_capture_dma_to_host_master(int poll_interval)
             mu_offset = offsetof(struct pcap_buffer, dmas_completed);
             mem_atomic_read_s8(&dmas_completed, mu_base_s8, mu_offset,
                                sizeof(dmas_completed));
+            local_csr_write(local_csr_mailbox0, first_packet);
+            local_csr_write(local_csr_mailbox1, total_dmas);
+            local_csr_write(local_csr_mailbox2, total_packets);
+            local_csr_write(local_csr_mailbox3, dmas_completed);
             if (dmas_completed == total_dmas) break;
             me_sleep(poll_interval);
         }
@@ -1103,6 +1133,9 @@ pkt_add_mu_buf_desc(uint32_t mu_base_s8, int buf_seq,
     __asm {
         mem[write32,pcap_buf_hdr,mu_base_s8,<<8, 0, 4], sig_done[sig1];
         mem[write,zeros,mu_base_s8,<<8, 16, 6],  sig_done[sig2];
+        //Next two are bitmask - atomic write?
+        //No need to clear the offset/size area as that is not DMAed to host
+        //unless bitmask bits are set
         mem[write,zeros,mu_base_s8,<<8, 64, 8],  sig_done[sig3];
         mem[write,zeros,mu_base_s8,<<8, c_128, 8], sig_done[sig4];
     }
@@ -1176,7 +1209,7 @@ packet_capture_mu_buffer_recycler(int poll_interval)
 
     host_data.cls_host_shared_data = __link_sym("pcap_cls_host_shared_data");
     host_data.cls_host_ring_base   = __link_sym("pcap_cls_host_ring_base");
-    host_data.cls_host_ring_item_mask = (PCAP_HOST_CLS_RING_SIZE>>2)-1;
+    host_data.cls_host_ring_item_mask = PCAP_HOST_CLS_RING_SIZE_ENTRIES-1;
     host_data.rptr = 0;
     host_data.wptr = 0;
 
@@ -1230,6 +1263,7 @@ packet_capture_fill_mu_buffer_list(uint32_t mu_base_s8, int num_buf)
  */
 __intrinsic void packet_capture_init_pkt_rx_dma(void)
 {
+    muq_debug_journal  = MU_QUEUE_CONFIG_GET(QDEF_DEBUG_JOURNAL);
     muq_mu_buf_in_use  = MU_QUEUE_CONFIG_GET(QDEF_MU_BUF_IN_USE);
     muq_mu_buf_alloc   = MU_QUEUE_CONFIG_GET(QDEF_MU_BUF_ALLOC);
 }
@@ -1244,6 +1278,7 @@ __intrinsic void packet_capture_init_pkt_rx_dma(void)
  */
 __intrinsic void packet_capture_init_mu_buffer_recycler(void)
 {
+    muq_debug_journal  = MU_QUEUE_CONFIG_WRITE(QDEF_DEBUG_JOURNAL);
     muq_mu_buf_alloc   = MU_QUEUE_CONFIG_WRITE(QDEF_MU_BUF_ALLOC);
     muq_mu_buf_recycle = MU_QUEUE_CONFIG_GET(QDEF_MU_BUF_RECYCLE);
     muq_to_host_dma    = MU_QUEUE_CONFIG_GET(QDEF_TO_HOST_DMA);
@@ -1259,6 +1294,7 @@ __intrinsic void packet_capture_init_mu_buffer_recycler(void)
  */
 __intrinsic void packet_capture_init_dma_to_host_master(void)
 {
+    muq_debug_journal  = MU_QUEUE_CONFIG_GET(QDEF_DEBUG_JOURNAL);
     muq_mu_buf_recycle = MU_QUEUE_CONFIG_WRITE(QDEF_MU_BUF_RECYCLE);
     muq_to_host_dma    = MU_QUEUE_CONFIG_WRITE(QDEF_TO_HOST_DMA);
     muq_mu_buf_in_use  = MU_QUEUE_CONFIG_WRITE(QDEF_MU_BUF_IN_USE);
@@ -1273,6 +1309,7 @@ __intrinsic void packet_capture_init_dma_to_host_master(void)
  */
 __intrinsic void packet_capture_init_dma_to_host_slave(void)
 {
+    muq_debug_journal  = MU_QUEUE_CONFIG_GET(QDEF_DEBUG_JOURNAL);
     muq_to_host_dma    = MU_QUEUE_CONFIG_GET(QDEF_TO_HOST_DMA);
 }
 

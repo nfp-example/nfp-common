@@ -32,6 +32,13 @@
 
 #define PCAP_ISLANDS (1+PCAP_RX_ISLANDS)
 
+// The CSR init stage is used to write basic CSRs
+// For example, this is network configuration, DMA setup, CTM allocation, etc
+// The next stage is prehost load.
+// Here queues should be configured
+// Once the prehost load is done, final preparation must be performed
+// This can include setting up buffer allocations and adding to queues
+// Then the code is ready to run
 #define PCAP_INIT_STAGES 3
 #define PCAP_INIT_STAGE_CSR_INIT      1
 #define PCAP_INIT_STAGE_PREHOST_LOAD 2

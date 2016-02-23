@@ -49,6 +49,7 @@ enum {
     PKTGEN_IPC_DUMP_BUFFERS,
     PKTGEN_IPC_LOAD,
     PKTGEN_IPC_RETURN_BUFFERS,
+    PKTGEN_IPC_SHOW_BUFFER_HEADERS,
 };
 
 /** struct msg_generate
