@@ -51,7 +51,8 @@ network_dma_init(int nbi_island)
     int i;
 
     xpb_base = (1<<31) | (nbi_island<<24) | (0x10<<16); // NBI DMA
-    xpb_write( xpb_base,    0, (((nbi_island&3)+1)<<7) | (1<<6) ); // NbiDmaCfg nbi island and enable CTM polling
+    xpb_write( xpb_base, 0, (((nbi_island&3)+1)<<7) | (1<<6) ); // NbiDmaCfg nbi island and enable CTM polling
+    xpb_write( xpb_base, 0x18, 0 ); // Clear all BP endpoints
     for (i=0; i<32; i++) {
         xpb_write( xpb_base, 0x40+i*4, 0 ); // BPE disabled
     }
@@ -123,10 +124,12 @@ void
 network_dma_init_bp_complete(int nbi_island, int buffer_pool, int bpe)
 {
     int xpb_base;
+    int r;
 
     xpb_base = (1<<31) | (nbi_island<<24) | (0x10<<16); // NBI DMA
 
-    xpb_write( xpb_base, 0x18, (bpe-1) );
+    r = xpb_read( xpb_base, 0x18 );
+    xpb_write( xpb_base, 0x18, r | (1<<(bpe-1)) );
 }
 
 

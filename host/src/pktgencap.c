@@ -619,6 +619,7 @@ main(int argc, char **argv)
                 pcap_show_pcie_buffer_headers(&pktgen_nfp);
                 msg->ack = 1;
             } else if (msg->reason == PKTGEN_IPC_RETURN_BUFFERS) {
+                int i;
                 if (msg->return_buffers.buffers[0]>=0) {
                     pcap_give_pcie_buffer(&pktgen_nfp,msg->return_buffers.buffers[0]);
                     if (msg->return_buffers.buffers[1]>=0) {
@@ -628,11 +629,11 @@ main(int argc, char **argv)
                 }
                 msg->return_buffers.buffers[0] = -1;
                 msg->return_buffers.buffers[1] = -1;
-                if (msg->return_buffers.buffers_to_claim>0) {
+                for (i=0; (i<msg->return_buffers.buffers_to_claim) && (i<1); i++) {
                     int ring_offset;
                     if (pktgen_nfp.pcap.ring_entries>0) {
                         ring_offset = pktgen_nfp.pcap.ring_rptr;
-                        msg->return_buffers.buffers[0] = pktgen_nfp.pcap.buffers_given[ring_offset];
+                        msg->return_buffers.buffers[i] = pktgen_nfp.pcap.buffers_given[ring_offset];
                         ring_offset = (ring_offset+1) % (PCAP_HOST_CLS_RING_SIZE/sizeof(uint64_t));
                         pktgen_nfp.pcap.ring_rptr = ring_offset;
                         pktgen_nfp.pcap.ring_entries--;

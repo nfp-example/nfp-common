@@ -41,7 +41,7 @@ void main(void)
         for (nbi_island=8; nbi_island<9; nbi_island++) {
             network_npc_control(nbi_island,0); // Disable packets
         }
-        for (ctm_island=32; ctm_island<=32+PCAP_RX_ISLANDS; ctm_island++) {
+        for (ctm_island=32; ctm_island<32+PCAP_RX_ISLANDS; ctm_island++) {
             //network_ctm_cleanup(ctm_island, 2000);
         }
         //init_tm(nbi_island);
@@ -58,11 +58,11 @@ void main(void)
                                 1,/* 64B CTM offset */
                                 3 /* 2kB split length */
             );
-        for (ctm_island=32; ctm_island<=32+PCAP_RX_ISLANDS; ctm_island++) {
+        for (ctm_island=32; ctm_island<32+PCAP_RX_ISLANDS; ctm_island++) {
             i = network_dma_init_bpe(8, 0, i, ctm_island, 64 /*pkt credit*/, 64 /*buffer credit */ );
         }
         network_dma_init_bp_complete(8, 0, i);
-        for (ctm_island=32; ctm_island<=32+PCAP_RX_ISLANDS; ctm_island++) {
+        for (ctm_island=32; ctm_island<32+PCAP_RX_ISLANDS; ctm_island++) {
             network_ctm_init(ctm_island, 0);
         }
     }
