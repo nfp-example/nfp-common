@@ -129,7 +129,7 @@ _alloc_mem("mu_buf_desc_store emem global 8 256")
 #define QDEF_TO_HOST_DMA    pcap_to_host_dma,11,19,emem
 
 /* Debugging journal */
-#define QDEF_DEBUG_JOURNAL  pcap_debug_journal,16,20,emem
+#define QDEF_DEBUG_JOURNAL  pcap_debug_journal,16,24,emem
 
 MU_QUEUE_ALLOC(QDEF_MU_BUF_RECYCLE);
 MU_QUEUE_ALLOC(QDEF_MU_BUF_IN_USE);
@@ -441,11 +441,11 @@ pkt_work_enq(struct pkt_buf_desc *pkt_buf_desc)
     pcap_pkt_buf_desc_out = pcap_pkt_buf_desc;
     __asm {
         mem[write, pcap_pkt_buf_desc_out, mu_base_s8, <<8, \
-            mu_desc_offset, 1], sig_done[sig1];
+            mu_desc_offset, 1], ctx_swap[sig1];
         mem[set, mu_bit_out, mu_base_s8, <<8, \
-            mu_bit_offset, 1], sig_done[sig2];
+            mu_bit_offset, 1], ctx_swap[sig2];
     }
-    wait_for_all(&sig1, &sig2);
+    //wait_for_all(&sig1, &sig2);
 }
 
 /** pkt_free - 7i
@@ -567,7 +567,7 @@ pkt_buffer_alloc_from_current(struct mu_buf_desc *mu_buf_desc,
             me_sleep(poll_interval);
             continue;
         }
-        buffer_end = 1 << 18; /* Buffer size fixed at 256kB, 1<<18 */
+        buffer_end = 1 << (18-6); /* Buffer size fixed at 256kB, 1<<18 */
 
         pkt_starts_okay = (mu_buf_desc->offset <= buffer_end);
         pkt_ends_okay   = ((mu_buf_desc->offset + pkt_buf_desc->num_blocks)
@@ -756,13 +756,21 @@ void pkt_dma_to_memory(struct pkt_buf_desc *pkt_buf_desc,
     mu_addr_low  = pkt_buf_desc->mu_base_s8 << 8;
     mu_offset    = pkt_buf_desc->mu_offset;
     local_csr_write(local_csr_cmd_indirect_ref0, mu_addr_high); 
-    size         = pkt_buf_desc->num_blocks+1;
+    size         = pkt_buf_desc->num_blocks;
     override = (( (2 << 3) | (1 << 6) | (1 << 7) ) | ((size - 1) << 8) |
                 (pkt_buf_desc->pkt_addr << (16 - 3)));
     __asm {
         alu[ --, --, B, override ];
         mem[pe_dma_to_memory_buffer, --, mu_addr_low, mu_offset, 1], \
             indirect_ref, ctx_swap[sig]; 
+    }
+    if (0) {
+        __xwrite uint32_t data[4];
+        data[0] = 64;
+        data[1] = mu_offset;
+        data[2] = override;
+        data[3] = mu_addr_low;
+        mem_ring_journal(muq_debug_journal,data,sizeof(data));
     }
 
     /* Release credit of one of CTM DMAs
@@ -921,6 +929,16 @@ packet_capture_dma_to_host_slave(void)
         dma_start_offset = (mu_buf_dma_desc.first_block << 6);
         dma_length       = ((mu_buf_dma_desc.end_block << 6) -
                             dma_start_offset);
+
+        if (0) {
+            __xwrite uint32_t data[4];
+            data[0] = 65;
+            data[1] = mu_buf_dma_desc.first_block;
+            data[2] = mu_buf_dma_desc.end_block - mu_buf_dma_desc.first_block;
+            data[3] = mu_buf_dma_desc.end_block;
+            mem_ring_journal(muq_debug_journal,data,sizeof(data));
+        }
+
         pkt_dma_memory_to_host(&mu_buf_dma_desc, dma_start_offset,
                                dma_length, 3);
 
