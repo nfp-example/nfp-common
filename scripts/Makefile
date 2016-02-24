@@ -47,6 +47,9 @@ trace_packets_in:
 mac_stats:
 	nfp -m mac show port stats 0 0-11
 
+dpdk_cbtest3:
+	(cd ~/pablo/pktgen-dpdk; ./app/app/build/pktgen -c 0xf -n 3 -- -P -p 0x01 -m "[0:1].0")
+
 mailboxes:
 	nfp-reg mecsr:i4.me0.Mailbox0 mecsr:i4.me0.Mailbox1 mecsr:i4.me0.Mailbox2 mecsr:i4.me0.Mailbox3
 	nfp-reg mecsr:i4.me1.Mailbox0 mecsr:i4.me1.Mailbox1 mecsr:i4.me1.Mailbox2 mecsr:i4.me1.Mailbox3

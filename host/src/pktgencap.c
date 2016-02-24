@@ -397,6 +397,11 @@ static void pcap_show_pcie_buffer_headers(struct pktgen_nfp *pktgen_nfp)
     uint64_t phys_offset;
 
     phys_offset = PCIE_HUGEPAGE_SIZE;
+    printf("PCIe pcap ring is %d entries long (wptr %d rptr %d)\n",
+           pktgen_nfp->pcap.ring_entries,
+           pktgen_nfp->pcap.ring_wptr,
+           pktgen_nfp->pcap.ring_rptr
+        );
     printf("Showing PCIe buffers (total %d)\n",pktgen_nfp->pcap.num_buffers);
     for (i=0; i<pktgen_nfp->pcap.num_buffers; i++) {
         if (1) {
@@ -407,7 +412,7 @@ static void pcap_show_pcie_buffer_headers(struct pktgen_nfp *pktgen_nfp)
             printf("Phys %"PRIx64"\n",phys_addr);
         }
         if (1) {
-            mem_dump( pktgen_nfp->shm.base + phys_offset, 1024 );
+            mem_dump( pktgen_nfp->shm.base + phys_offset, 8192 );
         }
         phys_offset += 1 << 18;
     }
