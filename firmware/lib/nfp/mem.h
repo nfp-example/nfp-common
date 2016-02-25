@@ -110,6 +110,11 @@ __intrinsic void mem_atomic_read_s8(__xread void *data, uint32_t base_s8,
 __intrinsic void mem_atomic_write_s8(__xwrite void *data,
                                      uint32_t base_s8, uint32_t ofs,
                                      int size );
+/** mem_ring_journal
+ */
+__intrinsic void mem_ring_journal(uint32_t mu_qdesc,
+                                    __xwrite uint32_t *data, int size);
+
 /** mem_workq_add_work
  */
 __intrinsic void mem_workq_add_work(uint32_t mu_qdesc,

@@ -39,7 +39,7 @@ $(eval $(call micro_c.compile,pcap_host,app,pcap_host.c))
 
 $(eval $(call micro_c.force_include,pcap_recycle,app,pcap_config))
 $(eval $(call micro_c.add_src_lib,pcap_recycle,app,pcap_lib))
-$(eval $(call micro_c.add_fw_libs,pcap_recycle,nfp sync))
+$(eval $(call micro_c.add_fw_libs,pcap_recycle,nfp sync network))
 $(eval $(call micro_c.add_define,pcap_recycle,PCAP_HOST_ISLAND))
 $(eval $(call micro_c.compile,pcap_recycle,app,pcap_recycle.c))
 
@@ -90,7 +90,7 @@ $(eval $(call micro_c.compile,pktgencap_pcap_host,app,pcap_host.c))
 
 $(eval $(call micro_c.force_include,pktgencap_pcap_recycle,app,pktgencap_config))
 $(eval $(call micro_c.add_src_lib,pktgencap_pcap_recycle,app,pcap_lib))
-$(eval $(call micro_c.add_fw_libs,pktgencap_pcap_recycle,nfp sync))
+$(eval $(call micro_c.add_fw_libs,pktgencap_pcap_recycle,nfp sync network))
 $(eval $(call micro_c.add_define,pktgencap_pcap_recycle,PCAP_HOST_ISLAND))
 $(eval $(call micro_c.compile,pktgencap_pcap_recycle,app,pcap_recycle.c))
 
@@ -159,14 +159,14 @@ make_it_go:
 
 make_it_go2:
 	sudo chmod a+rw /dev/nfp-cpp-0
-	sudo chmod a+rw /dev/ttyUSB*
+	#sudo chmod a+rw /dev/ttyUSB*
 	nfp-power =on
-	echo 20 | sudo tee /proc/sys/vm/nr_hugepages
+	#echo 20 | sudo tee /proc/sys/vm/nr_hugepages
 	nfp-reg mecsr:i4.me0.CtxEnables.CtxEnables=0
 	nfp-power nbi=off fpc_0=off fpc_1=off fpc_2=off fpc_3=off
 	sleep 1
 	nfp-power nbi=on fpc_0=on fpc_1=on fpc_2=on fpc_3=on
-	(cd ~/gavin/me_test.hg; make init_network)
+	#(cd ~/gavin/me_test.hg; make init_network)
 	nfp-macinit -0 /opt/netronome/share/nbi/sf1-2x40GE.json -p /opt/netronome/share/nbi/nfp_nbi_phy_tuning_SF.json -m0 
 	nfp -m mac -e set port rx 0 0 enable
 	nfp -m mac -e set port rx 0 4 enable

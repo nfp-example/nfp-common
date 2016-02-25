@@ -46,6 +46,7 @@
 
 #define PCAP_RX_CTXTS 8
 #define PCAP_RX_MES 1
+#define PCAP_RX_ISLANDS    PKTGENCAP_RX_ISLANDS
 
 
 #define PKTGEN_TX_CTXTS 8

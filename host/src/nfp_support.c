@@ -178,7 +178,7 @@ nfp_init(int device_num)
     nfp->pagemap.page_size      = getpagesize();
     nfp->pagemap.huge_page_size = gethugepagesize();
     nfp->pagemap.fd=open("/proc/self/pagemap", O_RDONLY);
-    if (nfp->pagemap.fd<0) goto err;
+    //if (nfp->pagemap.fd<0) goto err;
 
     if (device_num >= 0) {
         nfp->dev=nfp_device_open(device_num);

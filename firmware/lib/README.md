@@ -15,3 +15,16 @@ code, and by adding '<lib>/lib<lib>.c' to the 'nfcc' command
 line. This latter is made easier with the 'micro_c.add_fw_libs'
 template.
 
+## Libraries
+
+### nfp
+
+This contains basic NFP operations
+
+### sync
+
+This contains synchronization operations to enable firmware to start neatly
+
+### network
+
+This contains libraries of functions that initialize portions of an NFP network subsystem

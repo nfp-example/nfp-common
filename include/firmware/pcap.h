@@ -28,8 +28,11 @@
 #define STRINGIFY(x) __STRINGIFY(x)
 #endif
 
+// shared data size is in bytes
+// cls ring size is in bytes - it holds entries of size 8 bytes
 #define PCAP_HOST_CLS_SHARED_DATA_SIZE 64
 #define PCAP_HOST_CLS_RING_SIZE 1024
+#define PCAP_HOST_CLS_RING_SIZE_ENTRIES (PCAP_HOST_CLS_RING_SIZE>>3)
 #define PCAP_HOST_CLS_RING_SIZE__STR STRINGIFY(PKTGEN_CLS_RING_SIZE)
 
 /* Note that PCAP_BUF_TOTAL_PKTS MUST NOT exceed the 'number' field in

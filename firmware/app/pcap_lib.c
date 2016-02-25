@@ -128,10 +128,14 @@ _alloc_mem("mu_buf_desc_store emem global 8 256")
 /* To host DMA is workq of struct mu_buf_to_host_dma_work (8 bytes) */
 #define QDEF_TO_HOST_DMA    pcap_to_host_dma,11,19,emem
 
+/* Debugging journal */
+#define QDEF_DEBUG_JOURNAL  pcap_debug_journal,16,24,emem
+
 MU_QUEUE_ALLOC(QDEF_MU_BUF_RECYCLE);
 MU_QUEUE_ALLOC(QDEF_MU_BUF_IN_USE);
 MU_QUEUE_ALLOC(QDEF_MU_BUF_ALLOC);
 MU_QUEUE_ALLOC(QDEF_TO_HOST_DMA);
+MU_QUEUE_ALLOC(QDEF_DEBUG_JOURNAL)
 
 /** Memory allocation for packet receive threads
  */
@@ -139,6 +143,10 @@ MU_QUEUE_ALLOC(QDEF_TO_HOST_DMA);
 /* cls_ctm_dmas : struct cls_ctm_dma_credit */
 _alloc_mem("cls_ctm_dmas cls island 8")
 #endif
+
+/** Debug allocation
+ */
+_alloc_mem("cls_pcap_debug cls island 16")
 
 /** Memory allocation for host interaction threads
  */
@@ -163,6 +171,7 @@ ALLOC_MEM(pcap_cls_host_ring_base,  cls,global,PCAP_HOST_CLS_RING_SIZE)
 static uint32_t mu_buf_desc_store_s8; /* For packet rx */
 static uint32_t cls_ctm_dmas;         /* For packet rx */
 static __declspec(shared) int packet_count; /* For packet rx */
+static uint32_t cls_pcap_debug;         /* For general debug */
 
 /* muq_mu_buf_recycle is used by fill, DMA master, MU recycler */
 static __declspec(shared) uint32_t muq_mu_buf_recycle;
@@ -175,6 +184,9 @@ static __declspec(shared) uint32_t muq_mu_buf_in_use;
 
 /* muq_to_host_dma is used by DMA master and slaves */
 static __declspec(shared) uint32_t muq_to_host_dma;
+
+/* muq_debug_journal is used by various debug points */
+static __declspec(shared) uint32_t muq_debug_journal;
 
 /** struct cls_ctm_dma_credit
  *
@@ -350,6 +362,14 @@ pkt_mu_buf_desc_taken(struct mu_buf_desc *mu_buf_desc)
 
     wdesc = mu_buf_desc->mu_base_s18;
     mem_workq_add_work(muq_mu_buf_in_use, &wdesc, sizeof(wdesc));
+    if (0) {
+        __xwrite uint32_t data[4];
+        data[0] = 100;
+        data[1] = 0;
+        data[2] = 0;
+        data[3] = mu_buf_desc->mu_base_s18;
+        mem_ring_journal(muq_debug_journal,data,sizeof(data));
+    }
 }
 
 /** pkt_mu_buf_desc_complete - 6i + 100d
@@ -421,11 +441,11 @@ pkt_work_enq(struct pkt_buf_desc *pkt_buf_desc)
     pcap_pkt_buf_desc_out = pcap_pkt_buf_desc;
     __asm {
         mem[write, pcap_pkt_buf_desc_out, mu_base_s8, <<8, \
-            mu_desc_offset, 1], sig_done[sig1];
+            mu_desc_offset, 1], ctx_swap[sig1];
         mem[set, mu_bit_out, mu_base_s8, <<8, \
-            mu_bit_offset, 1], sig_done[sig2];
+            mu_bit_offset, 1], ctx_swap[sig2];
     }
-    wait_for_all(&sig1, &sig2);
+    //wait_for_all(&sig1, &sig2);
 }
 
 /** pkt_free - 7i
@@ -547,7 +567,7 @@ pkt_buffer_alloc_from_current(struct mu_buf_desc *mu_buf_desc,
             me_sleep(poll_interval);
             continue;
         }
-        buffer_end = 1 << 18; /* Buffer size fixed at 256kB, 1<<18 */
+        buffer_end = 1 << (18-6); /* Buffer size fixed at 256kB, 1<<18 */
 
         pkt_starts_okay = (mu_buf_desc->offset <= buffer_end);
         pkt_ends_okay   = ((mu_buf_desc->offset + pkt_buf_desc->num_blocks)
@@ -558,6 +578,14 @@ pkt_buffer_alloc_from_current(struct mu_buf_desc *mu_buf_desc,
         /* If a good allocation then return
          */
         if (pkt_ends_okay && pkt_num_okay) {
+            if (0) {
+                __xwrite uint32_t data[4];
+                data[0] = mu_buf_desc->mu_base_s18;
+                data[1] = mu_buf_desc->number;
+                data[2] = mu_buf_desc->offset;
+                data[3] = pkt_buf_desc->num_blocks;
+                mem_ring_journal(muq_debug_journal,data,sizeof(data));
+            }
             pkt_buf_desc->mu_num     = mu_buf_desc->number;
             pkt_buf_desc->mu_base_s8 = mu_buf_desc->mu_base_s18 << 10;
             pkt_buf_desc->mu_offset  = mu_buf_desc->offset << 6;
@@ -573,7 +601,17 @@ pkt_buffer_alloc_from_current(struct mu_buf_desc *mu_buf_desc,
          */
         if (pkt_starts_okay) {
             if (pkt_num_max || pkt_num_okay)
+            {
+                if (0) {
+                    __xwrite uint32_t data[4];
+                    data[0] = 0;
+                    data[1] = mu_buf_desc->number;
+                    data[2] = mu_buf_desc->offset;
+                    data[3] = pkt_buf_desc->num_blocks;
+                    mem_ring_journal(muq_debug_journal,data,sizeof(data));
+                }
                 return PKT_BUF_OVERFLOWED;
+            }
         }
 
         /* This allocation failed, last also failed, so retry required
@@ -599,9 +637,25 @@ pkt_buffer_alloc_from_new(struct mu_buf_desc *mu_buf_desc,
     __xread  struct mu_buf_desc mu_buf_desc_read;
     __xwrite struct mu_buf_desc mu_buf_desc_write;
 
-    mem_workq_add_thread(muq_mu_buf_alloc, (void *)&mu_buf_desc_read,
+    if (0) {
+        __xwrite uint32_t data[4];
+        data[0] = 1;
+        data[1] = 0;
+        data[2] = 0;
+        data[3] = pkt_buf_desc->seq;
+        mem_ring_journal(muq_debug_journal,data,sizeof(data));
+    }
+     mem_workq_add_thread(muq_mu_buf_alloc, (void *)&mu_buf_desc_read,
                          sizeof(mu_buf_desc_read));
     *mu_buf_desc = mu_buf_desc_read;
+     if (0) {
+        __xwrite uint32_t data[4];
+        data[0] = 2;
+        data[1] = mu_buf_desc->mu_base_s18;
+        data[2] = PCAP_BUF_FIRST_PKT_OFFSET;
+        data[3] = pkt_buf_desc->seq;
+        mem_ring_journal(muq_debug_journal,data,sizeof(data));
+    }
     pkt_mu_buf_desc_taken(mu_buf_desc);
 
     pkt_buf_desc->mu_base_s8 = mu_buf_desc->mu_base_s18 << 10;
@@ -702,13 +756,21 @@ void pkt_dma_to_memory(struct pkt_buf_desc *pkt_buf_desc,
     mu_addr_low  = pkt_buf_desc->mu_base_s8 << 8;
     mu_offset    = pkt_buf_desc->mu_offset;
     local_csr_write(local_csr_cmd_indirect_ref0, mu_addr_high); 
-    size         = pkt_buf_desc->num_blocks+1;
+    size         = pkt_buf_desc->num_blocks;
     override = (( (2 << 3) | (1 << 6) | (1 << 7) ) | ((size - 1) << 8) |
                 (pkt_buf_desc->pkt_addr << (16 - 3)));
     __asm {
         alu[ --, --, B, override ];
         mem[pe_dma_to_memory_buffer, --, mu_addr_low, mu_offset, 1], \
             indirect_ref, ctx_swap[sig]; 
+    }
+    if (0) {
+        __xwrite uint32_t data[4];
+        data[0] = 64;
+        data[1] = mu_offset;
+        data[2] = override;
+        data[3] = mu_addr_low;
+        mem_ring_journal(muq_debug_journal,data,sizeof(data));
     }
 
     /* Release credit of one of CTM DMAs
@@ -763,6 +825,14 @@ pkt_dma_memory_to_host(struct mu_buf_dma_desc *mu_buf_dma_desc,
     pcie_addr.uint32_lo = (mu_buf_dma_desc->pcie_base_low +
                     dma_start_offset);
     pcie_addr.uint32_hi = mu_buf_dma_desc->pcie_base_high;
+    if (0) {
+        __xwrite uint32_t data[4];
+        data[0] = mu_buf_dma_desc->mu_base_s8;
+        data[1] = mu_buf_dma_desc->pcie_base_low;
+        data[2] = dma_size;
+        data[3] = dma_start_offset;
+        mem_ring_journal(muq_debug_journal,data,sizeof(data));
+    }
     pcie_dma_buffer(0 /*PCAP_PCIE_ISLAND*/, pcie_addr,
                     cpp_addr, dma_size,
                                  NFP_PCIE_DMA_TOPCI_HI, token, PCAP_PCIE_DMA_CFG);
@@ -852,9 +922,23 @@ packet_capture_dma_to_host_slave(void)
 
         pkt_dma_slave_get_desc(&mu_buf_dma_desc);
 
+        if (mu_buf_dma_desc.num_packets==0) {
+            pkt_dma_memory_to_host(&mu_buf_dma_desc, 0, 64, 0);
+            continue;
+        }
         dma_start_offset = (mu_buf_dma_desc.first_block << 6);
         dma_length       = ((mu_buf_dma_desc.end_block << 6) -
                             dma_start_offset);
+
+        if (0) {
+            __xwrite uint32_t data[4];
+            data[0] = 65;
+            data[1] = mu_buf_dma_desc.first_block;
+            data[2] = mu_buf_dma_desc.end_block - mu_buf_dma_desc.first_block;
+            data[3] = mu_buf_dma_desc.end_block;
+            mem_ring_journal(muq_debug_journal,data,sizeof(data));
+        }
+
         pkt_dma_memory_to_host(&mu_buf_dma_desc, dma_start_offset,
                                dma_length, 3);
 
@@ -919,8 +1003,11 @@ dma_master_enqueue_next_pkts_ready(uint32_t mu_base_s8,
 
     /* If the rest of the packets in bitmask[0] are ready, try
      * bitmask[1] too
+     * Note that bitmask[1] is NOT valid if mu_offset means we read
+     * 'over the end' of the 64B cache line
      */
-    if ((n + b) == 32) {
+    if ( ((mu_offset&0x3f)<=56) &&
+         ((n + b) == 32) ) {
         x = ~bitmask[1];
         if (x == 0) {
             n += 32;
@@ -943,6 +1030,24 @@ dma_master_enqueue_next_pkts_ready(uint32_t mu_base_s8,
     mem_workq_add_work(muq_to_host_dma, (void *)&mu_buf_to_host_dma_out,
                        sizeof(mu_buf_to_host_dma));
     return n;
+}
+
+/** dma_master_enqueue_buffer_complete
+ */
+static void
+dma_master_enqueue_buffer_complete(uint32_t mu_base_s8)
+{
+    struct mu_buf_to_host_dma_work mu_buf_to_host_dma;
+    __xwrite struct mu_buf_to_host_dma_work mu_buf_to_host_dma_out;
+
+    /* Build DMA work for 'n' packets from first_packet
+     */
+    mu_buf_to_host_dma.mu_base_s8   = mu_base_s8;
+    mu_buf_to_host_dma.num_packets  = 0;
+    mu_buf_to_host_dma_out = mu_buf_to_host_dma;
+
+    mem_workq_add_work(muq_to_host_dma, (void *)&mu_buf_to_host_dma_out,
+                       sizeof(mu_buf_to_host_dma));
 }
 
 /** packet_capture_dma_to_host_master
@@ -988,8 +1093,24 @@ packet_capture_dma_to_host_master(int poll_interval)
 
         /* Get next MU buf to work on
          */
+        if (0) {
+            __xwrite uint32_t data[4];
+            data[0] = 200;
+            data[1] = 0;
+            data[2] = 0;
+            data[3] = 0;
+            mem_ring_journal(muq_debug_journal,data,sizeof(data));
+        }
         mem_workq_add_thread(muq_mu_buf_in_use, &mu_base_s18,
                              sizeof(mu_base_s18));
+        if (0) {
+            __xwrite uint32_t data[4];
+            data[0] = 201;
+            data[1] = 0;
+            data[2] = 0;
+            data[3] = mu_base_s18;
+            mem_ring_journal(muq_debug_journal,data,sizeof(data));
+        }
 
         mu_base_s8 = mu_base_s18 << 10;
         mem_atomic_read_s8(&pcap_buf_hdr_in, mu_base_s8, 0,
@@ -999,6 +1120,11 @@ packet_capture_dma_to_host_master(int poll_interval)
         /* Add slave DMA batches until all of MU buf is batched up
          */
         first_packet = 0;
+        total_dmas = 0;
+        local_csr_write(local_csr_mailbox0, 0);
+        local_csr_write(local_csr_mailbox1, 0);
+        local_csr_write(local_csr_mailbox2, 0);
+        local_csr_write(local_csr_mailbox3, 0);
         for (;;) {
             int num_pkts; /* Number of packets enqueued to slave */
             num_pkts = dma_master_enqueue_next_pkts_ready(mu_base_s8,
@@ -1011,11 +1137,15 @@ packet_capture_dma_to_host_master(int poll_interval)
                 me_sleep(poll_interval);
                 mem_atomic_read_s8(&pcap_buf_hdr_in, mu_base_s8, 0,
                                    sizeof(uint32_t)*2);
-            }
-            else {
+                total_packets = pcap_buf_hdr_in.total_packets;
+            } else {
                 total_dmas += 1;
                 first_packet += num_pkts;
             }
+            local_csr_write(local_csr_mailbox0, first_packet);
+            local_csr_write(local_csr_mailbox1, total_dmas);
+            local_csr_write(local_csr_mailbox2, total_packets);
+            local_csr_write(local_csr_mailbox3, 0);
         }
 
         /* Poll the 'dmas_completed' element until it matches total_dmas
@@ -1027,9 +1157,17 @@ packet_capture_dma_to_host_master(int poll_interval)
             mu_offset = offsetof(struct pcap_buffer, dmas_completed);
             mem_atomic_read_s8(&dmas_completed, mu_base_s8, mu_offset,
                                sizeof(dmas_completed));
+            local_csr_write(local_csr_mailbox0, first_packet);
+            local_csr_write(local_csr_mailbox1, total_dmas);
+            local_csr_write(local_csr_mailbox2, total_packets);
+            local_csr_write(local_csr_mailbox3, dmas_completed);
             if (dmas_completed == total_dmas) break;
             me_sleep(poll_interval);
         }
+
+        /*b DMA a completion of an MU buf
+         */
+        dma_master_enqueue_buffer_complete(mu_base_s8);
 
         /*b Recycle the MU buf
          */
@@ -1051,6 +1189,7 @@ pkt_add_mu_buf_desc(uint32_t mu_base_s8, int buf_seq,
                     struct pcie_buf_desc *pcie_buf_desc)
 {
     int c_128;       /* =128, in a register as required by assembler */
+    int c_160;       /* =160, in a register as required by assembler */
     SIGNAL sig1, sig2, sig3, sig4;         /* Completion signals */
     __xwrite struct pcap_buf_hdr pcap_buf_hdr; /* MU buffer header data */
     __xwrite uint64_t zeros[8];            /* Zeros to clear bitmask */
@@ -1073,11 +1212,17 @@ pkt_add_mu_buf_desc(uint32_t mu_base_s8, int buf_seq,
     zeros[6] = 0;
     zeros[7] = 0;
     c_128 = 128;
+    c_160 = 160;
     __asm {
         mem[write32,pcap_buf_hdr,mu_base_s8,<<8, 0, 4], sig_done[sig1];
         mem[write,zeros,mu_base_s8,<<8, 16, 6],  sig_done[sig2];
-        mem[write,zeros,mu_base_s8,<<8, 64, 8],  sig_done[sig3];
-        mem[write,zeros,mu_base_s8,<<8, c_128, 8], sig_done[sig4];
+        //Next two are bitmask - atomic write?
+        //No need to clear the offset/size area as that is not DMAed to host
+        //unless bitmask bits are set
+        mem[atomic_write,zeros,mu_base_s8,<<8, 64, 8];
+        mem[atomic_write,zeros,mu_base_s8,<<8, 96, 8],  sig_done[sig3];
+        mem[atomic_write,zeros,mu_base_s8,<<8, c_128, 8];
+        mem[atomic_write,zeros,mu_base_s8,<<8, c_160, 8], sig_done[sig4];
     }
     wait_for_all(&sig1, &sig2, &sig3, &sig4);
 
@@ -1086,6 +1231,14 @@ pkt_add_mu_buf_desc(uint32_t mu_base_s8, int buf_seq,
     mu_buf_desc.number = 0;
     mu_buf_desc.mu_base_s18 = mu_base_s8>>10;
     mu_buf_desc_out = mu_buf_desc;
+    if (0) {
+        __xwrite uint32_t data[4];
+        data[0] = 99;
+        data[1] = 0;
+        data[2] = buf_seq;
+        data[3] = mu_base_s8;
+        mem_ring_journal(muq_debug_journal,data,sizeof(data));
+    }
     mem_workq_add_work(muq_mu_buf_alloc, (void *)&mu_buf_desc_out,
                        sizeof(mu_buf_desc));
 }
@@ -1125,6 +1278,14 @@ host_get_buf(struct host_data *host_data,
     cls_read(&pcie_buf_desc_in, (__cls void *)addr, ofs, 
                  sizeof(uint64_t));
     host_data->rptr++;
+    if (0) {
+        __xwrite uint32_t data[4];
+        data[0] = addr;
+        data[1] = ofs;
+        data[2] = pcie_buf_desc_in.pcie_base_low;
+        data[3] = pcie_buf_desc_in.pcie_base_high;
+        mem_ring_journal(muq_debug_journal,data,sizeof(data));
+    }
     *pcie_buf_desc = pcie_buf_desc_in;
 }
 
@@ -1149,7 +1310,7 @@ packet_capture_mu_buffer_recycler(int poll_interval)
 
     host_data.cls_host_shared_data = __link_sym("pcap_cls_host_shared_data");
     host_data.cls_host_ring_base   = __link_sym("pcap_cls_host_ring_base");
-    host_data.cls_host_ring_item_mask = (PCAP_HOST_CLS_RING_SIZE>>2)-1;
+    host_data.cls_host_ring_item_mask = PCAP_HOST_CLS_RING_SIZE_ENTRIES-1;
     host_data.rptr = 0;
     host_data.wptr = 0;
 
@@ -1166,6 +1327,18 @@ packet_capture_mu_buffer_recycler(int poll_interval)
                              sizeof(mu_base_s8));
         pkt_add_mu_buf_desc(mu_base_s8, buf_seq, &pcie_buf_desc);
         buf_seq++;
+        if (0) {
+            __xwrite uint32_t data[4];
+            data[0] = buf_seq;
+            data[1] = mu_base_s8;
+            data[2] = pcie_buf_desc.pcie_base_low;
+            data[3] = pcie_buf_desc.pcie_base_high;
+            mem_ring_journal(muq_debug_journal,data,sizeof(data));
+        }
+        local_csr_write(local_csr_mailbox0, buf_seq);
+        local_csr_write(local_csr_mailbox1, mu_base_s8);
+        local_csr_write(local_csr_mailbox2, pcie_buf_desc.pcie_base_low);
+        local_csr_write(local_csr_mailbox3, pcie_buf_desc.pcie_base_high);
     }
 }
 
@@ -1199,6 +1372,7 @@ packet_capture_fill_mu_buffer_list(uint32_t mu_base_s8, int num_buf)
  */
 __intrinsic void packet_capture_init_pkt_rx_dma(void)
 {
+    muq_debug_journal  = MU_QUEUE_CONFIG_GET(QDEF_DEBUG_JOURNAL);
     muq_mu_buf_in_use  = MU_QUEUE_CONFIG_GET(QDEF_MU_BUF_IN_USE);
     muq_mu_buf_alloc   = MU_QUEUE_CONFIG_GET(QDEF_MU_BUF_ALLOC);
 }
@@ -1213,6 +1387,7 @@ __intrinsic void packet_capture_init_pkt_rx_dma(void)
  */
 __intrinsic void packet_capture_init_mu_buffer_recycler(void)
 {
+    muq_debug_journal  = MU_QUEUE_CONFIG_WRITE(QDEF_DEBUG_JOURNAL);
     muq_mu_buf_alloc   = MU_QUEUE_CONFIG_WRITE(QDEF_MU_BUF_ALLOC);
     muq_mu_buf_recycle = MU_QUEUE_CONFIG_GET(QDEF_MU_BUF_RECYCLE);
     muq_to_host_dma    = MU_QUEUE_CONFIG_GET(QDEF_TO_HOST_DMA);
@@ -1228,6 +1403,7 @@ __intrinsic void packet_capture_init_mu_buffer_recycler(void)
  */
 __intrinsic void packet_capture_init_dma_to_host_master(void)
 {
+    muq_debug_journal  = MU_QUEUE_CONFIG_GET(QDEF_DEBUG_JOURNAL);
     muq_mu_buf_recycle = MU_QUEUE_CONFIG_WRITE(QDEF_MU_BUF_RECYCLE);
     muq_to_host_dma    = MU_QUEUE_CONFIG_WRITE(QDEF_TO_HOST_DMA);
     muq_mu_buf_in_use  = MU_QUEUE_CONFIG_WRITE(QDEF_MU_BUF_IN_USE);
@@ -1242,6 +1418,7 @@ __intrinsic void packet_capture_init_dma_to_host_master(void)
  */
 __intrinsic void packet_capture_init_dma_to_host_slave(void)
 {
+    muq_debug_journal  = MU_QUEUE_CONFIG_GET(QDEF_DEBUG_JOURNAL);
     muq_to_host_dma    = MU_QUEUE_CONFIG_GET(QDEF_TO_HOST_DMA);
 }
 

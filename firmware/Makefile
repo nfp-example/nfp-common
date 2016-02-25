@@ -25,10 +25,11 @@ NFAS_BASE_DEFS =
 # -indirect_ref_format_nfp6000  BREAKS codeless builds
 CHIP = nfp-6xxx-a0
 CHIP = NFP-624A-0C-A0
+CHIP = NFP-624A-0C-B0
 NFAS_BASE_FLAGS = -chip $(CHIP)
 
 NFCC = $(NETRONOME)/bin/nfcc
-NFCC_BASE_INC = -I$(FIRMWARE_DIR)/lib -I$(INCLUDE_DIR)
+NFCC_BASE_INC = -I$(FIRMWARE_DIR)/lib -I$(INCLUDE_DIR) -I$(NETRONOME)/components/standardlibrary/microc/include -I$(NETRONOME)/include
 NFCC_BASE_DEFS = 
 NFCC_BASE_FLAGS = -Zi -W3 -Qspill=7 -Qnctx_mode=8 -single_dram_signal
 NFCC_BASE_CLIBS = 
