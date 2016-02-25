@@ -877,14 +877,14 @@ pkt_dma_slave_get_desc(struct mu_buf_dma_desc *mu_buf_dma_desc)
     pcap_pkt_buf_desc_size = (sizeof(struct pcap_pkt_buf_desc) /
                             sizeof(uint64_t));
     pcap_buf_hdr_size      = (sizeof(struct pcap_buf_hdr) /
-                            sizeof(uint64_t));
+                            sizeof(uint32_t));
     mu_base_s8 = mu_buf_read.mu_base_s8;
     __asm {
         mem[read, first_pkt_desc, mu_base_s8, <<8, first_packet_ofs, \
             pcap_pkt_buf_desc_size], sig_done[sig1];
         mem[read, last_pkt_desc,  mu_base_s8, <<8, last_packet_ofs, \
             pcap_pkt_buf_desc_size], sig_done[sig2];
-        mem[read, pcap_buf_hdr,     mu_base_s8, <<8, 0, pcap_buf_hdr_size],\
+        mem[atomic_read, pcap_buf_hdr,     mu_base_s8, <<8, 0, pcap_buf_hdr_size],\
             sig_done[sig3];
     }
     wait_for_all(&sig1, &sig2, &sig3);
@@ -1214,8 +1214,8 @@ pkt_add_mu_buf_desc(uint32_t mu_base_s8, int buf_seq,
     c_128 = 128;
     c_160 = 160;
     __asm {
-        mem[write32,pcap_buf_hdr,mu_base_s8,<<8, 0, 4], sig_done[sig1];
-        mem[write,zeros,mu_base_s8,<<8, 16, 6],  sig_done[sig2];
+        mem[atomic_write,pcap_buf_hdr,mu_base_s8,<<8, 0, 4], sig_done[sig1];
+        //mem[atomic_write,zeros,mu_base_s8,<<8, 16, 6],  sig_done[sig2];
         //Next two are bitmask - atomic write?
         //No need to clear the offset/size area as that is not DMAed to host
         //unless bitmask bits are set
@@ -1224,7 +1224,7 @@ pkt_add_mu_buf_desc(uint32_t mu_base_s8, int buf_seq,
         mem[atomic_write,zeros,mu_base_s8,<<8, c_128, 8];
         mem[atomic_write,zeros,mu_base_s8,<<8, c_160, 8], sig_done[sig4];
     }
-    wait_for_all(&sig1, &sig2, &sig3, &sig4);
+    wait_for_all(&sig1, &sig3, &sig4);
 
     mu_buf_desc.__raw = 0;
     mu_buf_desc.offset = 0;
