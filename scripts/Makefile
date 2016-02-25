@@ -58,3 +58,9 @@ mailboxes:
 	nfp-reg mecsr:i32.me0.Mailbox0 mecsr:i32.me0.Mailbox1 mecsr:i32.me0.Mailbox2 mecsr:i32.me0.Mailbox3
 	nfp-reg mecsr:i33.me0.Mailbox0 mecsr:i33.me0.Mailbox1 mecsr:i33.me0.Mailbox2 mecsr:i33.me0.Mailbox3
 	nfp-reg mecsr:i34.me0.Mailbox0 mecsr:i34.me0.Mailbox1 mecsr:i34.me0.Mailbox2 mecsr:i34.me0.Mailbox3
+
+pcie_me_status:
+	@nfp-reg mecsr:i4.me0.ActCtxStatus.ActiveContextPC mecsr:i4.me0.ActCtxStatus.ActiveContextNo mecsr:i4.me0.CtxEnables.CtxEnables mecsr:i4.me0.CtxEnables.Breakpoint
+	@nfp-reg mecsr:i4.me1.ActCtxStatus.ActiveContextPC mecsr:i4.me1.ActCtxStatus.ActiveContextNo mecsr:i4.me1.CtxEnables.CtxEnables mecsr:i4.me1.CtxEnables.Breakpoint
+	@nfp-reg mecsr:i4.me2.ActCtxStatus.ActiveContextPC mecsr:i4.me2.ActCtxStatus.ActiveContextNo mecsr:i4.me2.CtxEnables.CtxEnables mecsr:i4.me2.CtxEnables.Breakpoint
+	@nfp-reg mecsr:i4.me3.ActCtxStatus.ActiveContextPC mecsr:i4.me3.ActCtxStatus.ActiveContextNo mecsr:i4.me3.CtxEnables.CtxEnables mecsr:i4.me3.CtxEnables.Breakpoint
