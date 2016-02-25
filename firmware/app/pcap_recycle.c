@@ -17,11 +17,11 @@
 
 /** Static data
  */
-//#define NUM_MU_BUF 64
-#define NUM_MU_BUF 8
+#define NUM_MU_BUF 64
+//#define NUM_MU_BUF 8
 __asm {
-//    .alloc_mem   pcap_emu_buffer0    i24.mem global (PKT_CAP_MU_BUF_SIZE*NUM_MU_BUF) (1<<18);
-    .alloc_mem   pcap_emu_buffer0    i28.mem global (PKT_CAP_MU_BUF_SIZE*NUM_MU_BUF) (1<<18);
+    .alloc_mem   pcap_emu_buffer0    i24.mem global (PKT_CAP_MU_BUF_SIZE*NUM_MU_BUF) (1<<18);
+//    .alloc_mem   pcap_emu_buffer0    i28.mem global (PKT_CAP_MU_BUF_SIZE*NUM_MU_BUF) (1<<18);
 };
 
 /** Synchronization

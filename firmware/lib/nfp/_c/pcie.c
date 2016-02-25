@@ -122,11 +122,6 @@ pcie_dma_buffer(int island, uint64_32_t pcie_addr, uint64_32_t cpp_addr,
             ctx_arb[bpt];
         }
     }
-    if ((pcie_addr.uint32_hi&0xf)!=8) {
-        __asm {
-            ctx_arb[bpt];
-        }
-    }
     cmd.__raw[0] = cpp_addr.uint32_lo;
     cmd.__raw[1] = cpp_addr.uint32_hi;
     cmd.__raw[2] = pcie_addr.uint32_lo;
