@@ -37,6 +37,7 @@
 #define MAX_PAGES 2
 #define PCIE_HUGEPAGE_SIZE (1<<20)
 #define MAX_NFP_IPC_CLIENTS 32
+#define PCAP_HOST_PHYS_ENTRIES 64
 
 /** struct pcap_host_phys_buffer
  */
@@ -291,7 +292,7 @@ static int pcap_give_pcie_buffer(struct pktgen_nfp *pktgen_nfp, int buffer)
 {
     int ring_offset;
     int err;
-    uint64_t offset;
+    void *virt_addr;
     uint64_t phys_addr;
 
     SL_TIMER_ENTRY(pktgen_nfp->timers.pcap_give_pcie_buffer);
@@ -345,6 +346,8 @@ static int pcap_give_pcie_buffers(struct pktgen_nfp *pktgen_nfp)
 {
     int err;
     int i;
+    uint64_t offset;
+    uint64_t phys_addr;
 
     pktgen_nfp->pcap.ring_wptr = 0;
     pktgen_nfp->pcap.ring_rptr = 0;
@@ -604,32 +607,32 @@ main(int argc, char **argv)
     nfp_ipc_server_desc.max_clients = MAX_NFP_IPC_CLIENTS;
     nfp_ipc_init(pktgen_nfp.shm.nfp_ipc, &nfp_ipc_server_desc);
 
-    SL_TIMER_INIT(pktgen_nfp->timers.nfp_ipc_server_poll);
-    SL_TIMER_INIT(pktgen_nfp->timers.poll_pcap_buffer_recycle);
-    SL_TIMER_INIT(pktgen_nfp->timers.pcap_give_pcie_buffer);
-    SL_TIMER_INIT(pktgen_nfp->timers.polling_loop);
-    SL_TIMER_ENTRY(pktgen_nfp->timers.polling_loop);
+    SL_TIMER_INIT(pktgen_nfp.timers.nfp_ipc_server_poll);
+    SL_TIMER_INIT(pktgen_nfp.timers.poll_pcap_buffer_recycle);
+    SL_TIMER_INIT(pktgen_nfp.timers.pcap_give_pcie_buffer);
+    SL_TIMER_INIT(pktgen_nfp.timers.polling_loop);
+    SL_TIMER_ENTRY(pktgen_nfp.timers.polling_loop);
     for (;;) {
         int poll;
         struct nfp_ipc_event event;
 
-        if (SL_TIMER_ELAPSED(pktgen_nfp->timers.polling_loop)>1000000000ULL) {
-            double total_timer, poll_time, recycle_time, give_buffer_time;
-            SL_TIMER_EXIT(pktgen_nfp->timers.polling_loop);
-            total_time = SL_TIMER_VALUE_US(pktgen_nfp->timers.polling_loop);
-            poll_time = SL_TIMER_VALUE_US(pktgen_nfp->timers.nfp_ipc_server_poll);
-            recycle_time = SL_TIMER_VALUE_US(pktgen_nfp->timers.poll_pcap_buffer_recycle);
-            give_buffer_time = SL_TIMER_VALUE_US(pktgen_nfp->timers.pcap_give_pcie_buffer);
+        if (SL_TIMER_ELAPSED(pktgen_nfp.timers.polling_loop)>1000000000ULL) {
+            double total_time, poll_time, recycle_time, give_buffer_time;
+            SL_TIMER_EXIT(pktgen_nfp.timers.polling_loop);
+            total_time = SL_TIMER_VALUE_US(pktgen_nfp.timers.polling_loop);
+            poll_time = SL_TIMER_VALUE_US(pktgen_nfp.timers.nfp_ipc_server_poll);
+            recycle_time = SL_TIMER_VALUE_US(pktgen_nfp.timers.poll_pcap_buffer_recycle);
+            give_buffer_time = SL_TIMER_VALUE_US(pktgen_nfp.timers.pcap_give_pcie_buffer);
             fprintf(stderr,"Polled for %lf poll time %lf recycle time %lf give buffer time %lf\n", total_time, poll_time, recycle_time, give_buffer_time );
-            SL_TIMER_INIT(pktgen_nfp->timers.nfp_ipc_server_poll);
-            SL_TIMER_INIT(pktgen_nfp->timers.poll_pcap_buffer_recycle);
-            SL_TIMER_INIT(pktgen_nfp->timers.pcap_give_pcie_buffer);
-            SL_TIMER_INIT(pktgen_nfp->timers.polling_loop);
-            SL_TIMER_ENTRY(pktgen_nfp->timers.polling_loop);
+            SL_TIMER_INIT(pktgen_nfp.timers.nfp_ipc_server_poll);
+            SL_TIMER_INIT(pktgen_nfp.timers.poll_pcap_buffer_recycle);
+            SL_TIMER_INIT(pktgen_nfp.timers.pcap_give_pcie_buffer);
+            SL_TIMER_INIT(pktgen_nfp.timers.polling_loop);
+            SL_TIMER_ENTRY(pktgen_nfp.timers.polling_loop);
         }
-        SL_TIMER_ENTRY(pktgen_nfp->timers.nfp_ipc_server_poll);
+        SL_TIMER_ENTRY(pktgen_nfp.timers.nfp_ipc_server_poll);
         poll = nfp_ipc_server_poll(pktgen_nfp.shm.nfp_ipc, 0, &event);
-        SL_TIMER_EXIT(pktgen_nfp->timers.nfp_ipc_server_poll);
+        SL_TIMER_EXIT(pktgen_nfp.timers.nfp_ipc_server_poll);
 
         if (poll==NFP_IPC_EVENT_SHUTDOWN)
             break;
@@ -676,7 +679,7 @@ main(int argc, char **argv)
                 msg->ack = 1;
             } else if (msg->reason == PKTGEN_IPC_RETURN_BUFFERS) {
                 int i;
-                SL_TIMER_ENTRY(pktgen_nfp->timers.poll_pcap_buffer_recycle);
+                SL_TIMER_ENTRY(pktgen_nfp.timers.poll_pcap_buffer_recycle);
                 if (msg->return_buffers.buffers[0]>=0) {
                     pcap_give_pcie_buffer(&pktgen_nfp,msg->return_buffers.buffers[0]);
                     if (msg->return_buffers.buffers[1]>=0) {
@@ -701,7 +704,7 @@ main(int argc, char **argv)
                 msg->ack = -1;
             }
             nfp_ipc_server_send_msg(pktgen_nfp.shm.nfp_ipc, event.client, event.msg);
-            SL_TIMER_EXIT(pktgen_nfp->timers.poll_pcap_buffer_recycle);
+            SL_TIMER_EXIT(pktgen_nfp.timers.poll_pcap_buffer_recycle);
         }
     }
 
