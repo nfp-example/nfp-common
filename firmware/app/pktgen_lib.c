@@ -928,6 +928,7 @@ void pktgen_master_init(void)
     local_muq = MU_QUEUE_CONFIG_WRITE(QDEF_BATCH_DESC_5);
     local_muq = MU_QUEUE_CONFIG_WRITE(QDEF_BATCH_DESC_6);
     local_muq = MU_QUEUE_CONFIG_WRITE(QDEF_BATCH_DESC_7);
+    poll_interval = 1000;
 }
 
 /** pktgen_batch_distributor_init

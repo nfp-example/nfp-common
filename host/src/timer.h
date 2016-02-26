@@ -24,7 +24,7 @@
 #ifdef CLKS_PER_US
 #define SL_TIMER_x86_CLKS_PER_US (CLKS_PER_US)
 #else
-#define SL_TIMER_x86_CLKS_PER_US (2800)
+#define SL_TIMER_x86_CLKS_PER_US (2400)
 #endif
 
 #ifdef __GNUC__

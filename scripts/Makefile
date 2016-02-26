@@ -64,3 +64,7 @@ pcie_me_status:
 	@nfp-reg mecsr:i4.me1.ActCtxStatus.ActiveContextPC mecsr:i4.me1.ActCtxStatus.ActiveContextNo mecsr:i4.me1.CtxEnables.CtxEnables mecsr:i4.me1.CtxEnables.Breakpoint
 	@nfp-reg mecsr:i4.me2.ActCtxStatus.ActiveContextPC mecsr:i4.me2.ActCtxStatus.ActiveContextNo mecsr:i4.me2.CtxEnables.CtxEnables mecsr:i4.me2.CtxEnables.Breakpoint
 	@nfp-reg mecsr:i4.me3.ActCtxStatus.ActiveContextPC mecsr:i4.me3.ActCtxStatus.ActiveContextNo mecsr:i4.me3.CtxEnables.CtxEnables mecsr:i4.me3.CtxEnables.Breakpoint
+
+me_trace:
+	@echo "Getting ME trace for ME $(ME) (e.g. make ME=pcie0.me0 me_trace)"
+	@(cd $(NFP_COMMON)/../nfp-devtools-0.1; PYTHONPATH=$(NFP_COMMON)/../nfp-devtools-0.1/module ./tools/nfp-pa -m $(ME) -r -f $(NFP_COMMON)/firmware/nffw/pktgencap.nffw meinst)
