@@ -29,9 +29,9 @@ void main(void)
 {
     sync_state_set_stage_complete(PKTGEN_INIT_STAGE_PREHOST_LOAD);
     if (ctx()==0) {
-        pktgen_master_init();
+        pktgen_master_init(); // writes queue configs for batch desc and work
     } else {
-        pktgen_batch_distributor_init();
+        pktgen_batch_distributor_init(); // gets queue configs
     }
     sync_state_set_stage_complete(PKTGEN_INIT_STAGE_READY_TO_RUN);
     if (ctx()==0) {

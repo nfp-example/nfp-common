@@ -69,7 +69,6 @@ void main(void)
         }
     }
     sync_state_set_stage_complete(PCAP_INIT_STAGE_CSR_INIT);
-
     if (ctx()==0) {
         packet_capture_init_mu_buffer_recycler();
     } else {

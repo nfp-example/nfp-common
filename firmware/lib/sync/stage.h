@@ -57,7 +57,7 @@
 #include <stdint.h>
 #include <nfp.h>
 
-/** struct sync_stage_set_hdr
+/** struct sync_stage_set_hdr - CHANGE .init IF YOU CHANGE THIS
  */
 struct sync_stage_set_hdr
 {
@@ -65,9 +65,11 @@ struct sync_stage_set_hdr
     int total_users;
     int last_stage_completed;
     int users_completed;
+    int users_completed_mask;
+    int padding[3];
 };
 
-/** struct sync_stage_set
+/** struct sync_stage_set - CHANGE .init IF YOU CHANGE THIS
  */
 struct sync_stage_set
 {
@@ -79,31 +81,39 @@ struct sync_stage_set
 
 /** Macros
  */
-#define __SYNC_STAGE_SET_PREINIT(num_stages,num_users,scope,mem,ql_init)       \
+#define __SYNC_STAGE_SET_PREINIT(num_stages,num_users,scope,mem,ql_init) \
     __asm { .alloc_mem        scope ## _sync_stage_set_mem mem scope 256 256 } \
-    __asm { .declare_resource scope ## _sync_stage_set_res scope 256 scope ## _sync_stage_set_mem }   \
-    __asm { .alloc_resource   scope ## _sync_stage_set scope ## _sync_stage_set_res scope 256 }  \
-    __asm { .init             scope ## _sync_stage_set+0 num_stages }                  \
-    __asm { .init             scope ## _sync_stage_set+4 num_users }                 \
-    __asm { .init             scope ## _sync_stage_set+8 0 }                           \
-    __asm { .init             scope ## _sync_stage_set+12 0 }                          \
-    __asm { .init             scope ## _sync_stage_set+16 ql_init }  /* Start preclaimed */ \
-    __asm { .init             scope ## _sync_stage_set+20 0 }                          \
-    __asm { .init             scope ## _sync_stage_set+24 0 }                          \
-    __asm { .init             scope ## _sync_stage_set+28 0 }                     
+    __asm { .declare_resource scope ## _sync_stage_set_res scope 256 scope ## _sync_stage_set_mem } \
+    __asm { .alloc_resource   scope ## _sync_stage_set scope ## _sync_stage_set_res scope 256 } \
+    __asm { .init             scope ## _sync_stage_set+0 num_stages }   \
+    __asm { .init             scope ## _sync_stage_set+4 num_users }    \
+    __asm { .init             scope ## _sync_stage_set+8 0 }            \
+    __asm { .init             scope ## _sync_stage_set+12 0 }           \
+    __asm { .init             scope ## _sync_stage_set+16 0 }           \
+    __asm { .init             scope ## _sync_stage_set+20 0 }           \
+    __asm { .init             scope ## _sync_stage_set+24 0 }           \
+    __asm { .init             scope ## _sync_stage_set+28 0 }           \
+    __asm { .init             scope ## _sync_stage_set+32 ql_init }  /* Start preclaimed */ \
+    __asm { .init             scope ## _sync_stage_set+36 0 }           \
+    __asm { .init             scope ## _sync_stage_set+40 0 }           \
+    __asm { .init             scope ## _sync_stage_set+44 0 }           \
+    __asm { .init             scope ## _sync_stage_set+48 0 }           \
+    __asm { .init             scope ## _sync_stage_set+52 0 }           \
+    __asm { .init             scope ## _sync_stage_set+56 0 }           \
+    __asm { .init             scope ## _sync_stage_set+60 0 }
 
-#define SYNC_STAGE_SET_GLOBAL_PREINIT(num_stages,num_islands)  \
+#define SYNC_STAGE_SET_GLOBAL_PREINIT(num_stages,num_islands)       \
     __SYNC_STAGE_SET_PREINIT(num_stages,num_islands,global,emem,0)
 
-#define SYNC_STAGE_SET_ISLAND_PREINIT(num_stages,num_mes)      \
+#define SYNC_STAGE_SET_ISLAND_PREINIT(num_stages,num_mes)       \
     __SYNC_STAGE_SET_PREINIT(num_stages,num_mes,island,ctm,16)
 
-#define SYNC_STAGE_SET_ME_PREINIT(num_stages,num_ctx)      \
+#define SYNC_STAGE_SET_ME_PREINIT(num_stages,num_ctx)   \
     __declspec(shared) int __sss_num_ctx=num_ctx;
 
 #define SYNC_STAGE_SET_PREINIT(num_stages,num_ctxts,num_mes,num_islands) \
-    SYNC_STAGE_SET_ME_PREINIT(num_stages,num_ctxts) \
-    SYNC_STAGE_SET_ISLAND_PREINIT(num_stages,num_mes) \
+    SYNC_STAGE_SET_ME_PREINIT(num_stages,num_ctxts)                     \
+    SYNC_STAGE_SET_ISLAND_PREINIT(num_stages,num_mes)                   \
     SYNC_STAGE_SET_GLOBAL_PREINIT(num_stages,num_islands)
 
 /** sync_stage_set_stage_complete

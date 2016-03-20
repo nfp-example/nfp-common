@@ -193,18 +193,18 @@ _declare_resource("pktgen_cls_debug island 64 pktgen_cls_debug_res")
  */
 /* Batch work queue is from pktgen_master to batch_distributor */
 /* Currently 1k words = 256 entries = 4k packets*/
-#define QDEF_BATCH_WORK pktgen_mu_workq_batch_work,10,40,emem
+#define QDEF_BATCH_WORK pktgen_mu_workq_batch_work,10,40,i24.emem
 
 /* Batch descriptor queues are from batch_distributor to tx_slaves */
 /* Currently 1k words = 256 entries = 4k packets*/
-#define QDEF_BATCH_DESC_0 pktgen_mu_workq_batch_desc_0,10,32,emem
-#define QDEF_BATCH_DESC_1 pktgen_mu_workq_batch_desc_1,10,33,emem
-#define QDEF_BATCH_DESC_2 pktgen_mu_workq_batch_desc_2,10,34,emem
-#define QDEF_BATCH_DESC_3 pktgen_mu_workq_batch_desc_3,10,35,emem
-#define QDEF_BATCH_DESC_4 pktgen_mu_workq_batch_desc_4,10,36,emem
-#define QDEF_BATCH_DESC_5 pktgen_mu_workq_batch_desc_5,10,37,emem
-#define QDEF_BATCH_DESC_6 pktgen_mu_workq_batch_desc_6,10,38,emem
-#define QDEF_BATCH_DESC_7 pktgen_mu_workq_batch_desc_7,10,39,emem
+#define QDEF_BATCH_DESC_0 pktgen_mu_workq_batch_desc_0,10,32,i24.emem
+#define QDEF_BATCH_DESC_1 pktgen_mu_workq_batch_desc_1,10,33,i24.emem
+#define QDEF_BATCH_DESC_2 pktgen_mu_workq_batch_desc_2,10,34,i24.emem
+#define QDEF_BATCH_DESC_3 pktgen_mu_workq_batch_desc_3,10,35,i24.emem
+#define QDEF_BATCH_DESC_4 pktgen_mu_workq_batch_desc_4,10,36,i24.emem
+#define QDEF_BATCH_DESC_5 pktgen_mu_workq_batch_desc_5,10,37,i24.emem
+#define QDEF_BATCH_DESC_6 pktgen_mu_workq_batch_desc_6,10,38,i24.emem
+#define QDEF_BATCH_DESC_7 pktgen_mu_workq_batch_desc_7,10,39,i24.emem
 
 MU_QUEUE_ALLOC(QDEF_BATCH_WORK);
 MU_QUEUE_ALLOC(QDEF_BATCH_DESC_0);

@@ -117,19 +117,19 @@ _alloc_mem("mu_buf_desc_store emem global 8 256")
 /** Queue descriptors and allocations
  */
 /* Recycle queue is workq of mu_base_s8 */
-#define QDEF_MU_BUF_RECYCLE pcap_mu_buf_recycle,10,16,emem
+#define QDEF_MU_BUF_RECYCLE pcap_mu_buf_recycle,10,16,i24.emem
 
 /* Buf in use is workq of mu_base_s18 */
-#define QDEF_MU_BUF_IN_USE  pcap_mu_buf_in_use,10,17,emem
+#define QDEF_MU_BUF_IN_USE  pcap_mu_buf_in_use,10,17,i24.emem
 
 /* Buf alloc is workq of struct mu_buf_desc (8 bytes) */
-#define QDEF_MU_BUF_ALLOC   pcap_mu_buf_alloc,11,18,emem
+#define QDEF_MU_BUF_ALLOC   pcap_mu_buf_alloc,11,18,i24.emem
 
 /* To host DMA is workq of struct mu_buf_to_host_dma_work (8 bytes) */
-#define QDEF_TO_HOST_DMA    pcap_to_host_dma,11,19,emem
+#define QDEF_TO_HOST_DMA    pcap_to_host_dma,11,19,i24.emem
 
 /* Debugging journal */
-#define QDEF_DEBUG_JOURNAL  pcap_debug_journal,16,24,emem
+#define QDEF_DEBUG_JOURNAL  pcap_debug_journal,16,24,i24.emem
 
 MU_QUEUE_ALLOC(QDEF_MU_BUF_RECYCLE);
 MU_QUEUE_ALLOC(QDEF_MU_BUF_IN_USE);
@@ -1334,10 +1334,10 @@ packet_capture_mu_buffer_recycler(int poll_interval)
             data[3] = pcie_buf_desc.pcie_base_high;
             mem_ring_journal(muq_debug_journal,data,sizeof(data));
         }
-        local_csr_write(local_csr_mailbox0, buf_seq);
-        local_csr_write(local_csr_mailbox1, mu_base_s8);
-        local_csr_write(local_csr_mailbox2, pcie_buf_desc.pcie_base_low);
-        local_csr_write(local_csr_mailbox3, pcie_buf_desc.pcie_base_high);
+        //local_csr_write(local_csr_mailbox0, buf_seq);
+        //local_csr_write(local_csr_mailbox1, mu_base_s8);
+        //local_csr_write(local_csr_mailbox2, pcie_buf_desc.pcie_base_low);
+        //local_csr_write(local_csr_mailbox3, pcie_buf_desc.pcie_base_high);
     }
 }
 

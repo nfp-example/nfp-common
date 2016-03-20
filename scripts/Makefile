@@ -68,3 +68,86 @@ pcie_me_status:
 me_trace:
 	@echo "Getting ME trace for ME $(ME) (e.g. make ME=pcie0.me0 me_trace)"
 	@(cd $(NFP_COMMON)/../nfp-devtools-0.1; PYTHONPATH=$(NFP_COMMON)/../nfp-devtools-0.1/module ./tools/nfp-pa -m $(ME) -r -f $(NFP_COMMON)/firmware/nffw/pktgencap.nffw meinst)
+
+fw_init_trace:
+	nfp-rtsym global_sync_stage_set
+	nfp-rtsym i4.island_sync_stage_set_mem
+	nfp-rtsym i32.island_sync_stage_set_mem
+	nfp-rtsym i35.island_sync_stage_set_mem
+	nfp-rtsym i33.island_sync_stage_set_mem
+
+fw_init_mailboxes:
+	nfp-reg mecsr:i4.me0.Mailbox0 mecsr:i4.me0.Mailbox1 mecsr:i4.me0.Mailbox2 mecsr:i4.me0.Mailbox3
+	nfp-reg mecsr:i4.me2.Mailbox0 mecsr:i4.me2.Mailbox1 mecsr:i4.me2.Mailbox2 mecsr:i4.me2.Mailbox3
+	nfp-reg mecsr:i4.me3.Mailbox0 mecsr:i4.me3.Mailbox1 mecsr:i4.me3.Mailbox2 mecsr:i4.me3.Mailbox3
+	nfp-reg mecsr:i32.me0.Mailbox0 mecsr:i32.me0.Mailbox1 mecsr:i32.me0.Mailbox2 mecsr:i32.me0.Mailbox3
+	nfp-reg mecsr:i33.me0.Mailbox0 mecsr:i33.me0.Mailbox1 mecsr:i33.me0.Mailbox2 mecsr:i33.me0.Mailbox3
+	nfp-reg mecsr:i35.me0.Mailbox0 mecsr:i35.me0.Mailbox1 mecsr:i35.me0.Mailbox2 mecsr:i35.me0.Mailbox3
+	nfp-reg mecsr:i35.me1.Mailbox0 mecsr:i35.me1.Mailbox1 mecsr:i35.me1.Mailbox2 mecsr:i35.me1.Mailbox3
+	nfp-reg mecsr:i35.me2.Mailbox0 mecsr:i35.me2.Mailbox1 mecsr:i35.me2.Mailbox2 mecsr:i35.me2.Mailbox3
+	nfp-reg mecsr:i35.me3.Mailbox0 mecsr:i35.me3.Mailbox1 mecsr:i35.me3.Mailbox2 mecsr:i35.me3.Mailbox3
+	nfp-reg mecsr:i35.me4.Mailbox0 mecsr:i35.me4.Mailbox1 mecsr:i35.me4.Mailbox2 mecsr:i35.me4.Mailbox3
+	nfp-reg mecsr:i35.me5.Mailbox0 mecsr:i35.me5.Mailbox1 mecsr:i35.me5.Mailbox2 mecsr:i35.me5.Mailbox3
+	nfp-reg mecsr:i35.me6.Mailbox0 mecsr:i35.me6.Mailbox1 mecsr:i35.me6.Mailbox2 mecsr:i35.me6.Mailbox3
+	nfp-reg mecsr:i35.me7.Mailbox0 mecsr:i35.me7.Mailbox1 mecsr:i35.me7.Mailbox2 mecsr:i35.me7.Mailbox3
+
+me_status:
+	@nfp-reg mecsr:$(ME).ActCtxStatus.ActiveContextNo
+	@nfp-reg mecsr:$(ME).ActCtxStatus.ActiveContextPC
+	@nfp-reg mecsr:$(ME).CtxEnables
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=0
+	@nfp-reg mecsr:$(ME).IndCtxStatus
+	@nfp-reg mecsr:$(ME).IndCtxWkpEvt
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=1
+	@nfp-reg mecsr:$(ME).IndCtxStatus
+	@nfp-reg mecsr:$(ME).IndCtxWkpEvt
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=2
+	@nfp-reg mecsr:$(ME).IndCtxStatus
+	@nfp-reg mecsr:$(ME).IndCtxWkpEvt
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=3
+	@nfp-reg mecsr:$(ME).IndCtxStatus
+	@nfp-reg mecsr:$(ME).IndCtxWkpEvt
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=4
+	@nfp-reg mecsr:$(ME).IndCtxStatus
+	@nfp-reg mecsr:$(ME).IndCtxWkpEvt
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=5
+	@nfp-reg mecsr:$(ME).IndCtxStatus
+	@nfp-reg mecsr:$(ME).IndCtxWkpEvt
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=6
+	@nfp-reg mecsr:$(ME).IndCtxStatus
+	@nfp-reg mecsr:$(ME).IndCtxWkpEvt
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=7
+	@nfp-reg mecsr:$(ME).IndCtxStatus
+	@nfp-reg mecsr:$(ME).IndCtxWkpEvt
+
+me_pcs:
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=0
+	@nfp-reg mecsr:$(ME).IndCtxStatus.ContextPC
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=1
+	@nfp-reg mecsr:$(ME).IndCtxStatus.ContextPC
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=2
+	@nfp-reg mecsr:$(ME).IndCtxStatus.ContextPC
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=3
+	@nfp-reg mecsr:$(ME).IndCtxStatus.ContextPC
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=4
+	@nfp-reg mecsr:$(ME).IndCtxStatus.ContextPC
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=5
+	@nfp-reg mecsr:$(ME).IndCtxStatus.ContextPC
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=6
+	@nfp-reg mecsr:$(ME).IndCtxStatus.ContextPC
+	@nfp-reg mecsr:$(ME).CSRCtxPtr=7
+	@nfp-reg mecsr:$(ME).IndCtxStatus.ContextPC
+
+me_island_pcs:
+	@make ME=$(ISL).me0 me_pcs
+	@make ME=$(ISL).me1 me_pcs
+	@make ME=$(ISL).me2 me_pcs
+	@make ME=$(ISL).me3 me_pcs
+	@make ME=$(ISL).me4 me_pcs
+	@make ME=$(ISL).me5 me_pcs
+	@make ME=$(ISL).me6 me_pcs
+	@make ME=$(ISL).me7 me_pcs
+	@make ME=$(ISL).me8 me_pcs
+	@make ME=$(ISL).me9 me_pcs
+	@make ME=$(ISL).me10 me_pcs
+	@make ME=$(ISL).me11 me_pcs

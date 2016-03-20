@@ -11,6 +11,7 @@
  */
 #include "sync/stage.h"
 #include "pktgen_lib.h"
+#include <nfp/me.h>
 #include <stdint.h>
 
 /** Synchronization
@@ -23,7 +24,11 @@ void main(void)
 {
     int batch;
     batch = __MEID & 7;
-    pktgen_tx_slave_init(batch);
+    sync_state_set_stage_complete(PKTGEN_INIT_STAGE_CSR_INIT);
+    //pktgen_tx_slave_init(batch); // gets queue configs
     sync_state_set_stage_complete(PKTGEN_INIT_STAGE_READY_TO_RUN);
-    pktgen_tx_slave();
+    //pktgen_tx_slave();
+    for (;;) {
+        me_sleep(10000);
+    }
 }

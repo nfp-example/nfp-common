@@ -45,11 +45,11 @@ $(eval $(call micro_c.compile,pcap_recycle,app,pcap_recycle.c))
 
 $(eval $(call microcode.assemble_init,pcap_init,app,pcap_init.uc))
 
-$(eval $(call nffw.add_obj_with_mes,pcap,pcap_host,i4.me2))
-$(eval $(call nffw.add_obj_with_mes,pcap,pcap_recycle,i4.me3))
-$(eval $(call nffw.add_obj_with_mes,pcap,pcap_rx,i32.me0 i33.me0 i34.me0))
-$(eval $(call nffw.add_init_obj,pcap,pcap_init))
-$(eval $(call nffw.link,pcap))
+#$(eval $(call nffw.add_obj_with_mes,pcap,pcap_host,i4.me2))
+#$(eval $(call nffw.add_obj_with_mes,pcap,pcap_recycle,i4.me3))
+#$(eval $(call nffw.add_obj_with_mes,pcap,pcap_rx,i32.me0 i33.me0 i34.me0))
+#$(eval $(call nffw.add_init_obj,pcap,pcap_init))
+#$(eval $(call nffw.link,pcap))
 
 #a Packet generator firmware
 $(eval $(call micro_c.force_include,pktgen_host,app,pktgen_config))
@@ -112,9 +112,9 @@ $(eval $(call micro_c.compile,pktgencap_init,app,pktgencap_init.c))
 $(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pktgen_host,i4.me0))
 $(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pcap_host,i4.me2))
 $(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pcap_recycle,i4.me3))
-$(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pcap_rx,i32.me0 i33.me0 i34.me0))
+$(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pcap_rx,i32.me0))# i33.me0 i34.me0))
 $(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_pktgen_tx_slave,i35.me0 i35.me1 i35.me2 i35.me3 i35.me4 i35.me5 i35.me6 i35.me7))
-$(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_init,i5.me2))
+$(eval $(call nffw.add_obj_with_mes,pktgencap,pktgencap_init,i33.me0))
 
 $(eval $(call nffw.add_ppc,pktgencap,i8,$(NETRONOME_PICOCODE)/null/null.npfw))
 
