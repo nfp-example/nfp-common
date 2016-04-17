@@ -405,7 +405,7 @@ nfp_huge_physical_address(struct nfp *nfp, void *ptr, uint64_t ofs)
     }
     addr = (linux_page_data & (-1LL>>(64-55)))*nfp->pagemap.page_size;
     addr += ((uint64_t)ptr) % nfp->pagemap.page_size;
-    fprintf(stderr,"Huge page for %p offset %"PRIx64" is %"PRIx64"\n",ptr,ofs,addr);
+    //fprintf(stderr,"Huge page for %p offset %"PRIx64" is %"PRIx64"\n",ptr,ofs,addr);
     return addr;
 }
 
@@ -485,6 +485,7 @@ nfp_get_rtsym_cppid(struct nfp *nfp, const char *sym_name, struct nfp_cppid *cpp
 int
 nfp_write(struct nfp *nfp, struct nfp_cppid *cppid, int offset, void *data, ssize_t size)
 {
+    /*
     fprintf(stderr,"Writing to %08"PRIx32" %016"PRIx64" data %02x.%02x.%02x.%02x.%02x.%02x...\n",
             cppid->cpp_id, cppid->addr+offset,
             ((unsigned char *)data)[0],
@@ -493,6 +494,7 @@ nfp_write(struct nfp *nfp, struct nfp_cppid *cppid, int offset, void *data, ssiz
             ((unsigned char *)data)[3],
             ((unsigned char *)data)[4],
             ((unsigned char *)data)[5] );
+    */
     if (nfp_cpp_write(nfp->cpp, cppid->cpp_id, cppid->addr+offset, data, size )==size)
         return 0;
     return -1;

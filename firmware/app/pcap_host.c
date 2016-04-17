@@ -33,7 +33,6 @@ void main(void)
     }
 
     sync_state_set_stage_complete(PCAP_INIT_STAGE_READY_TO_RUN);
-
     if (ctx()==0) {
         packet_capture_dma_to_host_master(poll_interval);
     } else {

@@ -26,6 +26,62 @@
 #include <nfp_override.h>
 #include <nfp/mem.h>
 
+/** Debug definitions
+    mailbox0 = SS0W00NN; S = last stage completed by context, W=0->not last context of ME, 1->last context of ME synchronizing, 2-> last context and synced, N=number of contexts done
+    mailbox1 = SS0W00NN; S = last stage completed by all MEs in island, W=0->not last ME of island, 1->last ME if island synchronizing, 2-> last ME and synced, N=MES completed
+    mailbox2 = SS0W00NN; S = last stage completed by context as last ME in island, W=0->not last island, 1->last island if island synchronizing, 2-> last island and synced
+ */
+#define DEBUG_ISLAND_COMPLETE(stage,hdr) do { \
+    register int i=(hdr.last_stage_completed<<24); \
+    i |= hdr.users_completed; \
+    local_csr_write(local_csr_mailbox2, i); \
+    i=local_csr_read(local_csr_mailbox3); \
+    i+=(1<<16);                            \
+    local_csr_write(local_csr_mailbox3, i); \
+    } while (0)
+#define DEBUG_ISLAND_LAST_COMPLETE(stage,hdr) do { \
+    register int i=local_csr_read(local_csr_mailbox2); \
+    local_csr_write(local_csr_mailbox2, (1<<16) | i);  \
+    } while (0)
+#define DEBUG_ISLAND_NEW_STAGE(stage,hdr) do { \
+    register int i=(hdr.last_stage_completed<<24); \
+          local_csr_write(local_csr_mailbox2, (2<<16) | i); \
+    } while (0)
+
+#define DEBUG_ME_COMPLETE(hdr) do { \
+    register int i=(hdr.last_stage_completed<<24); \
+    i |= hdr.users_completed; \
+    local_csr_write(local_csr_mailbox1, i); \
+    i=local_csr_read(local_csr_mailbox3); \
+    i++; \
+    local_csr_write(local_csr_mailbox3, i); \
+    } while (0)
+#define DEBUG_ME_COMPLETE_LAST(hdr) do { \
+    int i=local_csr_read(local_csr_mailbox1); \
+    local_csr_write(local_csr_mailbox1,(1<<16) | i); \
+    } while (0)
+#define DEBUG_ME_NEW_STAGE(hdr) do { \
+    register int i=(hdr.last_stage_completed<<24); \
+          local_csr_write(local_csr_mailbox1, (2<<16) | i); \
+    } while (0)
+
+#define DEBUG_CTX_COMPLETE(stage) do {        \
+    int i=local_csr_read(local_csr_mailbox0); \
+    i=(i+1) &~ (0xffff<<16);\
+    i |= (stage<<24); \
+    local_csr_write(local_csr_mailbox0,i); \
+    if (last_stage_completed==0) local_csr_write(local_csr_mailbox3,0); \
+    } while (0)
+#define DEBUG_ALL_CTXS_COMPLETE(stage) do { \
+    int i=local_csr_read(local_csr_mailbox0); \
+    local_csr_write(local_csr_mailbox0,(1<<16)|i);   \
+    } while (0)
+#define DEBUG_NO_CTXS_COMPLETE(stage) do { \
+    int i=local_csr_read(local_csr_mailbox0); \
+    local_csr_write(local_csr_mailbox0,(2<<16)|i);   \
+    } while (0)
+
+
 /** Static variables
  */
 __declspec(shared) int __sss_num_ctx;
@@ -145,20 +201,21 @@ mes_in_island_complete(__mem struct sync_stage_set *global_sync_stage_set,
     __xread struct sync_stage_set_hdr hdr;
     uint32_t gsss_base;
 
-    mem_read64(&hdr, global_sync_stage_set, sizeof(hdr) );
+    gsss_base = (uint32_t) (((uint64_t)global_sync_stage_set) >> 8);
+    mem_atomic_read_s8(&hdr, gsss_base, 0, sizeof(hdr) );
     if (stage < hdr.last_stage_completed) {
         __asm { ctx_arb[bpt] }
     }
 
-    gsss_base = (uint32_t) (((uint64_t)global_sync_stage_set) >> 8);
     while (stage > hdr.last_stage_completed) {
         SIGNAL_PAIR ql_sig;
         SIGNAL_PAIR ta_sig;
-        __xrw uint32_t data[2];
-        int MQ_OFS, UC_OFS, LSC_OFS;
+        __xrw uint32_t data[3];
+        int MQ_OFS, UC_OFS, UCM_OFS, LSC_OFS;
 
         MQ_OFS = offsetof(struct sync_stage_set,queue_lock);
         UC_OFS = offsetof(struct sync_stage_set,hdr.users_completed);
+        UCM_OFS = offsetof(struct sync_stage_set,hdr.users_completed_mask);
         LSC_OFS = offsetof(struct sync_stage_set,hdr.last_stage_completed);
 
         /* Add to the queue lock list of waiting users, increment
@@ -166,8 +223,16 @@ mes_in_island_complete(__mem struct sync_stage_set *global_sync_stage_set,
          */
         data[0] = encode_signal(&ql_sig);
         data[1] = 1;
+        {
+            uint32_t ctxsts, island_id;
+            ctxsts = local_csr_read(local_csr_active_ctx_sts);
+            island_id = (ctxsts >> 25) & 0x3f;
+            island_id = ((island_id & 0x30)>>1) | (island_id & 0xf);
+            data[2] = 1<<island_id;
+        }
         __asm {
             mem[microq256_put, data[0], gsss_base, <<8, MQ_OFS];
+            mem[set, data[2], gsss_base, <<8, UCM_OFS, 1];
             mem[test_and_add, data[1], gsss_base, <<8, UC_OFS, 1], \
                 sig_done[ta_sig];            
         }
@@ -176,11 +241,14 @@ mes_in_island_complete(__mem struct sync_stage_set *global_sync_stage_set,
         /* If was last to add to list, then update structure, then
          * signal all threads on the list
         */
+        DEBUG_ISLAND_COMPLETE(stage,hdr);
         if (data[1] + 1 == hdr.total_users) {
             int i;
+            DEBUG_ISLAND_LAST_COMPLETE(stage,hdr);
             data[0]=0;
             __asm {
                 mem[incr, --, gsss_base, <<8, LSC_OFS];
+                mem[atomic_write, data[0], gsss_base, <<8, UCM_OFS, 1];
                 mem[atomic_write, data[0], gsss_base, <<8, UC_OFS, 1];
             }
             for (i=0; i<hdr.total_users; i++) {
@@ -203,8 +271,9 @@ mes_in_island_complete(__mem struct sync_stage_set *global_sync_stage_set,
 
         /* Reread the header to get up-to-date last_stage_completed etc
          */
-        mem_read64(&hdr, global_sync_stage_set, sizeof(hdr) );
+        mem_atomic_read_s8(&hdr, gsss_base, 0, sizeof(hdr) );
     }
+    DEBUG_ISLAND_NEW_STAGE(stage,hdr);
 }
 
 /** contexts_in_me_complete
@@ -243,28 +312,37 @@ contexts_in_me_complete(void)
 {
     SIGNAL_PAIR ql_sig;
     SIGNAL_PAIR ta_sig;
-    __xrw uint32_t data;
-    int QL_OFS, UC_OFS, LSC_OFS;
+    __xrw uint32_t data[2];
+    int QL_OFS, UC_OFS, UCM_OFS, LSC_OFS;
     __mem struct sync_stage_set *island_sync_stage_set;
     __xread struct sync_stage_set_hdr hdr;
 
     uint32_t isss_base;
     island_sync_stage_set = (__mem struct sync_stage_set *)__link_sym("island_sync_stage_set");
 
-    mem_read64(&hdr, island_sync_stage_set, sizeof(hdr) );
     isss_base = (uint32_t) (((uint64_t)island_sync_stage_set) >> 8);
+    mem_atomic_read_s8(&hdr, isss_base, 0, sizeof(hdr) );
 
     QL_OFS  = offsetof(struct sync_stage_set, queue_lock);
     UC_OFS  = offsetof(struct sync_stage_set, hdr.users_completed);
+    UCM_OFS = offsetof(struct sync_stage_set, hdr.users_completed_mask);
     LSC_OFS = offsetof(struct sync_stage_set, hdr.last_stage_completed);
 
     /* Add to the queue lock list of users waiting, and increment number
      */
-    data = 1;
+    data[0] = 1;
+    {
+        uint32_t ctxsts, me_id;
+        ctxsts = local_csr_read(local_csr_active_ctx_sts);
+        me_id     = (ctxsts >> 3) & 0xf;
+        data[1] = 1<<me_id;
+    }
+    me_clear_all_signals();
     __asm {
         mem[queue256_lock, --, isss_base, <<8, QL_OFS], \
             sig_done[ql_sig];
-        mem[test_and_add, data, isss_base, <<8, UC_OFS, 1], \
+        mem[set,          data[1], isss_base, <<8, UCM_OFS, 1];
+        mem[test_and_add, data[0], isss_base, <<8, UC_OFS, 1], \
             sig_done[ta_sig];            
     }
     wait_for_all(&ta_sig);
@@ -273,25 +351,29 @@ contexts_in_me_complete(void)
        sync with island level and ...
        unlock the chain
     */
-    if (data + 1 == hdr.total_users) {
+    DEBUG_ME_COMPLETE(hdr);
+    if (data[0] + 1 == hdr.total_users) {
         SIGNAL sig;
         SIGNAL_PAIR last_sig;
         __mem struct sync_stage_set *global_sync_stage_set;
 
-        data=0;
+        DEBUG_ME_COMPLETE_LAST(hdr);
+        data[0]=0;
         __asm {
             mem[queue256_lock, --, isss_base, <<8, QL_OFS], \
                 sig_done[last_sig];
             mem[incr, --, isss_base, <<8, LSC_OFS];
-            mem[atomic_write, data, isss_base, <<8, UC_OFS, 1], \
-                sig_done[sig];
+            mem[atomic_write, data[0], isss_base, <<8, UCM_OFS, 1];
+            //mem[atomic_write, data[0], isss_base, <<8, UC_OFS, 1],   \
+                  //    sig_done[sig];
+            mem[atomic_write, data[0], isss_base, <<8, UC_OFS, 1];
+            mem[atomic_read, data[0], isss_base, <<8, UC_OFS, 1], sig_done[sig];
         }
         wait_for_all(&sig);
 
         global_sync_stage_set = (__mem struct sync_stage_set *)__link_sym("global_sync_stage_set");
         mes_in_island_complete(global_sync_stage_set,
                                hdr.last_stage_completed + 1);
-
         __asm {
             mem[queue256_unlock, --, isss_base, <<8, QL_OFS, 0];
             ctx_arb[ql_sig.even];
@@ -307,6 +389,7 @@ contexts_in_me_complete(void)
             mem[queue256_unlock, --, isss_base, <<8, QL_OFS, 0];
         }
     }
+    DEBUG_ME_NEW_STAGE(hdr);
 }
 
 /** issue_sequence_signal
@@ -353,6 +436,7 @@ context_complete(int total_ctx)
 
     stage_completed = last_stage_completed + 1;
     num_ctx_done += 1;
+    DEBUG_CTX_COMPLETE(last_stage_completed);
     if (num_ctx_done < total_ctx) {
         SIGNAL sig;
         sig_ctx_to_signal = next_sig_ctx;
@@ -363,7 +447,9 @@ context_complete(int total_ctx)
         num_ctx_done = 0;
         next_sig_ctx = 0;
         last_stage_completed++;
+        DEBUG_ALL_CTXS_COMPLETE(stage_completed);
         contexts_in_me_complete();
+        DEBUG_NO_CTXS_COMPLETE(stage_completed);
     }
     if (sig_ctx_to_signal != 0) {
         issue_sequence_signal(sig_ctx_to_signal);
@@ -386,3 +472,5 @@ sync_state_set_stage_complete(int stage)
         if (stage == context_complete(__sss_num_ctx)) break;
     }
 }
+
+
