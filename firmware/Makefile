@@ -24,8 +24,9 @@ NFAS_BASE_INC =
 NFAS_BASE_DEFS = 
 # -indirect_ref_format_nfp6000  BREAKS codeless builds
 CHIP = nfp-6xxx-a0
-CHIP = NFP-624A-0C-A0
 CHIP = NFP-624A-0C-B0
+#CHIP = NFP-4xxx-b0
+#CHIP = NFP-624A-0C-A0
 NFAS_BASE_FLAGS = -chip $(CHIP)
 
 NFCC = $(NETRONOME)/bin/nfcc
@@ -35,7 +36,8 @@ NFCC_BASE_FLAGS = -Zi -W3 -Qspill=7 -Qnctx_mode=8 -single_dram_signal
 NFCC_BASE_CLIBS = 
 
 NFLD = $(NETRONOME)/bin/nfld
-NFLD_BASE_FLAGS = -chip $(CHIP) -g -elf64
+NFLD_BASE_FLAGS = -chip $(CHIP) -g -elf64 -emu_cache_as_ddr.i25
+#NFLD_BASE_FLAGS = -chip $(CHIP) -g -elf64 -res.i25.emem.size 0
 
 include $(FIRMWARE_DIR)/Makefile.templates
 include $(FIRMWARE_DIR)/Makefile.apps

@@ -309,7 +309,7 @@ void main(void)
     if (ctx()!=0) {
         __asm { ctx_arb[kill] }
     }
-
+#if 0
     network_base_init();
 
     /* Rx */
@@ -323,7 +323,7 @@ void main(void)
     for (i=32; i<32+PKTGENCAP_RXTX_ISLANDS; i++) {
         network_init_ctm(i, 1); /* Half of CTM for pkts */
     }
-
+#endif
     sync_state_set_stage_complete(PKTGEN_INIT_STAGE_READY_TO_RUN);
     __asm { ctx_arb[kill] }
 }
