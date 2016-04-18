@@ -17,28 +17,28 @@
  *
  */
 
-/** Includes
+/*a Includes
  */
 #include <stdint.h> 
 
-/** Defines
+/*a Defines
  */
 #define NFP_IPC_MAX_CLIENTS 64
 #define MSGS_PER_QUEUE 8
 
-/** NFP_IPC_STATE
+/** NFP_IPC_STATE, state used for client and server
  */
 enum {
-    NFP_IPC_STATE_INIT,
-    NFP_IPC_STATE_ALIVE,
-    NFP_IPC_STATE_SHUTTING_DOWN, /* To get clients to shut down */
-    NFP_IPC_STATE_DEAD /* Once all clients are inactive */
+    NFP_IPC_STATE_INIT,  /**< For clients, indicates client is inactive */
+    NFP_IPC_STATE_ALIVE, /**< Clients & servers, indicates alive */
+    NFP_IPC_STATE_SHUTTING_DOWN, /**< Clients & servers, indicates shutting down */
+    NFP_IPC_STATE_DEAD  /**< Server, once all clients are shut down, needs reinit */
 };
 
-/** NFP_IPC_EVENT
+/** NFP_IPC_EVENT, return type for server and client poll
  */
 enum {
-    NFP_IPC_EVENT_SHUTDOWN=-1,
+    NFP_IPC_EVENT_SHUTDOWN=-1, /**< E
     NFP_IPC_EVENT_TIMEOUT,
     NFP_IPC_EVENT_MESSAGE,
 };
@@ -184,13 +184,13 @@ int nfp_ipc_server_poll(struct nfp_ipc *nfp_ipc, int timeout, struct nfp_ipc_eve
  */
 int nfp_ipc_server_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg *msg);
 
-/** nfp_ipc_alloc_msg
+/** nfp_ipc_msg_alloc
  */
-struct nfp_ipc_msg *nfp_ipc_alloc_msg(struct nfp_ipc *nfp_ipc, int size);
+struct nfp_ipc_msg *nfp_ipc_msg_alloc(struct nfp_ipc *nfp_ipc, int size);
 
-/** nfp_ipc_free_msg
+/** nfp_ipc_msg_free
  */
-void nfp_ipc_free_msg(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg);
+void nfp_ipc_msg_free(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg);
 
 /** nfp_ipc_client_start
  *

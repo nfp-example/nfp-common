@@ -36,8 +36,11 @@
 struct pktgen_nfp {
     struct nfp *nfp;
     struct {
+        /** base **/
         char *base;
+        /** size **/
         size_t size;
+        /** nfp_ipc **/
         struct nfp_ipc *nfp_ipc;
     } shm;
 };

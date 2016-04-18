@@ -66,9 +66,13 @@ struct pktgen_mem_alloc_hints {
     int hint_type; /* Enumerated hint type, last in array must be
                       PKTGEN_ALLOC_HINT_END */
     union {
+        /** a */
         struct {
+        /** a */
             int region; /* Which region to hint for (schedule/script/data N) */
+        /** a */
             int memory_mask; /* Mask of memories to spread packets across */
+        /** a */
             uint64_t size; /* Size in bytes per memory to spread */
         } balance;
     };

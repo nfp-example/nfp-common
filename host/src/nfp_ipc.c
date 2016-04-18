@@ -674,10 +674,10 @@ nfp_ipc_server_shutdown(struct nfp_ipc *nfp_ipc, int timeout)
     return rc;
 }
 
-/** nfp_ipc_alloc_msg
+/** nfp_ipc_msg_alloc
  */
 struct nfp_ipc_msg *
-nfp_ipc_alloc_msg(struct nfp_ipc *nfp_ipc, int size)
+nfp_ipc_msg_alloc(struct nfp_ipc *nfp_ipc, int size)
 {
     struct nfp_ipc_msg *msg;
     int byte_size;
@@ -749,10 +749,10 @@ nfp_ipc_alloc_msg(struct nfp_ipc *nfp_ipc, int size)
     return msg;
 }
 
-/** nfp_ipc_free_msg
+/** nfp_ipc_msg_free
  */
 void
-nfp_ipc_free_msg(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg)
+nfp_ipc_msg_free(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg)
 {
     int msg_ofs;
     int prev_ofs;

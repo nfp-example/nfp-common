@@ -67,12 +67,13 @@ struct msg_return_buffers {
 };
 
 /** struct pktgen_ipc_msg
+ * @ brief brief thing
  */
 struct pktgen_ipc_msg {
-    int reason;
-    int ack;
-    union {
-        struct msg_generate generate;
-        struct msg_return_buffers return_buffers;
-    };
+    int reason;/**< reason */
+    int ack;/**< ack */
+    union /** fred */ { /** union */
+        struct msg_generate generate;/** generate */
+        struct msg_return_buffers return_buffers;/** return_buffers */
+    };/**< union */
 };
