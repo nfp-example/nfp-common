@@ -125,7 +125,7 @@ main(int argc, char **argv)
     pktgen_alloc_shm(&pktgen_nfp);
 
     struct nfp_ipc_client_desc nfp_ipc_client_desc;
-    nfp_ipc_client = nfp_ipc_start_client(pktgen_nfp.shm.nfp_ipc, &nfp_ipc_client_desc);
+    nfp_ipc_client = nfp_ipc_client_start(pktgen_nfp.shm.nfp_ipc, &nfp_ipc_client_desc);
     if (nfp_ipc_client < 0) {
         fprintf(stderr, "Failed to connect to pktgen SHM\n");
         return 1;
@@ -151,7 +151,7 @@ main(int argc, char **argv)
             }
         }
 
-    nfp_ipc_stop_client(pktgen_nfp.shm.nfp_ipc, nfp_ipc_client);
+    nfp_ipc_client_stop(pktgen_nfp.shm.nfp_ipc, nfp_ipc_client);
 
     return 0;
 }

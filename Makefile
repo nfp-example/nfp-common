@@ -29,6 +29,8 @@ ALL:
 
 clean:
 
+test:
+
 help:
 	@echo "To make for a Starfighter, use:"
 	@echo "  make CHIP=NFP-624A-0C-A0"

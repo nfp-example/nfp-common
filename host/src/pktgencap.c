@@ -605,7 +605,7 @@ main(int argc, char **argv)
 
     struct nfp_ipc_server_desc nfp_ipc_server_desc;
     nfp_ipc_server_desc.max_clients = MAX_NFP_IPC_CLIENTS;
-    nfp_ipc_init(pktgen_nfp.shm.nfp_ipc, &nfp_ipc_server_desc);
+    nfp_ipc_server_init(pktgen_nfp.shm.nfp_ipc, &nfp_ipc_server_desc);
 
     SL_TIMER_INIT(pktgen_nfp.timers.nfp_ipc_server_poll);
     SL_TIMER_INIT(pktgen_nfp.timers.poll_pcap_buffer_recycle);
@@ -708,7 +708,7 @@ main(int argc, char **argv)
         }
     }
 
-    nfp_ipc_shutdown(pktgen_nfp.shm.nfp_ipc, 5*1000*1000);
+    nfp_ipc_server_shutdown(pktgen_nfp.shm.nfp_ipc, 5*1000*1000);
 
     nfp_shutdown(pktgen_nfp.nfp);
     return 0;

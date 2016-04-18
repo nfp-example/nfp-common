@@ -52,6 +52,7 @@ clock_gettime(int clk, struct timespec *ts)
 #endif
 
 /** timer_init
+    Initialize timeout timer to long 'timeout' in us
  */
 static void
 timer_init(struct timer *timer, long timeout)
@@ -550,7 +551,7 @@ client_poll(struct nfp_ipc *nfp_ipc, int client, struct timer *timer, struct nfp
     return NFP_IPC_EVENT_MESSAGE;
 }
 
-/** nfp_ipc_start_client
+/** nfp_ipc_client_start
  *
  * Start a new client
  *
@@ -564,7 +565,7 @@ client_poll(struct nfp_ipc *nfp_ipc, int client, struct timer *timer, struct nfp
  *
  */
 int
-nfp_ipc_start_client(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_client_desc *desc)
+nfp_ipc_client_start(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_client_desc *desc)
 {
     int client;
 
@@ -591,7 +592,7 @@ nfp_ipc_start_client(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_client_desc *
     return client;
 }
 
-/** nfp_ipc_stop_client
+/** nfp_ipc_client_stop
  *
  * Stop a client that has previously been started
  *
@@ -599,7 +600,7 @@ nfp_ipc_start_client(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_client_desc *
  *
  */
 void
-nfp_ipc_stop_client(struct nfp_ipc *nfp_ipc, int client)
+nfp_ipc_client_stop(struct nfp_ipc *nfp_ipc, int client)
 {
     nfp_ipc->clients[client].state = NFP_IPC_STATE_SHUTTING_DOWN;
     alert_server(nfp_ipc, client);
@@ -614,10 +615,10 @@ nfp_ipc_size(void)
     return sizeof(struct nfp_ipc);
 }
 
-/** nfp_ipc_init
+/** nfp_ipc_server_init
  */
 void
-nfp_ipc_init(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_server_desc *desc)
+nfp_ipc_server_init(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_server_desc *desc)
 {
     int max_clients;
     int i;
@@ -639,10 +640,10 @@ nfp_ipc_init(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_server_desc *desc)
     msg_init(nfp_ipc);
 }
 
-/** nfp_ipc_shutdown
+/** nfp_ipc_server_shutdown
  */
 int
-nfp_ipc_shutdown(struct nfp_ipc *nfp_ipc, int timeout)
+nfp_ipc_server_shutdown(struct nfp_ipc *nfp_ipc, int timeout)
 {
     struct timer timer;
     struct nfp_ipc_event event;

@@ -137,9 +137,68 @@ struct nfp_ipc_event {
     struct nfp_ipc_msg *msg;
 };
 
-/** nfp_ipc_start_client
+/** nfp_ipc_size
+ */
+int nfp_ipc_size(void);
+
+/** nfp_ipc_server_init
+    Initialize an NFP IPC server
+
+    @nfp_ipc: storage for nfp_ipc structure, private to the server, of at least 'nfp_ipc_size()' bytes
+    @desc:    structure filled out with maximum number of clients, server name, etc
+
+    Clients cannot connect to a server until it has been initialized
+ */
+void nfp_ipc_server_init(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_server_desc *desc);
+
+/** nfp_ipc_server_shutdown
+    Shut down a previously initialized server
+    Return -1 on error, 0 on success, 1 on timeout
+    
+    @nfp_ipc: previously initialized server structure
+    @timeout: time to wait for clients to shutdown; use 0 to block indefinitely for clients
+
+    Will wait for clients to stop before quitting the server. This will timeout after the
+    given timeout, if that is non-zero.
+ */
+int nfp_ipc_server_shutdown(struct nfp_ipc *nfp_ipc, int timeout);
+
+/** nfp_ipc_server_poll
+    Poll the NFP IPC server for messages or events from clients.
+    Returns NFP_IPC_EVENT_SHUTDOWN if shut down, NFP_IPC_EVENT_TIMEOUT on timeout,
+    else NFP_IPC_EVENT_MESSAGE for a message, in which case event is filled out
+
+    @nfp_ipc: previously initialized server structure
+    @timeout: time to wait for messages, 0 for return immediately
+    @event:   filled with event that occurred
+ */
+int nfp_ipc_server_poll(struct nfp_ipc *nfp_ipc, int timeout, struct nfp_ipc_event *event);
+
+/** nfp_ipc_server_send_msg
+    Send a message from the server to a client. The message has to have been allocated with
+    nfp_ipc_alloc_msg or received from nfp_ipc_server_poll
+
+    @nfp_ipc: previously initialized server structure
+    @client:  client number to send the message to
+    @msg:     message to send
+ */
+int nfp_ipc_server_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg *msg);
+
+/** nfp_ipc_alloc_msg
+ */
+struct nfp_ipc_msg *nfp_ipc_alloc_msg(struct nfp_ipc *nfp_ipc, int size);
+
+/** nfp_ipc_free_msg
+ */
+void nfp_ipc_free_msg(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg);
+
+/** nfp_ipc_client_start
  *
- * Start a new client
+ * Start a new client. Returns client number allocated
+ *
+    @nfp_ipc: previously initialized server structure
+    @desc:    filled-out client descriptor
+
  *
  * If added client 'n', then active_client_mask will now have bit 'n'
  * set, and total_clients will be incremented
@@ -150,48 +209,26 @@ struct nfp_ipc_event {
  * If all clients are busy, of the nfp_ipc is shutting down, then fail.
  *
  */
-int nfp_ipc_start_client(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_client_desc *desc);
+int nfp_ipc_client_start(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_client_desc *desc);
 
-/** nfp_ipc_stop_client
+/** nfp_ipc_client_stop
  *
  * Stop a client that has previously been started
  *
  * Make state to be shutting down, and alerts server
  *
  */
-void nfp_ipc_stop_client(struct nfp_ipc *nfp_ipc, int client);
-
-/** nfp_ipc_size
- */
-int nfp_ipc_size(void);
-
-/** nfp_ipc_init
- */
-void nfp_ipc_init(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_server_desc *desc);
-
-/** nfp_ipc_shutdown
- */
-int nfp_ipc_shutdown(struct nfp_ipc *nfp_ipc, int timeout);
-
-/** nfp_ipc_alloc_msg
- */
-struct nfp_ipc_msg *nfp_ipc_alloc_msg(struct nfp_ipc *nfp_ipc, int size);
-
-/** nfp_ipc_free_msg
- */
-void nfp_ipc_free_msg(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg);
-
-/** nfp_ipc_server_send_msg
- */
-int nfp_ipc_server_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg *msg);
+void nfp_ipc_client_stop(struct nfp_ipc *nfp_ipc, int client);
 
 /** nfp_ipc_client_send_msg
+    Send a message from the client to the server. The message has to have been allocated with
+    nfp_ipc_alloc_msg or received from nfp_ipc_client_poll
+
+    @nfp_ipc: previously initialized server structure
+    @client:  client number to send the message to
+    @msg:     message to send
  */
 int nfp_ipc_client_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg *msg);
-
-/** nfp_ipc_server_poll
- */
-int nfp_ipc_server_poll(struct nfp_ipc *nfp_ipc, int timeout, struct nfp_ipc_event *event);
 
 /** nfp_ipc_client_poll
  */

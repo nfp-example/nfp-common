@@ -69,10 +69,15 @@ $(HOST_BIN_DIR)/nfp_ipc_test:
 
 nfp_ipc_test: $(HOST_BIN_DIR)/nfp_ipc_test
 
+test_nfp_ipc_test: nfp_ipc_test
+	$(HOST_BIN_DIR)/nfp_ipc_test
+
 clean_host__nfp_ipc_test:
 	rm -f $(HOST_BIN_DIR)/nfp_ipc_test
 
 clean_host: clean_host__nfp_ipc_test
+
+test: test_nfp_ipc_test
 
 all_host: pktgencap pktgencap_ctl pktgencap_test nfp_ipc_test
 

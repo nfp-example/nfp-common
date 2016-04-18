@@ -49,16 +49,16 @@ test_simple(int num_clients)
 
     server_desc.max_clients = num_clients;
     nfp_ipc = malloc(nfp_ipc_size());
-    nfp_ipc_init(nfp_ipc, &server_desc);
+    nfp_ipc_server_init(nfp_ipc, &server_desc);
     for (i=0; i<num_clients; i++) {
-        clients[i] = nfp_ipc_start_client(nfp_ipc, &client_desc);
+        clients[i] = nfp_ipc_client_start(nfp_ipc, &client_desc);
         if (clients[i]<0)
             return i+100;
     }
     for (i=0; i<num_clients; i++) {
-        nfp_ipc_stop_client(nfp_ipc, clients[i]);
+        nfp_ipc_client_stop(nfp_ipc, clients[i]);
     }
-    err = nfp_ipc_shutdown(nfp_ipc, 1000);
+    err = nfp_ipc_server_shutdown(nfp_ipc, 1000);
     free(nfp_ipc);
     return err;
 }
@@ -78,14 +78,14 @@ test_start_stop(int num_clients, int iter)
 
     server_desc.max_clients = num_clients;
     nfp_ipc = malloc(nfp_ipc_size());
-    nfp_ipc_init(nfp_ipc, &server_desc);
+    nfp_ipc_server_init(nfp_ipc, &server_desc);
     for (i=0; i<num_clients; i++) {
         clients[i] = -1;
     }
     for (; iter > 0; iter--) {
         i = get_rand(num_clients);
         if (clients[i] < 0) {
-            clients[i] = nfp_ipc_start_client(nfp_ipc, &client_desc);
+            clients[i] = nfp_ipc_client_start(nfp_ipc, &client_desc);
             //printf("Started %d:%d\n",i,clients[i]);
             if (clients[i]<0) {
                 for (i=0; i<num_clients; i++) {
@@ -95,7 +95,7 @@ test_start_stop(int num_clients, int iter)
                 return 100;
             }
         } else {
-            nfp_ipc_stop_client(nfp_ipc, clients[i]);
+            nfp_ipc_client_stop(nfp_ipc, clients[i]);
             //printf("Stopped %d:%d\n",i,clients[i]);
             clients[i] = -1;
         }
@@ -103,10 +103,10 @@ test_start_stop(int num_clients, int iter)
     }
     for (i=0; i<num_clients; i++) {
         if (clients[i] >= 0) {
-            nfp_ipc_stop_client(nfp_ipc, clients[i]);
+            nfp_ipc_client_stop(nfp_ipc, clients[i]);
         }
     }
-    err = nfp_ipc_shutdown(nfp_ipc, 1000);
+    err = nfp_ipc_server_shutdown(nfp_ipc, 1000);
     free(nfp_ipc);
     return err;
 }
@@ -126,7 +126,7 @@ test_mem_simple(int iter, int max_blocks, int size_base, int size_range)
     server_desc.max_clients = 1;
 
     nfp_ipc = malloc(nfp_ipc_size());
-    nfp_ipc_init(nfp_ipc, &server_desc);
+    nfp_ipc_server_init(nfp_ipc, &server_desc);
 
     for (i=0; i<max_blocks; i++) {
         msg[i] = NULL;
@@ -152,7 +152,7 @@ test_mem_simple(int iter, int max_blocks, int size_base, int size_range)
         }
     }
 
-    err = nfp_ipc_shutdown(nfp_ipc, 1000);
+    err = nfp_ipc_server_shutdown(nfp_ipc, 1000);
 
     return err;
 }
@@ -174,10 +174,10 @@ test_msg_simple(int iter, int max_clients)
     server_desc.max_clients = max_clients;
 
     nfp_ipc = malloc(nfp_ipc_size());
-    nfp_ipc_init(nfp_ipc, &server_desc);
+    nfp_ipc_server_init(nfp_ipc, &server_desc);
 
     for (i=0; i<max_clients; i++) {
-        nfp_ipc_start_client(nfp_ipc, &client_desc);
+        nfp_ipc_client_start(nfp_ipc, &client_desc);
         msg[i] = NULL;
     }
     for (; iter > 0; iter--) {
@@ -222,10 +222,10 @@ test_msg_simple(int iter, int max_clients)
         if (msg[i]) {
             nfp_ipc_free_msg(nfp_ipc, msg[i]);
         }
-        nfp_ipc_stop_client(nfp_ipc, i);
+        nfp_ipc_client_stop(nfp_ipc, i);
     }
 
-    err = nfp_ipc_shutdown(nfp_ipc, 1000);
+    err = nfp_ipc_server_shutdown(nfp_ipc, 1000);
     free(nfp_ipc);
 
     return err;
@@ -249,10 +249,10 @@ test_msg_bounce(int iter, int max_clients)
     server_desc.max_clients = max_clients;
 
     nfp_ipc = malloc(nfp_ipc_size());
-    nfp_ipc_init(nfp_ipc, &server_desc);
+    nfp_ipc_server_init(nfp_ipc, &server_desc);
 
     for (i=0; i<max_clients; i++) {
-        nfp_ipc_start_client(nfp_ipc, &client_desc);
+        nfp_ipc_client_start(nfp_ipc, &client_desc);
         msg[i] = NULL;
         msg_state[i] = 0;
     }
@@ -320,10 +320,10 @@ test_msg_bounce(int iter, int max_clients)
             }
             nfp_ipc_free_msg(nfp_ipc, msg[i]);
         }
-        nfp_ipc_stop_client(nfp_ipc, i);
+        nfp_ipc_client_stop(nfp_ipc, i);
     }
 
-    err = nfp_ipc_shutdown(nfp_ipc, 1000);
+    err = nfp_ipc_server_shutdown(nfp_ipc, 1000);
     free(nfp_ipc);
 
     return err;
