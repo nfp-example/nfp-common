@@ -209,7 +209,7 @@ nfp_shutdown(struct nfp *nfp)
 {
     if (!nfp) return;
     if (nfp->dev) {
-        nfp_unload(nfp);
+        nfp_fw_unload(nfp);
         nfp_device_close(nfp->dev);
         nfp->dev = NULL;
     }
@@ -248,7 +248,7 @@ nfp_fw_load(struct nfp *nfp, const char *filename)
  *
  */
 void
-nfp_unload(struct nfp *nfp)
+nfp_fw_unload(struct nfp *nfp)
 {
     if (!nfp->dev) return;
     nfp_nffw_info_acquire(nfp->dev);
