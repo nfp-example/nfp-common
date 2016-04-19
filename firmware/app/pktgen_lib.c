@@ -240,17 +240,18 @@ struct tx_pkt_work {
 /** struct batch_work
  */
 struct batch_work {
-    union {
-        struct {
-            uint32_t     tx_time_lo;   /* Not sure what units... */
-            unsigned int tx_time_hi:8; /* Top 8 bits */
-            unsigned int num_valid_pkts:8;        /* Pad 8 bits */
-            unsigned int tx_seq:16;    /* Tx sequence for first of 8 entries */
-            uint32_t     mu_base_s8;   /* 256B aligned flow script start */
-            uint32_t     work_ofs;     /* Offset to script from script base */
-        };
-        uint32_t __raw[4];
-    };
+/** a **/
+    union {/** a **/
+        struct {/** a **/
+            uint32_t     tx_time_lo;   /** Not sure what units... */
+            unsigned int tx_time_hi:8; /** Top 8 bits */
+            unsigned int num_valid_pkts:8;        /** Pad 8 bits */
+            unsigned int tx_seq:16;    /** Tx sequence for first of 8 entries */
+            uint32_t     mu_base_s8;   /** 256B aligned flow script start */
+            uint32_t     work_ofs;     /** Offset to script from script base */
+        }; /** a **/
+        uint32_t __raw[4]; /** a **/
+    }; /** a **/
 };
 
 /** struct tx_seq

@@ -29,23 +29,41 @@
 /** struct queue_desc
  */
 struct queue_desc {
+/** a **/
     union {
+/** a **/
         struct {
+/** a **/
             unsigned int ring_size:4;
+/** a **/
             unsigned int reserved1:2;
+/** a **/
             unsigned int head_ptr:24;
+/** a **/
             unsigned int eop:1;
+/** a **/
             unsigned int zero:1;
+/** a **/
             unsigned int tail_ptr:30;
+/** a **/
             unsigned int ring_type:2;
+/** a **/
             unsigned int q_loc:2;
+/** a **/
             unsigned int reserved2:4;
+/** a **/
             unsigned int q_page:2;
+/** a **/
             unsigned int q_count:24;
+/** a **/
             uint32_t padding;
+/** a **/
         };
+/** a **/
         uint32_t __raw[4];
+/** a **/
     };
+/** a **/
 };
 
 /** MEM_QUEUE_OP

@@ -73,10 +73,14 @@ struct sync_stage_set_hdr
  */
 struct sync_stage_set
 {
+/** a **/
     struct sync_stage_set_hdr hdr;
-    struct {
+/** a **/
+    struct {/** a **/
         uint64_t queue_lock[4];
-    };
+/** a **/
+    };/** a **/
+
 };
 
 /** Macros

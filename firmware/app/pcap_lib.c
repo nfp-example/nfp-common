@@ -256,15 +256,16 @@ struct pkt_buf_desc {
  *
  */
 struct mu_buf_desc {
-    union {
-        struct {
-            unsigned int offset:24;
-            unsigned int pad:8;
-            unsigned int number:10;
-            unsigned int mu_base_s18:22;
-        };
-        int64_t __raw;
-    };
+    /** a **/
+    union { /** a **/
+        struct { /** a **/
+            unsigned int offset:24; /** a **/
+            unsigned int pad:8; /** a **/
+            unsigned int number:10; /** a **/
+            unsigned int mu_base_s18:22; /** a **/
+        }; /** a **/
+        int64_t __raw; /** a **/
+    }; /** a **/
 };
 
 /** struct mu_buf_to_host_dma_work

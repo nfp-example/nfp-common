@@ -37,31 +37,57 @@
 /** struct nfp_pcie_dma - from databook
  */
 struct nfp_pcie_dma_cmd {
+/** a **/
     union {
+/** a **/
         struct {
+/** a **/
             unsigned int cpp_addr_lo:32;
+/** a **/
             unsigned int mode_sel:2;
+/** a **/
             unsigned int dma_mode:16;
+/** a **/
             unsigned int cpp_token:2;
+/** a **/
             unsigned int dma_cfg_index:4;
+/** a **/
             unsigned int cpp_addr_hi:8;
+/** a **/
             unsigned int pcie_addr_lo:32;
+/** a **/
             unsigned int length:12;
+/** a **/
             unsigned int rid:8;
+/** a **/
             unsigned int rid_override:1;
+/** a **/
             unsigned int trans_class:3;
+/** a **/
             unsigned int pcie_addr_hi:8;
+/** a **/
         };
+/** a **/
         struct {
+/** a **/
             unsigned int pad_0:32;
+/** a **/
             unsigned int signal:17;
+/** a **/
             unsigned int dma_mode_signal:1;
+/** a **/
             unsigned int pad_1:14;
+/** a **/
             unsigned int pad_2:32;
+/** a **/
             unsigned int pad_3:32;
+/** a **/
         };
+/** a **/
         unsigned int __raw[4];
+/** a **/
     };
+/** a **/
 };
 
 /** pcie_read_int

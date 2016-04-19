@@ -26,12 +26,19 @@
 /** uint64_32_t
  */
 typedef union {
+/** a **/
     uint64_t uint64;
+/** a **/
     uint32_t uint32[2];
+/** a **/
     struct {
+/** a **/
         uint32_t uint32_hi;
+/** a **/
         uint32_t uint32_lo;
+/** a **/
     };
+/** a **/
 } uint64_32_t;
 
 /** Close guard
