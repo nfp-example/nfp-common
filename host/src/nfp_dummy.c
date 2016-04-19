@@ -1,4 +1,4 @@
-/** Copyright (C) 2015,  Gavin J Stark.  All rights reserved.
+/** Copyright (C) 2015-2016,  Gavin J Stark.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,22 +19,43 @@
  *
  */
 
-/** Includes
+/*a Includes
  */
 #include <stddef.h> 
 #include <stdint.h> 
 #include "nfp_dummy.h"
 
+/*a Structures
+ */
+/** Dummy structure that can be instanced, so that instance can be
+ * returned from functions
+ **/
 struct nfp_device {
     int dummy;
 };
-struct nfp_device dummy_nfp_device;
+
+/** Dummy structure that can be instanced, so that instance can be
+ * returned from functions
+ **/
 struct nfp_cpp {
     int dummy;
 };
+
+/*a Statics
+ */
+/** Instance of dummy @p nfp_device for returning from functions
+ **/
+struct nfp_device dummy_nfp_device;
+
+/** Instance of dummy @p nfp_device for returning from functions
+ **/
 struct nfp_cpp dummy_nfp_cpp;
 
-/** gethugepagesize
+/*a Huge pages functions
+ */
+/*f gethugepagesize */
+/**
+ * Return huge page size of 1MB
  */
 int
 gethugepagesize(void)
@@ -42,7 +63,9 @@ gethugepagesize(void)
     return 1<<20;
 }
 
-/** get_huge_pages
+/*f get_huge_pages */
+/**
+ * Fail to return memory
  */
 void *
 get_huge_pages(size_t size, int flags)
@@ -50,13 +73,17 @@ get_huge_pages(size_t size, int flags)
     return NULL;
 }
 
-/** free_huge_pages
+/*f free_huge_pages */
+/**
+ * Dummy function doing nothing
  */
 void
 free_huge_pages(void *ptr)
 {
 }
 
+/*a NFP device functions
+ */
 /** nfp_device_open
  */
 struct nfp_device *

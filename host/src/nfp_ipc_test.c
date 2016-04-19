@@ -1,4 +1,4 @@
-/** Copyright (C) 2015,  Gavin J Stark.  All rights reserved.
+/** Copyright (C) 2015-2016,  Gavin J Stark.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,13 +17,20 @@
  *
  */
 
-/** Includes
+/*a Includes
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include "nfp_ipc.h"
 
+/*a Useful functions
+ */
 /** get_rand
+ * @brief Get a random number between 0 and max-1
+ *
+ * @param max Range of numbers to pick randomly from
+ *
+ * @returns Random number between 0 and @p max-1
  */
 static int
 get_rand(int max)
@@ -35,8 +42,19 @@ get_rand(int max)
     return (int)(d / (1<<24));
 }
 
-/** test_simple
+/*a Tests
  */
+/*f test_simple */
+/**
+ * @brief test_simple
+ *
+ * @param num_clients Number of clients to use
+ *
+ * @returns Zero on success, else an error indications
+ *
+ * Start up the specified number of clients, then shut them down.
+ *
+ **/
 static int
 test_simple(int num_clients)
 {
@@ -63,8 +81,19 @@ test_simple(int num_clients)
     return err;
 }
 
-/** test_start_stop
- */
+/*f test_start_stop */
+/**
+ * @brief test_start_stop
+ *
+ * @param iter Number of iterations to run for
+ *
+ * @param num_clients Number of clients to use
+ *
+ * @returns Zero on success, else an error indications
+ *
+ * Randomly start and stop clients.
+ *
+ **/
 static int
 test_start_stop(int num_clients, int iter)
 {
@@ -111,7 +140,29 @@ test_start_stop(int num_clients, int iter)
     return err;
 }
 
-/** test_mem_simple
+/*f test_mem_simple */
+/**
+ * @brief test_msg_bounce
+ *
+ * @param iter Number of iterations to run for
+ *
+ * @param max_blocks
+ *
+ * @param size_base
+ *
+ * @param size_range
+ *
+ * @returns Zero on success, else an error indications
+ *
+ * Create a server, then allocate and free messages in the server.
+ *
+ * The allocations are randomly handled so that the heap will fragment
+ * and require coalescing.
+ *
+ * At the end all the messages are freed.
+ *
+ * Ideally this test is run with the nfp_ipc heap checking enabled
+ *
  **/
 static int
 test_mem_simple(int iter, int max_blocks, int size_base, int size_range)
@@ -157,7 +208,25 @@ test_mem_simple(int iter, int max_blocks, int size_base, int size_range)
     return err;
 }
 
-/** test_msg_simple
+/*f test_msg_simple */
+/**
+ * @brief test_msg_simple
+ *
+ * @param iter Number of iterations to run for
+ *
+ * @param max_clients Maximum number of clients to use
+ *
+ * @returns Zero on success, else an error indications
+ *
+ * Start up all the clients (@p max_clients), and randomly either send
+ * a message from a client or poll for a message in the server
+ *
+ * At most one message is sent per client
+ *
+ * When the server receives a message it frees it
+ *
+ * At the end make the server poll for all the messages that should be pending
+ *
  **/
 static int
 test_msg_simple(int iter, int max_clients)
@@ -231,7 +300,28 @@ test_msg_simple(int iter, int max_clients)
     return err;
 }
 
-/** test_msg_bounce
+/*f test_msg_bounce */
+/**
+ * @brief test_msg_bounce
+ *
+ * @param iter Number of iterations to run for
+ *
+ * @param max_clients Maximum number of clients to use for bouncing
+ *
+ * @returns Zero on success, else an error indications
+ *
+ * Start up all the clients (@p max_clients), and randomly either send
+ * a message from a client, poll for a message in the server, or poll
+ * for a message in the client
+ *
+ * At most one message is sent per client
+ *
+ * When the server receives a message from the client it bounces it back straight away
+ *
+ * At most one message will then be queued for a client
+ *
+ * At the end make the server poll and bounce, and then close out all clients
+ *
  **/
 static int
 test_msg_bounce(int iter, int max_clients)
@@ -329,7 +419,16 @@ test_msg_bounce(int iter, int max_clients)
     return err;
 }
 
-/** TEST_RUN
+/*a Toplevel - main
+ */
+/*f TEST_RUN */
+/**
+ * @brief Run a test and display a pass/fail message
+ *
+ * @param msg Message describing the test for (success or failure)
+ *
+ * @param x Test function to run for the test
+ *
  */
 #define TEST_RUN(msg,x)                    \
     do { \
@@ -341,7 +440,10 @@ test_msg_bounce(int iter, int max_clients)
     } \
     } while (0);
 
-/** main
+/*f main */
+/**
+ * @brief Main function - run the required tests
+ *
  */
 extern int
 main(int argc, char **argv)
