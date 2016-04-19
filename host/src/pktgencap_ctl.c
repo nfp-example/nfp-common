@@ -112,7 +112,7 @@ main(int argc, char **argv)
         int poll;
 
         timeout = 1000*1000;
-        msg = nfp_ipc_alloc_msg(pktgen_nfp.shm.nfp_ipc, sizeof(struct pktgen_ipc_msg));
+        msg = nfp_ipc_msg_alloc(pktgen_nfp.shm.nfp_ipc, sizeof(struct pktgen_ipc_msg));
         pktgen_msg = (struct pktgen_ipc_msg *)(&msg->data[0]);
         if (!strcmp(argv[i],"shutdown")) {
             pktgen_msg->reason = PKTGEN_IPC_SHUTDOWN;

@@ -31,13 +31,129 @@
 #include <time.h>
 #include <inttypes.h>
 
-/** struct timer
+/*f struct timer
  */
 struct timer {
     struct timespec timeout;
 };
 
-/** clock_gettime for OSX
+/*f struct _nfp_ipc_msg_queue */ /**
+ *
+ *  @brief Internal structure for a message queue
+ *
+ * Message queues are used for to-server and to-client messaging. As
+ * the IPC system is meant for limited interaction between clients and
+ * servers (hopefully the clients are doing good work most of the
+ * time) the message queues are of compile-time size; this also helps
+ * with using a single shared memory structure for the client/server.
+ *
+ * Because the message queue size is a compile-time constant, the
+ * message queue can be set up as a circular buffer.
+ *
+ */
+struct _nfp_ipc_msg_queue
+{
+    /** Pointer into msg_ofs of next message to be added to the
+     * queue. Needs to be bounded to @p msg_ofs size, as it is
+     * monotonically increasing. If @p write_ptr == @p read_ptr then
+     * the queue is empty. The queue must never have more than @p
+     * MSGS_PER_QUEUE entries, so @p write_ptr must never exceeed @p
+     * read_ptr by more than @p MSGS_PER_QUEUE (when the queue would
+     * be full)**/
+    int write_ptr;
+    /** Pointer into msg_ofs of next message to be removed from the
+     * queue. Needs to be bounded to @p msg_ofs size, as it is
+     * monotonically increasing. **/
+    int read_ptr;
+    /** Message buffer data, kept as offsets within the heap; pointers
+     * are not valid across different processes, of course. **/
+    int msg_ofs[MSGS_PER_QUEUE];
+};
+
+/*f struct _nfp_ipc_server_data */ /**
+ *
+ * @brief Internal structure for the state of a server
+ *
+ *  This structure contains the state of the nfp_ipc server; it
+ * is an internal data structure that should not be read or modified
+ * by the user of the nfp_ipc functions, but it is declared here so
+ * that the shared data structure (nfp_ipc) for the client/servers can
+ * be defined cleanly.
+ *
+ * The structure contains the start of the server and bit masks used
+ * for interacting with clients. This structure will be read
+ * constantly by the server, and so is made to be exactly one cache
+ * line long - it will reside in the L1 or L2 cache of the core
+ * running the server process. When a client (infrequently) needs to
+ * update the structure (for example when it adds a message for the
+ * server) it has to atomically set a bit, and the client process core
+ * will have to claim the cache line from the server core (forcing an
+ * eviction from the L2 cache of the server core), modify it, write it
+ * back to its L2, and the server will (almost immediately) import the
+ * modified version back in to its L2 cache. It is critical that this
+ * structure does not contain any additional information other than
+ * client-to-server interactions; if it did so then the caches would
+ * thrash more.
+ */
+struct _nfp_ipc_server_data {
+    /** State of the server from NFP_IPC_STATE_* **/
+    int      state;
+    /** Maximum number of clients that can connect to the server **/
+    int      max_clients;
+    /** Total number of clients currently connected to the server **/
+    int      total_clients;
+    /** Padding to align other fields to 8B alignment **/
+    int      pad2;
+    /** Client mask indicating which clients are not inactive **/
+    uint64_t client_mask;
+    /** Active client mask indicating which clients are fully active **/
+    uint64_t active_client_mask;
+    /** Doorbell mask with one bit per client indicating that the
+     * client has added a message to its to-server message queue, or
+     * that the client has changed state. This has to be atomically
+     * set or cleared by the client or server - it cannot be just
+     * written (it may just be read though) **/
+    uint64_t doorbell_mask;
+    /** Server-held mask indicating which clients have set their
+     * doorbells in the recent past but have not yet been serviced **/
+    uint64_t pending_mask;
+    /** Padding to ensure this structure is 64B long (one cache line) **/
+    char pad[16];
+};
+
+/*f struct _nfp_ipc_client_data */ /**
+ *
+ *  @brief Internal structure for a client
+ *
+ *  The internal data structure for a client that is stored in the
+ *  shared memory, with one instance per client.
+ */
+struct _nfp_ipc_client_data {
+    /** State of the client, e.g. inactive, active, shutting down **/
+    int     state;
+    /** Doorbell mask; the server atomically sets a bit in here to
+     * wake client, for example when the @p to_clientq becomes
+     * non-empty **/
+    int     doorbell_mask;
+    /** Message queue to the server from the client **/
+    struct  _nfp_ipc_msg_queue to_serverq;
+    /** Message queue to the client from the server**/
+    struct  _nfp_ipc_msg_queue to_clientq;
+};
+
+/*f struct nfp_ipc */ /**
+ *
+ * @brief Structure containing all server/client data
+ *
+ * This structure
+ */
+struct nfp_ipc {
+    struct _nfp_ipc_server_data server;
+    struct _nfp_ipc_client_data clients[NFP_IPC_MAX_CLIENTS];
+    struct _nfp_ipc_msg_data msg;
+};
+
+/*f clock_gettime for OSX
  */
 #ifdef __MACH__
 #define CLOCK_REALTIME 0
@@ -51,7 +167,7 @@ clock_gettime(int clk, struct timespec *ts)
 }
 #endif
 
-/** timer_init
+/*f timer_init
     Initialize timeout timer to long 'timeout' in us
  */
 static void
@@ -74,7 +190,7 @@ timer_init(struct timer *timer, long timeout)
     }
 }
 
-/** timer_wait
+/*f timer_wait
  */
 static int
 timer_wait(struct timer *timer)
@@ -101,35 +217,35 @@ timer_wait(struct timer *timer)
     return 0;
 }
     
-/** msg_queue_init
+/*f msg_queue_init
  */
 static void
-msg_queue_init(struct nfp_ipc_msg_queue *msgq)
+msg_queue_init(struct _nfp_ipc_msg_queue *msgq)
 {
     msgq->read_ptr = 0;
     msgq->write_ptr = 0;
 }
 
-/** msg_queue_empty
+/*f msg_queue_empty
  */
 static int
-msg_queue_empty(struct nfp_ipc_msg_queue *msgq)
+msg_queue_empty(struct _nfp_ipc_msg_queue *msgq)
 {
     return (msgq->write_ptr == msgq->read_ptr);
 }
 
-/** msg_queue_full
+/*f msg_queue_full
  */
 static int
-msg_queue_full(struct nfp_ipc_msg_queue *msgq)
+msg_queue_full(struct _nfp_ipc_msg_queue *msgq)
 {
     return (msgq->write_ptr-msgq->read_ptr) >= MSGS_PER_QUEUE;
 }
 
-/** msg_queue_get
+/*f msg_queue_get
  */
 static int
-msg_queue_get(struct nfp_ipc_msg_queue *msgq)
+msg_queue_get(struct _nfp_ipc_msg_queue *msgq)
 {
     int ptr;
 
@@ -140,7 +256,7 @@ msg_queue_get(struct nfp_ipc_msg_queue *msgq)
     return msgq->msg_ofs[ptr];
 }
 
-/** msg_queue_put
+/*f msg_queue_put
  *
  * Put a message on a queue
  *
@@ -149,7 +265,7 @@ msg_queue_get(struct nfp_ipc_msg_queue *msgq)
  *
  */
 static int
-msg_queue_put(struct nfp_ipc_msg_queue *msgq, int msg_ofs)
+msg_queue_put(struct _nfp_ipc_msg_queue *msgq, int msg_ofs)
 {
     int ptr;
 
@@ -161,7 +277,7 @@ msg_queue_put(struct nfp_ipc_msg_queue *msgq, int msg_ofs)
     return 0;
 }
 
-/** is_alive
+/*f is_alive
  */
 static int
 is_alive(struct nfp_ipc *nfp_ipc)
@@ -172,7 +288,7 @@ is_alive(struct nfp_ipc *nfp_ipc)
              0 );
 }
 
-/** find_first_set
+/*f find_first_set
  */
 static int
 find_first_set(uint64_t mask)
@@ -185,7 +301,7 @@ find_first_set(uint64_t mask)
     return n;
 }
 
-/** find_free_client
+/*f find_free_client
  */
 static int
 find_free_client(struct nfp_ipc *nfp_ipc)
@@ -198,7 +314,7 @@ find_free_client(struct nfp_ipc *nfp_ipc)
     return find_first_set(av_mask);
 }
 
-/** total_clients_inc
+/*f total_clients_inc
  */
 static void
 total_clients_inc(struct nfp_ipc *nfp_ipc)
@@ -211,7 +327,7 @@ total_clients_inc(struct nfp_ipc *nfp_ipc)
     (void) __atomic_fetch_add(total_clients, one, __ATOMIC_ACQ_REL);
 }
 
-/** total_clients_dec
+/*f total_clients_dec
  */
 static void
 total_clients_dec(struct nfp_ipc *nfp_ipc)
@@ -224,7 +340,7 @@ total_clients_dec(struct nfp_ipc *nfp_ipc)
     (void) __atomic_fetch_add(total_clients, minus_one, __ATOMIC_ACQ_REL);
 }
 
-/** claim_client
+/*f claim_client
  */
 static int
 claim_client(struct nfp_ipc *nfp_ipc, int client)
@@ -242,7 +358,7 @@ claim_client(struct nfp_ipc *nfp_ipc, int client)
     return client;
 }
 
-/** alert_server
+/*f alert_server
  */
 static void
 alert_server(struct nfp_ipc *nfp_ipc, int client)
@@ -255,7 +371,7 @@ alert_server(struct nfp_ipc *nfp_ipc, int client)
     (void) __atomic_fetch_or(doorbell_mask, client_bit, __ATOMIC_ACQ_REL);
 }
 
-/** alert_client
+/*f alert_client
  */
 static void
 alert_client(struct nfp_ipc *nfp_ipc, int client)
@@ -263,7 +379,7 @@ alert_client(struct nfp_ipc *nfp_ipc, int client)
     nfp_ipc->clients[client].doorbell_mask |= 1;
 }
 
-/** alert_clients
+/*f alert_clients
  */
 static void
 alert_clients(struct nfp_ipc *nfp_ipc, uint64_t client_mask)
@@ -276,7 +392,7 @@ alert_clients(struct nfp_ipc *nfp_ipc, uint64_t client_mask)
     }
 }
 
-/** server_client_shutdown
+/*f server_client_shutdown
  *
  * Fully shutdown a client from within the server - the client has already stopped using the API
  *
@@ -295,7 +411,7 @@ server_client_shutdown(struct nfp_ipc *nfp_ipc, int client)
     (void) __atomic_fetch_and(active_client_mask, client_mask, __ATOMIC_ACQ_REL);
 }
 
-/** msg_init
+/*f msg_init
  */
 static void
 msg_init(struct nfp_ipc *nfp_ipc)
@@ -313,7 +429,7 @@ msg_init(struct nfp_ipc *nfp_ipc)
     msg->hdr.byte_size = sizeof(nfp_ipc->msg.data);
 }
 
-/** msg_claim_block
+/*f msg_claim_block
  */
 static int
 msg_claim_block(struct nfp_ipc *nfp_ipc)
@@ -335,7 +451,7 @@ msg_claim_block(struct nfp_ipc *nfp_ipc)
     return 0;
 }
 
-/** msg_release_block
+/*f msg_release_block
  */
 static void
 msg_release_block(struct nfp_ipc *nfp_ipc)
@@ -345,7 +461,7 @@ msg_release_block(struct nfp_ipc *nfp_ipc)
     (void) __atomic_fetch_and(msg_locked, ~1, __ATOMIC_ACQ_REL);
 }
 
-/** msg_dump
+/*f msg_dump
  */
 static void
 msg_dump(struct nfp_ipc *nfp_ipc)
@@ -375,7 +491,7 @@ msg_dump(struct nfp_ipc *nfp_ipc)
     msg_release_block(nfp_ipc);
 }
 
-/** msg_check_heap
+/*f msg_check_heap
  */
 static int
 msg_check_heap(struct nfp_ipc *nfp_ipc)
@@ -458,7 +574,7 @@ msg_check_heap(struct nfp_ipc *nfp_ipc)
     return total_errors;
 }
 
-/** msg_get_ofs
+/*f msg_get_ofs
  */
 static int
 msg_get_ofs(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg)
@@ -467,7 +583,7 @@ msg_get_ofs(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg)
     return (char *)nfp_ipc_msg - (char *)&nfp_ipc->msg;
 }
 
-/** msg_get_msg
+/*f msg_get_msg
  */
 static struct nfp_ipc_msg *
 msg_get_msg(struct nfp_ipc *nfp_ipc, int msg_ofs)
@@ -476,7 +592,7 @@ msg_get_msg(struct nfp_ipc *nfp_ipc, int msg_ofs)
     return (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + msg_ofs);
 }
 
-/** server_poll
+/*f server_poll
  */
 static int
 server_poll(struct nfp_ipc *nfp_ipc, struct timer *timer, struct nfp_ipc_event *event)
@@ -521,7 +637,7 @@ server_poll(struct nfp_ipc *nfp_ipc, struct timer *timer, struct nfp_ipc_event *
     return NFP_IPC_EVENT_MESSAGE;
 }
 
-/** client_poll
+/*f client_poll
  */
 static int
 client_poll(struct nfp_ipc *nfp_ipc, int client, struct timer *timer, struct nfp_ipc_event *event)
@@ -551,7 +667,7 @@ client_poll(struct nfp_ipc *nfp_ipc, int client, struct timer *timer, struct nfp
     return NFP_IPC_EVENT_MESSAGE;
 }
 
-/** nfp_ipc_client_start
+/*f nfp_ipc_client_start
  *
  * Start a new client
  *
@@ -592,7 +708,7 @@ nfp_ipc_client_start(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_client_desc *
     return client;
 }
 
-/** nfp_ipc_client_stop
+/*f nfp_ipc_client_stop
  *
  * Stop a client that has previously been started
  *
@@ -607,7 +723,7 @@ nfp_ipc_client_stop(struct nfp_ipc *nfp_ipc, int client)
     //printf("Stop:Active %016llx\n",nfp_ipc->server.active_client_mask);
 }
 
-/** nfp_ipc_size
+/*f nfp_ipc_size
  */
 int
 nfp_ipc_size(void)
@@ -615,7 +731,7 @@ nfp_ipc_size(void)
     return sizeof(struct nfp_ipc);
 }
 
-/** nfp_ipc_server_init
+/*f nfp_ipc_server_init
  */
 void
 nfp_ipc_server_init(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_server_desc *desc)
@@ -640,7 +756,7 @@ nfp_ipc_server_init(struct nfp_ipc *nfp_ipc, const struct nfp_ipc_server_desc *d
     msg_init(nfp_ipc);
 }
 
-/** nfp_ipc_server_shutdown
+/*f nfp_ipc_server_shutdown
  */
 int
 nfp_ipc_server_shutdown(struct nfp_ipc *nfp_ipc, int timeout)
@@ -674,7 +790,7 @@ nfp_ipc_server_shutdown(struct nfp_ipc *nfp_ipc, int timeout)
     return rc;
 }
 
-/** nfp_ipc_msg_alloc
+/*f nfp_ipc_msg_alloc
  */
 struct nfp_ipc_msg *
 nfp_ipc_msg_alloc(struct nfp_ipc *nfp_ipc, int size)
@@ -695,7 +811,7 @@ nfp_ipc_msg_alloc(struct nfp_ipc *nfp_ipc, int size)
 
     prev_ofs = 0;
     msg_ofs = nfp_ipc->msg.hdr.free_list;
-    byte_size = size + sizeof(struct nfp_ipc_msg_hdr);
+    byte_size = size + sizeof(struct _nfp_ipc_msg_hdr);
     byte_size = (byte_size + 7) & ~7;
 
     for (;;) {
@@ -749,7 +865,7 @@ nfp_ipc_msg_alloc(struct nfp_ipc *nfp_ipc, int size)
     return msg;
 }
 
-/** nfp_ipc_msg_free
+/*f nfp_ipc_msg_free
  */
 void
 nfp_ipc_msg_free(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg)
@@ -842,12 +958,12 @@ nfp_ipc_msg_free(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg)
     if (0) msg_check_heap(nfp_ipc);
 }
 
-/** nfp_ipc_server_send_msg
+/*f nfp_ipc_server_send_msg
  */
 int
 nfp_ipc_server_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg *msg)
 {
-    struct nfp_ipc_msg_queue *msgq;    
+    struct _nfp_ipc_msg_queue *msgq;    
     int rc;
 
     msgq = &(nfp_ipc->clients[client].to_clientq);
@@ -859,12 +975,12 @@ nfp_ipc_server_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg 
     return rc;
 }
 
-/** nfp_ipc_client_send_msg
+/*f nfp_ipc_client_send_msg
  */
 int
 nfp_ipc_client_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg *msg)
 {
-    struct nfp_ipc_msg_queue *msgq;
+    struct _nfp_ipc_msg_queue *msgq;
     int rc;
     
     msgq = &(nfp_ipc->clients[client].to_serverq);
@@ -875,7 +991,7 @@ nfp_ipc_client_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg 
     return rc;
 }
 
-/** nfp_ipc_server_poll
+/*f nfp_ipc_server_poll
  */
 int
 nfp_ipc_server_poll(struct nfp_ipc *nfp_ipc, int timeout, struct nfp_ipc_event *event)
@@ -888,7 +1004,7 @@ nfp_ipc_server_poll(struct nfp_ipc *nfp_ipc, int timeout, struct nfp_ipc_event *
     return server_poll(nfp_ipc, &timer, event);
 }
 
-/** nfp_ipc_client_poll
+/*f nfp_ipc_client_poll
  */
 int
 nfp_ipc_client_poll(struct nfp_ipc *nfp_ipc, int client, int timeout, struct nfp_ipc_event *event)

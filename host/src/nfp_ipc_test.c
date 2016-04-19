@@ -135,20 +135,20 @@ test_mem_simple(int iter, int max_blocks, int size_base, int size_range)
         i = get_rand(max_blocks);
         if (!msg[i]) {
             size = size_base + get_rand(size_range);
-            msg[i] = nfp_ipc_alloc_msg(nfp_ipc, size);
+            msg[i] = nfp_ipc_msg_alloc(nfp_ipc, size);
             if (!msg[i]) {
                 printf("Failed to allocate blah\n");
                 return 100;
             }
         } else {
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
             msg[i] = NULL;
         }
     }
 
     for (i=0; i<max_blocks; i++) {
         if (msg[i]) {
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
         }
     }
 
@@ -184,7 +184,7 @@ test_msg_simple(int iter, int max_clients)
         i = get_rand(max_clients);
         if (!msg[i]) {
             size = 64;
-            msg[i] = nfp_ipc_alloc_msg(nfp_ipc, size);
+            msg[i] = nfp_ipc_msg_alloc(nfp_ipc, size);
             if (nfp_ipc_client_send_msg(nfp_ipc, i, msg[i])!=0) {
                 printf("Adding message %d did not succeed but it should (max 1 queue entry per client in this use case)\n",i);
                 return 100;
@@ -202,7 +202,7 @@ test_msg_simple(int iter, int max_clients)
                        msg[i] );
                 return 100;
             }
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
             msg[i] = NULL;
         }
     }
@@ -215,12 +215,12 @@ test_msg_simple(int iter, int max_clients)
                        msg[i] );
                 return 100;
             }
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
             msg[i] = NULL;
     }
     for (i=0; i<max_clients; i++) {
         if (msg[i]) {
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
         }
         nfp_ipc_client_stop(nfp_ipc, i);
     }
@@ -260,7 +260,7 @@ test_msg_bounce(int iter, int max_clients)
         i = get_rand(max_clients);
         if (msg_state[i]==0) {
             size = 64;
-            msg[i] = nfp_ipc_alloc_msg(nfp_ipc, size);
+            msg[i] = nfp_ipc_msg_alloc(nfp_ipc, size);
             if (nfp_ipc_client_send_msg(nfp_ipc, i, msg[i])!=0) {
                 printf("Adding message %d did not succeed but it should (max 1 queue entry per client in this use case)\n",i);
                 return 100;
@@ -294,7 +294,7 @@ test_msg_bounce(int iter, int max_clients)
                        msg[i] );
                 return 100;
             }
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
             msg[i] = NULL;
             msg_state[i] = 0;
         }
@@ -309,7 +309,7 @@ test_msg_bounce(int iter, int max_clients)
                 return 100;
             }
             // check msg_state[i]==1
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
             msg[i] = NULL;
     }
     for (i=0; i<max_clients; i++) {
@@ -318,7 +318,7 @@ test_msg_bounce(int iter, int max_clients)
                 printf("Message state expected to be 2 if msg[i] exists and not for server\n");
                 return 100;
             }
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
         }
         nfp_ipc_client_stop(nfp_ipc, i);
     }
