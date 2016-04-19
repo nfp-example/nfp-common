@@ -1,4 +1,4 @@
-/** Copyright (C) 2015,  Gavin J Stark.  All rights reserved.
+/** Copyright (C) 2015-2016,  Gavin J Stark.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
  *
  */
 
-/** Includes
+/*a Includes
  */
 #include "nfp_ipc.h"
 #include <stdint.h> 
@@ -31,13 +31,31 @@
 #include <time.h>
 #include <inttypes.h>
 
-/*f struct timer
+/*a Defines
+ */
+
+/*a Enumerations
+ */
+enum {
+    TIMER_EXPIRED,
+    TIMER_POLL
+};
+
+/*a Structures
+ */
+/*f struct timer */ /**
+ * Timeout timer structure, used with @p timer_init and @p timer_wait
  */
 struct timer {
+    /** Timeout to wait for; timeouts are performed with @p usleep(),
+     * and the timeout is kept as the clock_gettime seconds and
+     * nsecs. If the @p tv_sec value is zero then the timeout is
+     * immediate. If the @p tv_sec value is negative then the
+     * timer_wait() call will never timeout. **/
     struct timespec timeout;
 };
 
-/*f struct _nfp_ipc_msg_queue */ /**
+/*f struct nfp_ipc_msg_queue */ /**
  *
  *  @brief Internal structure for a message queue
  *
@@ -51,7 +69,7 @@ struct timer {
  * message queue can be set up as a circular buffer.
  *
  */
-struct _nfp_ipc_msg_queue
+struct nfp_ipc_msg_queue
 {
     /** Pointer into msg_ofs of next message to be added to the
      * queue. Needs to be bounded to @p msg_ofs size, as it is
@@ -70,7 +88,7 @@ struct _nfp_ipc_msg_queue
     int msg_ofs[MSGS_PER_QUEUE];
 };
 
-/*f struct _nfp_ipc_server_data */ /**
+/*f struct nfp_ipc_server_data */ /**
  *
  * @brief Internal structure for the state of a server
  *
@@ -95,7 +113,7 @@ struct _nfp_ipc_msg_queue
  * client-to-server interactions; if it did so then the caches would
  * thrash more.
  */
-struct _nfp_ipc_server_data {
+struct nfp_ipc_server_data {
     /** State of the server from NFP_IPC_STATE_* **/
     int      state;
     /** Maximum number of clients that can connect to the server **/
@@ -104,7 +122,9 @@ struct _nfp_ipc_server_data {
     int      total_clients;
     /** Padding to align other fields to 8B alignment **/
     int      pad2;
-    /** Client mask indicating which clients are not inactive **/
+    /** Client mask with one bit per potentially-active client; the
+     * bottom @p max_clients bits of this mask should be set at all
+     * times. **/
     uint64_t client_mask;
     /** Active client mask indicating which clients are fully active **/
     uint64_t active_client_mask;
@@ -121,14 +141,14 @@ struct _nfp_ipc_server_data {
     char pad[16];
 };
 
-/*f struct _nfp_ipc_client_data */ /**
+/*f struct nfp_ipc_client_data */ /**
  *
  *  @brief Internal structure for a client
  *
  *  The internal data structure for a client that is stored in the
  *  shared memory, with one instance per client.
  */
-struct _nfp_ipc_client_data {
+struct nfp_ipc_client_data {
     /** State of the client, e.g. inactive, active, shutting down **/
     int     state;
     /** Doorbell mask; the server atomically sets a bit in here to
@@ -136,9 +156,9 @@ struct _nfp_ipc_client_data {
      * non-empty **/
     int     doorbell_mask;
     /** Message queue to the server from the client **/
-    struct  _nfp_ipc_msg_queue to_serverq;
+    struct nfp_ipc_msg_queue to_serverq;
     /** Message queue to the client from the server**/
-    struct  _nfp_ipc_msg_queue to_clientq;
+    struct nfp_ipc_msg_queue to_clientq;
 };
 
 /*f struct nfp_ipc */ /**
@@ -148,11 +168,13 @@ struct _nfp_ipc_client_data {
  * This structure
  */
 struct nfp_ipc {
-    struct _nfp_ipc_server_data server;
-    struct _nfp_ipc_client_data clients[NFP_IPC_MAX_CLIENTS];
+    struct nfp_ipc_server_data server;
+    struct nfp_ipc_client_data clients[NFP_IPC_MAX_CLIENTS];
     struct _nfp_ipc_msg_data msg;
 };
 
+/*a Timer functions
+ */
 /*f clock_gettime for OSX
  */
 #ifdef __MACH__
@@ -167,8 +189,22 @@ clock_gettime(int clk, struct timespec *ts)
 }
 #endif
 
-/*f timer_init
-    Initialize timeout timer to long 'timeout' in us
+/*f timer_init */
+/**
+ * @brief Initialize a timeout timer
+ * 
+ * @param timer Timer to initialize
+ *
+ * @param timeout Number of microseconds to wait; if negative, wait
+ * indefinitely.
+ *
+ * Initialize a timeout timer to a value.
+ *
+ * The timeout structure will be set to contain the current wall clock
+ * time plus the timeout value; if the required timeout is zero, then
+ * the @p tv_sec field is zeroed; if it is negative, for never
+ * timeout, the @p tv_sec field is -1.
+ *
  */
 static void
 timer_init(struct timer *timer, long timeout)
@@ -177,6 +213,10 @@ timer_init(struct timer *timer, long timeout)
     long sec;
     if (timeout==0) {
         timer->timeout.tv_sec = 0;
+        return;
+    }
+    if (timeout<0) {
+        timer->timeout.tv_sec = -1;
         return;
     }
     sec = timeout / 1000000;
@@ -190,14 +230,31 @@ timer_init(struct timer *timer, long timeout)
     }
 }
 
-/*f timer_wait
- */
+/*f timer_wait */
+/**
+ * @brief Wait for timeout
+ *
+ * @param timer Previously initialized timer (using @p timer_init)
+ *
+ * @returns TIMER_EXPIRED if the timer timed out, else TIMER_POLL
+ *
+ * Wait for a period of time (up to 10ms) up to the timeout, then
+ * return. If the timer had expired before waiting, then an expiration
+ * result is returned; otherwise a poll result is returned so that the
+ * caller may (e.g.) poll for essages before calling @p timer_wait
+ * again.
+ *
+ **/
 static int
 timer_wait(struct timer *timer)
 {
     struct timespec ts;
     if (timer->timeout.tv_sec==0)
-        return NFP_IPC_EVENT_TIMEOUT;
+        return TIMER_EXPIRED;
+    if (timer->timeout.tv_sec<0) {
+        usleep(10000);
+        return TIMER_POLL;
+    }
 
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_nsec = timer->timeout.tv_nsec - ts.tv_nsec;
@@ -208,44 +265,78 @@ timer_wait(struct timer *timer)
         ts.tv_sec -= 1;
     }
     if (ts.tv_sec < 0)
-        return NFP_IPC_EVENT_TIMEOUT;
+        return TIMER_EXPIRED;
 
     if ((ts.tv_sec == 0) && (ts.tv_nsec <= 0))
-        return NFP_IPC_EVENT_TIMEOUT;
+        return TIMER_EXPIRED;
 
     usleep(10000);
-    return 0;
+    return TIMER_POLL;
 }
     
-/*f msg_queue_init
+/*a Message queue functions
  */
+/*f msg_queue_init */
+/**
+ * @brief Initialize a message queue
+ *
+ * @param msgq Message queue to initialize 
+ *
+ * Initialize a message queue by resetting the @p read_ptr and @p
+ * write_ptr
+ *
+ **/
 static void
-msg_queue_init(struct _nfp_ipc_msg_queue *msgq)
+msg_queue_init(struct nfp_ipc_msg_queue *msgq)
 {
     msgq->read_ptr = 0;
     msgq->write_ptr = 0;
 }
 
-/*f msg_queue_empty
- */
+/*f msg_queue_empty */
+/**
+ * @brief Determine if a message queue is empty
+ *
+ * @param msgq Message queue to test
+ *
+ * @returns TRUE if the message queue is empty, otherwise FALSE
+ *
+ **/
 static int
-msg_queue_empty(struct _nfp_ipc_msg_queue *msgq)
+msg_queue_empty(struct nfp_ipc_msg_queue *msgq)
 {
     return (msgq->write_ptr == msgq->read_ptr);
 }
 
-/*f msg_queue_full
- */
+/*f msg_queue_full */
+/**
+ * @brief Determine if a message queue is full
+ *
+ * @param msgq Message queue to test
+ *
+ * @returns TRUE if the message queue is full, otherwise FALSE
+ *
+ **/
 static int
-msg_queue_full(struct _nfp_ipc_msg_queue *msgq)
+msg_queue_full(struct nfp_ipc_msg_queue *msgq)
 {
     return (msgq->write_ptr-msgq->read_ptr) >= MSGS_PER_QUEUE;
 }
 
-/*f msg_queue_get
- */
+/*f msg_queue_get */
+/**
+ * @brief Get first available message from a message queue
+ *
+ * @param msgq Message queue to retrieve message from
+ *
+ * @returns -1 for no message, else offset in to message heap of
+ * message
+ *
+ * Get a message from the front of a message queue.
+ *
+ **/
 static int
-msg_queue_get(struct _nfp_ipc_msg_queue *msgq)
+msg_queue_get(struct nfp_ipc_msg_queue *msgq)
 {
     int ptr;
 
@@ -256,16 +347,21 @@ msg_queue_get(struct _nfp_ipc_msg_queue *msgq)
     return msgq->msg_ofs[ptr];
 }
 
-/*f msg_queue_put
+/*f msg_queue_put */
+/**
+ * @brief Put a message on to a message queue
  *
- * Put a message on a queue
+ * @param msgq Message queue to retrieve message from
  *
- * @param msgq     Message queue to add message to
  * @param msg_ofs  Offset in to message pool of message
  *
- */
+ * @returns -1 if the queue was full, else 0
+ *
+ * Put a message onto a message queue.
+ *
+ **/
 static int
-msg_queue_put(struct _nfp_ipc_msg_queue *msgq, int msg_ofs)
+msg_queue_put(struct nfp_ipc_msg_queue *msgq, int msg_ofs)
 {
     int ptr;
 
@@ -277,8 +373,17 @@ msg_queue_put(struct _nfp_ipc_msg_queue *msgq, int msg_ofs)
     return 0;
 }
 
-/*f is_alive
+/*a Server client management functions
  */
+/*f is_alive */
+/**
+ * @brief Determine if server is alive
+ *
+ * @param nfp_ipc NFP IPC structure for the server
+ *
+ * @returns TRUE if the server is alive, else FALSE
+ *
+ **/
 static int
 is_alive(struct nfp_ipc *nfp_ipc)
 {
@@ -288,8 +393,16 @@ is_alive(struct nfp_ipc *nfp_ipc)
              0 );
 }
 
-/*f find_first_set
- */
+/*f find_first_set */
+/**
+ * @brief Find lowest bit set in a bitmask
+ *
+ * @param mask Bit mask to find lowest bit set
+ *
+ * @returns -1 if the mask is clear, else the number of the lowest set
+ * bit
+ *
+ **/
 static int
 find_first_set(uint64_t mask)
 {
@@ -301,8 +414,19 @@ find_first_set(uint64_t mask)
     return n;
 }
 
-/*f find_free_client
- */
+/*f find_free_client */
+/**
+ * @brief Find first available client
+ *
+ * @param nfp_ipc Previously initialized server structure
+ *
+ * @returns -1 if no clients are available, else a client number
+ *
+ * Uses the @p client_mask ANDed with the inverse of the @p
+ * active_client_mask to find inactive clients, and the first
+ * available of these (if any) is returned.
+ *
+ **/
 static int
 find_free_client(struct nfp_ipc *nfp_ipc)
 {
@@ -314,8 +438,25 @@ find_free_client(struct nfp_ipc *nfp_ipc)
     return find_first_set(av_mask);
 }
 
-/*f total_clients_inc
- */
+/*f total_clients_inc */
+/**
+ * @brief Increment the count of total clients
+ *
+ * @param nfp_ipc Previously initialized server structure
+ *
+ * Increment the total number of clients attempting to use the
+ * server. This number may exceed the maximum number of clients when a
+ * client is attempting to be added to the server - the bitmask of
+ * active clients controls the actual client connectivity to the
+ * server.
+ *
+ * This call is invoked when a client attempts to add itself to the
+ * server. A corresponding @p total_clients_dec will be invoked when
+ * the client eventually shuts down (if it successfully connects to
+ * the server) or when it abandons attempts to connect to the server
+ * (after retrying).
+ *
+ **/
 static void
 total_clients_inc(struct nfp_ipc *nfp_ipc)
 {
@@ -327,8 +468,17 @@ total_clients_inc(struct nfp_ipc *nfp_ipc)
     (void) __atomic_fetch_add(total_clients, one, __ATOMIC_ACQ_REL);
 }
 
-/*f total_clients_dec
- */
+/*f total_clients_dec */
+/**
+ * @brief Decrement the count of total clients
+ *
+ * @param nfp_ipc Previously initialized server structure
+ *
+ * Decrement the total number of clients attempting to use the
+ * server. This is invoked either when a client eventually shuts down,
+ * or when the client abandons attempting to connect to the server.
+ *
+ **/
 static void
 total_clients_dec(struct nfp_ipc *nfp_ipc)
 {
@@ -340,8 +490,22 @@ total_clients_dec(struct nfp_ipc *nfp_ipc)
     (void) __atomic_fetch_add(total_clients, minus_one, __ATOMIC_ACQ_REL);
 }
 
-/*f claim_client
- */
+/*f claim_client */
+/**
+ * @brief Claim a particular client
+ *
+ * @param nfp_ipc Previously initialized server structure
+ *
+ * @param client Client number to claim
+ *
+ * @returns -1 if the claim failed (because another client won the
+ * race); on success it returns @p client
+ *
+ * Attempt to set the @p active_client_mask bit for the client; if it
+ * was already set, then the client has already been activated from a
+ * different thread or process, so the call fails.
+ *
+ **/
 static int
 claim_client(struct nfp_ipc *nfp_ipc, int client)
 {
@@ -358,8 +522,21 @@ claim_client(struct nfp_ipc *nfp_ipc, int client)
     return client;
 }
 
-/*f alert_server
- */
+/*f alert_server */
+/**
+ * @brief Alert server from a client
+ *
+ * @param nfp_ipc Previously initialized server structure
+ *
+ * @param client Client number to alert server with
+ *
+ * Alert the server to do something based on an event of some sort
+ * from the specified @p client.
+ *
+ * This call may be invoked by a client when it adds a message to the
+ * server message queue for that client, for example.
+ *
+ **/
 static void
 alert_server(struct nfp_ipc *nfp_ipc, int client)
 {
@@ -371,16 +548,38 @@ alert_server(struct nfp_ipc *nfp_ipc, int client)
     (void) __atomic_fetch_or(doorbell_mask, client_bit, __ATOMIC_ACQ_REL);
 }
 
-/*f alert_client
- */
+/*f alert_client */
+/**
+ * @brief Alert client from the server
+ *
+ * @param nfp_ipc Previously initialized server structure
+ *
+ * @param client Client number to alert
+ *
+ * Alert a client to do something based on an event of some sort
+ * from the server.
+ *
+ * This call may be invoked by the server when it adds a message to the
+ * client message queue for that client, for example.
+ *
+ **/
 static void
 alert_client(struct nfp_ipc *nfp_ipc, int client)
 {
     nfp_ipc->clients[client].doorbell_mask |= 1;
 }
 
-/*f alert_clients
- */
+/*f alert_clients */
+/**
+ * @brief Alert all clients
+ *
+ * @param nfp_ipc Previously initialized server structure
+ *
+ * Alert all the clients (active or not) that the server has some event for the clients to handle.
+ *
+ * This call is invoked, for example, when the server starts to shut down.
+ *
+ **/
 static void
 alert_clients(struct nfp_ipc *nfp_ipc, uint64_t client_mask)
 {
@@ -392,11 +591,22 @@ alert_clients(struct nfp_ipc *nfp_ipc, uint64_t client_mask)
     }
 }
 
-/*f server_client_shutdown
+/*f server_client_shutdown */
+/**
+ * @brief Fully shutdown a client from within the server
  *
- * Fully shutdown a client from within the server - the client has already stopped using the API
+ * @param nfp_ipc Previously initialized server structure
  *
- */
+ * @param client Client number to shut down
+ *
+ * Shut down the client within the server.
+ *
+ * The client must have previously started, and be active.
+ *
+ * The client is removed from the @p active_client_mask and the total
+ * number of connected clients.
+ *
+ **/
 static void
 server_client_shutdown(struct nfp_ipc *nfp_ipc, int client)
 {
@@ -411,6 +621,8 @@ server_client_shutdown(struct nfp_ipc *nfp_ipc, int client)
     (void) __atomic_fetch_and(active_client_mask, client_mask, __ATOMIC_ACQ_REL);
 }
 
+/*a Message functions
+ */
 /*f msg_init
  */
 static void
@@ -592,19 +804,55 @@ msg_get_msg(struct nfp_ipc *nfp_ipc, int msg_ofs)
     return (struct nfp_ipc_msg *) ((char *)&nfp_ipc->msg + msg_ofs);
 }
 
-/*f server_poll
+/*a Polling functions
  */
+/*f server_poll */
+/**
+ *
+ * @brief Server call to poll for messages, or other events
+ *
+ * @param nfp_ipc Previously initialized server structure
+ *
+ * @param timer Timeout to wait for while polling
+ *
+ * @param event Structure to be filled out if a valid event has
+ * occurred
+ *
+ * @returns NFP_IPC_EVENT_* enumeration indicating that an event is
+ * valid (and @p event is filled out), or that the timeout occurred
+ *
+ * Poll for events from clients on behalf of for the specified amount
+ * of time. If a valid event occurs then @p event will be filled out;
+ * otherwise (e.g. on timeouts) an appropriate return value is
+ * used and @p event is not touched.
+ *
+ * The process is to maintain a mask of clients that have work for the
+ * server to do. If the mask is empty, then it is refreshed from the
+ * client doorbells, atomically clearing the doorbells at the same
+ * time. If there is still no work to do, then a period of waiting (up
+ * to the timer timeout) can be performed.
+ *
+ * If there is work to do then the first client is
+ * handled. Potentially the client may still have more work for the
+ * server to do, for example if its message queue contains more than
+ * one message, so in some cases the client remains in the mask of
+ * clients with work to do @p pending_mask.
+ *
+ * If a client has nothing for the server then it is removed from the
+ * @p pending_mask.
+ *
+ **/
 static int
 server_poll(struct nfp_ipc *nfp_ipc, struct timer *timer, struct nfp_ipc_event *event)
 {
     uint64_t client_mask;
     int client;
 
-    //printf("Poll:Active   %016"PRIx64"\n",nfp_ipc->server.active_client_mask);
-    //printf("Poll:Doorbell %016"PRIx64"\n",nfp_ipc->server.doorbell_mask);
-    //printf("Poll:Pending  %016"PRIx64"\n",nfp_ipc->server.pending_mask);
     for (;;) {
 
+        /* Get the client_mask from the server data; if there are no
+         * clients, then get the doorbel data and clear it
+         */
         client_mask = nfp_ipc->server.pending_mask;
         if (client_mask == 0) {
             uint64_t *doorbell_mask;
@@ -613,21 +861,33 @@ server_poll(struct nfp_ipc *nfp_ipc, struct timer *timer, struct nfp_ipc_event *
         }
         client_mask  &= nfp_ipc->server.active_client_mask;
         nfp_ipc->server.pending_mask = client_mask;
-        //printf("Poll:Client   %016"PRIx64"\n",client_mask);
+
+        /* If there is nothing to do then wait for the timer, else
+         * handle the client
+         */
         if (client_mask == 0) {
-            if (timer_wait(timer) == NFP_IPC_EVENT_TIMEOUT)
+            if (timer_wait(timer) == TIMER_EXPIRED)
                 return NFP_IPC_EVENT_TIMEOUT;
         } else {
+            /* Get ready to remove the client from the pending set
+             */
             client = find_first_set(client_mask);
             client_mask &= ~(1ULL << client);
-            nfp_ipc->server.pending_mask = client_mask;
 
             if (nfp_ipc->clients[client].state == NFP_IPC_STATE_SHUTTING_DOWN) {
+                /* Client is shutting down; drop its pending bit
+                 */
+                nfp_ipc->server.pending_mask = client_mask;
                 server_client_shutdown(nfp_ipc, client);
                 continue;
             } else if (!msg_queue_empty(&nfp_ipc->clients[client].to_serverq)) {
+                /* Client has at least one message - KEEP its pending bit
+                 */
                 break;
             }
+            /* Client seems to have nothing to do - drop its pending bit
+             */
+            nfp_ipc->server.pending_mask = client_mask;
         }
     }
     event->event_type = NFP_IPC_EVENT_MESSAGE;
@@ -637,7 +897,28 @@ server_poll(struct nfp_ipc *nfp_ipc, struct timer *timer, struct nfp_ipc_event *
     return NFP_IPC_EVENT_MESSAGE;
 }
 
-/*f client_poll
+/*f client_poll */
+/**
+ *
+ * @brief Client call to poll for messages, or other events
+ *
+ * @param nfp_ipc Previously initialized server structure
+ *
+ * @param client Client number to poll for messages for
+ *
+ * @param timer Timeout to wait for while polling
+ *
+ * @param event Structure to be filled out if a valid event has
+ * occurred
+ *
+ * @returns NFP_IPC_EVENT_* enumeration indicating that an event is
+ * valid (and @p event is filled out), or that the timeout occurred
+ *
+ * Poll for events from the server for a client for the specified amount
+ * of time. If a valid event occurs then @p event will be filled out;
+ * otherwise (e.g. on timeouts) an appropriate return value is
+ * used and @p event is not touched.
+ *
  */
 static int
 client_poll(struct nfp_ipc *nfp_ipc, int client, struct timer *timer, struct nfp_ipc_event *event)
@@ -650,7 +931,7 @@ client_poll(struct nfp_ipc *nfp_ipc, int client, struct timer *timer, struct nfp
             return NFP_IPC_EVENT_SHUTDOWN;
 
         if (nfp_ipc->clients[client].doorbell_mask==0) {
-            if (timer_wait(timer) == NFP_IPC_EVENT_TIMEOUT)
+            if (timer_wait(timer) == TIMER_EXPIRED)
                 return NFP_IPC_EVENT_TIMEOUT;
         } else {
             nfp_ipc->clients[client].doorbell_mask = 0;
@@ -667,6 +948,8 @@ client_poll(struct nfp_ipc *nfp_ipc, int client, struct timer *timer, struct nfp
     return NFP_IPC_EVENT_MESSAGE;
 }
 
+/*a Public fnuctions
+ */
 /*f nfp_ipc_client_start
  *
  * Start a new client
@@ -963,7 +1246,7 @@ nfp_ipc_msg_free(struct nfp_ipc *nfp_ipc, struct nfp_ipc_msg *nfp_ipc_msg)
 int
 nfp_ipc_server_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg *msg)
 {
-    struct _nfp_ipc_msg_queue *msgq;    
+    struct nfp_ipc_msg_queue *msgq;    
     int rc;
 
     msgq = &(nfp_ipc->clients[client].to_clientq);
@@ -980,7 +1263,7 @@ nfp_ipc_server_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg 
 int
 nfp_ipc_client_send_msg(struct nfp_ipc *nfp_ipc, int client, struct nfp_ipc_msg *msg)
 {
-    struct _nfp_ipc_msg_queue *msgq;
+    struct nfp_ipc_msg_queue *msgq;
     int rc;
     
     msgq = &(nfp_ipc->clients[client].to_serverq);
