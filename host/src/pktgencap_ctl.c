@@ -153,6 +153,7 @@ main(int argc, char **argv)
                     fprintf(stderr,"Error returned by pktgencap (%d) for command %s\n",msg->ack,argv[i]);
                     i = argc;
                 }
+                nfp_ipc_msg_free(pktgen_nfp.shm.nfp_ipc, event.msg);
                 break;
             }
         }

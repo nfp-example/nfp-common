@@ -1,4 +1,4 @@
-/** Copyright (C) 2015,  Gavin J Stark.  All rights reserved.
+/** Copyright (C) 2015-2016,  Gavin J Stark.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
  *
  */
 
-/** Includes
+/*a Includes
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,6 +40,10 @@
 #endif
 #include "nfp_support.h"
 
+/*a Types
+ */
+/*a Structures
+ */
 /** struct pagemap_data
  */
 struct pagemap_data {
@@ -68,12 +72,15 @@ struct nfp {
     uint8_t firmware_id;
 };
 
-/** Statics
+/*a Statics
  */
 static struct nfp *nfp_list;
 static int exit_handler_registered=0;
 
-/** read_file
+/*a Static functions
+ */
+/*f read_file */
+/**
  * Malloc a buffer and read the file in; return length of file, or -1 on error
  *
  * @param filename       Filename to load
@@ -98,7 +105,8 @@ static int read_file(const char *filename, char **file_data_ptr)
     return file_len;
 }
 
-/** exit_handler
+/*f exit_handler */
+/**
  *
  * Shutdown all NFPs on the list
  *
@@ -111,7 +119,8 @@ exit_handler(void)
     }
 }
 
-/** nfp_link
+/*f nfp_link */
+/**
  */
 static void
 nfp_link(struct nfp *nfp)
@@ -127,7 +136,8 @@ nfp_link(struct nfp *nfp)
     nfp->prev=NULL;
 }
 
-/** nfp_unlink
+/*f nfp_unlink */
+/**
  */
 static void
 nfp_unlink(struct nfp *nfp)
@@ -148,7 +158,9 @@ nfp_unlink(struct nfp *nfp)
     nfp->prev=NULL;
 }
 
-/** nfp_init
+/*a NFP instance functions
+ */
+/*f nfp_init
  *
  * Initialize NFP structure, attaching to specified device number
  * Returns NULL on error, otherwise an allocated NFP structure
@@ -156,7 +168,7 @@ nfp_unlink(struct nfp *nfp)
  *
  * @param device_num   NFP device number to attach to (-1 => none)
  */
-struct nfp *
+extern struct nfp *
 nfp_init(int device_num)
 {
     struct nfp *nfp;
@@ -194,7 +206,7 @@ err:
     return NULL;
 }
 
-/** nfp_shutdown
+/*f nfp_shutdown
  *
  * Shutdown the NFP, unloading firmware before closing the device
  * Performs an incremental shutdown of the activated components, and can
@@ -218,7 +230,9 @@ nfp_shutdown(struct nfp *nfp)
     free(nfp);
 }
 
-/** nfp_fw_load
+/*a Firmware
+ */
+/*f nfp_fw_load
  *
  * Load firmware from an 'nffw' file
  * Return 0 on success, <0 on failure
@@ -240,7 +254,7 @@ nfp_fw_load(struct nfp *nfp, const char *filename)
     return err;
 }
 
-/** nfp_fw_unload
+/*f nfp_fw_unload
  *
  * Unload any loaded firmware; if nothing loaded, then does nothing
  *
@@ -258,7 +272,7 @@ nfp_fw_unload(struct nfp *nfp)
     nfp_nffw_info_release(nfp->dev);
 }
 
-/** nfp_fw_start
+/*f nfp_fw_start
  *
  * Start any loaded firmware
  *
@@ -271,7 +285,9 @@ nfp_fw_start(struct nfp *nfp)
     return nfp_nffw_start(nfp->dev,nfp->firmware_id);
 }
 
-/** nfp_shm_alloc
+/*a Shared memory
+ */
+/*f nfp_shm_alloc
  */
 extern int
 nfp_shm_alloc(struct nfp *nfp, const char *shm_filename, int shm_key, size_t byte_size, int create)
@@ -311,7 +327,7 @@ nfp_shm_alloc(struct nfp *nfp, const char *shm_filename, int shm_key, size_t byt
     return byte_size;
 }
 
-/** nfp_shm_data
+/*f nfp_shm_data
  *
  * Get SHM data pointer after it has been allocated
  *
@@ -324,7 +340,7 @@ nfp_shm_data(struct nfp *nfp)
     return nfp->shm.data;
 }
 
-/** nfp_shm_close
+/*f nfp_shm_close
  */
 extern void
 nfp_shm_close(struct nfp *nfp)
@@ -343,7 +359,7 @@ nfp_shm_close(struct nfp *nfp)
     }
 }
 
-/** nfp_huge_malloc
+/*f nfp_huge_malloc
  *
  * Malloc using hugepages, and get pointer to it,
  * and return 0 on success
@@ -353,7 +369,7 @@ nfp_shm_close(struct nfp *nfp)
  * @param byte_size  Byte size to allocate
  *
  */
-int
+extern int
 nfp_huge_malloc(struct nfp *nfp, void **ptr, size_t byte_size)
 {
     int  num_huge_pages;
@@ -371,7 +387,7 @@ nfp_huge_malloc(struct nfp *nfp, void **ptr, size_t byte_size)
     return allocation_size;
 }
 
-/** nfp_huge_physical_address
+/*f nfp_huge_physical_address
  *
  * Find physical address of an offset into a huge malloc region
  *
@@ -380,7 +396,7 @@ nfp_huge_malloc(struct nfp *nfp, void **ptr, size_t byte_size)
  * @param ofs   Offset from pointer to find address
  *
  */
-uint64_t
+extern uint64_t
 nfp_huge_physical_address(struct nfp *nfp, void *ptr, uint64_t ofs)
 {
     uint64_t linux_pfn, linux_page_data;
@@ -409,7 +425,7 @@ nfp_huge_physical_address(struct nfp *nfp, void *ptr, uint64_t ofs)
     return addr;
 }
 
-/** nfp_huge_free
+/*f nfp_huge_free
  *
  * Free a hugepage allocation
  *
@@ -417,18 +433,18 @@ nfp_huge_physical_address(struct nfp *nfp, void *ptr, uint64_t ofs)
  * @param ptr        Huge page allocation previous returned by nfp_huge_malloc
  *
  */
-void
+extern void
 nfp_huge_free(struct nfp *nfp, void *ptr)
 {
     free_huge_pages(ptr);
 }
 
-/** nfp_show_rtsyms
+/*f nfp_show_rtsyms
  *
  * @param nfp      Nfp with loaded firmware whose run-time symbols are to be displayed
  *
  */
-void
+extern void
 nfp_show_rtsyms(struct nfp *nfp)
 {
     int i, num_symbols;
@@ -445,7 +461,7 @@ nfp_show_rtsyms(struct nfp *nfp)
     }
 }
 
-/** nfp_get_rtsym_cppid
+/*f nfp_get_rtsym_cppid
  *
  * Read a run-time symbol and derive a struct nfp_cppid to use for reading/writing
  *
@@ -454,7 +470,7 @@ nfp_show_rtsyms(struct nfp *nfp)
  * @param cppid    Structure to store result in, used for later read/write
  *
  */
-int
+extern int
 nfp_get_rtsym_cppid(struct nfp *nfp, const char *sym_name, struct nfp_cppid *cppid)
 {
     const struct nfp_rtsym *rtsym;
@@ -471,7 +487,7 @@ nfp_get_rtsym_cppid(struct nfp *nfp, const char *sym_name, struct nfp_cppid *cpp
     return 0;
 }
 
-/** nfp_write
+/*f nfp_write
  *
  * Write data to an NFP memory or register
  *
@@ -482,7 +498,7 @@ nfp_get_rtsym_cppid(struct nfp *nfp, const char *sym_name, struct nfp_cppid *cpp
  * @param size     Size in bytes of data to write
  *
  */
-int
+extern int
 nfp_write(struct nfp *nfp, struct nfp_cppid *cppid, int offset, void *data, ssize_t size)
 {
     /*
@@ -500,7 +516,7 @@ nfp_write(struct nfp *nfp, struct nfp_cppid *cppid, int offset, void *data, ssiz
     return -1;
 }
 
-/** nfp_read
+/*f nfp_read
  *
  * Read data from an NFP memory or register
  *
@@ -511,7 +527,7 @@ nfp_write(struct nfp *nfp, struct nfp_cppid *cppid, int offset, void *data, ssiz
  * @param size     Size in bytes of data to read
  *
  */
-int
+extern int
 nfp_read(struct nfp *nfp, struct nfp_cppid *cppid, int offset, void *data, ssize_t size)
 {
     if (nfp_cpp_read(nfp->cpp, cppid->cpp_id, cppid->addr+offset, data, size )==size)

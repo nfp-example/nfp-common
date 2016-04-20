@@ -40,7 +40,7 @@
 
 /*a Types
  */
-/*t struct nfp_cppid */
+/*f struct nfp_cppid */
 /** Structure to contain the required CPP data for access a run-time
  * symbol, or other on-chip resource
  */
@@ -51,17 +51,26 @@ struct nfp_cppid {
     uint64_t addr;
 };
 
+/*a Functions
+ */
 /*f nfp_init */
 /**
- * @brief Initialize an NFP chip and structure for use
+ * @brief Initialize an NFP structure for use, attaching to an NFP if
+ * required
  *
  * @param device_num   NFP device number to attach to (-1 => none)
  *
- * @returns NFP device structure for use in later function calls    
+ * @returns NULL on error, otherwise an allocated NFP structure
  *
  * Initialize NFP structure, attaching to specified device number
- * Returns NULL on error, otherwise an allocated NFP structure
- * Adds atexit handler to shut down NFP cleanly at exit
+ *
+ * For clients that do not interact directly with an NFP the device
+ * number should be -1. The device number should only be non-negative
+ * for a server thread that is to directly interact with an NFP (for
+ * example to load firmware). (Many client interactions with an NFP
+ * will take place using host memory alone.)
+ * 
+ * Adds atexit handler to shut down NFP cleanly at exit if required.
  *
  */
 extern struct nfp *nfp_init(int device_num);
@@ -121,7 +130,8 @@ extern void nfp_fw_unload(struct nfp *nfp);
  */
 extern int nfp_fw_start(struct nfp *nfp);
 
-/** nfp_shm_alloc
+/*f nfp_shm_alloc */
+/**
  *
  * @brief Allocate some shared memory (one area per NFP)
  *
@@ -143,10 +153,10 @@ extern int nfp_fw_start(struct nfp *nfp);
  *
  * Only a single shared memory is permitted per NFP structure.
  *
- * Generally the server will invoke this call with @p create set to
- * 1. Clients then start up, connect to the server, and call this
- * function with create set to 0 (but the rest of the arguments the
- * same, except size is ignored)
+ * Generally the server will invoke this call with @p create set to a
+ * vaue of 1. Clients then start up, connect to the server, and call
+ * this function with create set to 0 (but the rest of the arguments
+ * the same, except size is ignored)
  *
  */
 extern int nfp_shm_alloc(struct nfp *nfp, const char *shm_filename,
