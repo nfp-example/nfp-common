@@ -38,22 +38,38 @@
  **/
 struct data_coproc {
     struct nfp *nfp;
-    int cls_host_wptrs;
+    struct nfp_cppid cls_workq_wptrs;
     void *shm_base;
     uint64_t phys_addr[1];
 };
 
 /*a Global variables */
-static nffw_filename="banana.nffw";
-static shm_filename="fred";
-static shm_key = 0;
+static const char *nffw_filename="/tmp/nfp_dcb_shm.lock";
+static const char *shm_filename="/tmp/nfp_dcb_shm.lock";
+static int shm_key = 0x0d0c0b0a;
 
 /*a Functions
  */
 /*f data_coproc_initialize */
 /**
+ * @brief Initialize data coprocessor - nfp, shm, firmware
+ *
+ * @param data_coproc Data coprocessor structure to fill out
+ *
+ * @param dev_num Device number of NFP to use
+ *
+ * @param shm_size Amount of shared memory to allocate
+ *
+ * @returns Zero on success, non-zero on error (with an error message
+ * printed)
+ *
+ * Initialize the NFP and load the firmware; get everything that is
+ * needed to interact (run-time symbols); allocate shared memory (to
+ * get memory that can be shared with the NFP)
+ *
  **/
-static int data_coproc_initialize(struct data_coproc *data_coproc, int dev_num, size_t shm_size)
+static int
+data_coproc_initialize(struct data_coproc *data_coproc, int dev_num, size_t shm_size)
 {
     data_coproc->nfp = nfp_init(dev_num);
     if (!data_coproc->nfp) {
@@ -63,20 +79,20 @@ static int data_coproc_initialize(struct data_coproc *data_coproc, int dev_num, 
 
     if (nfp_fw_load(data_coproc->nfp, nffw_filename) < 0) {
         fprintf(stderr, "Failed to load NFP firmware\n");
-        return 1;
+        return 2;
     }
 
     if (nfp_get_rtsym_cppid(data_coproc->nfp,
-                            "i4.cls_host_wptrs",
-                            &data_coproc->cls_host_wptrs) < 0) {
+                            "i4.cls_workq_wptrs",
+                            &data_coproc->cls_workq_wptrs) < 0) {
         fprintf(stderr, "Failed to find necessary symbols\n");
-        return 1;
+        return 3;
     }
 
     if (nfp_shm_alloc(data_coproc->nfp,
                       shm_filename, shm_key,
                       shm_size, 1)==0) {
-        return 1;
+        return 4;
     }
 
     data_coproc->shm_base = nfp_shm_data(data_coproc->nfp);
@@ -86,17 +102,24 @@ static int data_coproc_initialize(struct data_coproc *data_coproc, int dev_num, 
                                                          0);
     if (data_coproc->phys_addr[0] == 0) {
         fprintf(stderr, "Failed to find physical page mapping\n");
-        return 1;
+        return 5;
     }
 
     if (nfp_fw_start(data_coproc->nfp)<0) {
         fprintf(stderr,"Failed to start NFP firmware\n");
-        return 4;
+        return 6;
     }
+    return 0;
 }
 
 /*f data_coproc_shutdown */
 /**
+ * @brief data_coproc_shutdown
+ *
+ * @param data_coproc Data coprocessor structure already initialized
+ *
+ * Shuts down the NFP
+ *
  **/
 static void
 data_coproc_shutdown(struct data_coproc *data_coproc)
@@ -106,16 +129,19 @@ data_coproc_shutdown(struct data_coproc *data_coproc)
 
 /*f main */
 /**
-    For this we load the firmware and give it packets.
+ * Initialize the system, run data, and stop
+ *
+ *
  */
 extern int
 main(int argc, char **argv)
 {
     struct data_coproc data_coproc;
     int dev_num = 0;
-    size_t shm_size = PCIE_HUGEPAGE_SIZE * MAX_PAGES;
+    size_t shm_size = 16 * 2 * 1024 * 104;
 
-    data_coproc_initialize(&data_coproc, dev_num, shm_size);
+    if (data_coproc_initialize(&data_coproc, dev_num, shm_size)!=0)
+        return 4;
 
     for (;;) {
     }
