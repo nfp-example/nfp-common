@@ -175,17 +175,16 @@ nfp_init(int device_num)
     nfp = malloc(sizeof(struct nfp));
     if (!nfp) return NULL;
 
+    nfp->pagemap.fd = -1;
+    nfp->dev   = NULL;
+    nfp->cpp   = NULL;
+    nfp->shm.file = NULL;
+
     if (!exit_handler_registered) {
         exit_handler_registered=1;
         atexit(exit_handler);
     }
     nfp_link(nfp);
-
-    nfp->pagemap.fd = -1;
-    nfp->dev   = NULL;
-    nfp->cpp   = NULL;
-
-    nfp->shm.file = NULL;
 
     nfp->pagemap.page_size      = getpagesize();
     nfp->pagemap.huge_page_size = gethugepagesize();
