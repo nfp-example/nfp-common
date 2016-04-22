@@ -32,15 +32,14 @@ void main(void)
     sync_state_set_stage_complete(DCPRC_INIT_STAGE_CSR_INIT);
 
     if (ctx()==0) {
-        data_coproc_init_workq_manager();
+        data_coproc_init_workq_manager(poll_interval);
     } else {
-        //packet_capture_init_dma_to_host_slave();
     }
 
     sync_state_set_stage_complete(DCPRC_INIT_STAGE_READY_TO_RUN);
     if (ctx()==0) {
-        data_coproc_workq_manager();
+        data_coproc_workq_manager(32);
     } else {
-        //packet_capture_dma_to_host_slave();
+        data_coproc_work_gatherer();
     }
 }

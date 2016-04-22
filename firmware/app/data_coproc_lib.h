@@ -25,20 +25,40 @@
 /*a Defines */
 
 /*a Functions */
+/*f data_coproc_work_gatherer */
+/**
+ * @brief Gather work from PCIe work queues and start transfer to worker threads
+ *
+ * In conjunction with at least one data_coproc_workq_manager thread
+ * on the same ME, which tells the gatherer which workq's are valid
+ * and caches the data for them, the gatherers initiate DMAs and
+ * deliver appropriate work to the worker threads.
+ *
+ * The gatherers do not wait for completion of the DMAs; that is the
+ * responsiblity of the worker threads (which can tell when the work
+ * they have to do is non-zero).
+ *
+ */
+void data_coproc_work_gatherer(void);
+
 /*f data_coproc_workq_manager */
 /**
  * @brief Work queue manger
  *
+ * @param max_queue Maximum work queue number to poll for work
+ *
  * Main loop for the work queue manager
  *
  */
-__intrinsic void data_coproc_workq_manager(void);
+void data_coproc_workq_manager(int max_queue);
 
 /*f data_coproc_init_workq_manager */
 /**
  * @brief Perform initialization of the work queue manager
  *
+ * @param poll_interval Standard poll interval for workq threads
+ *
  * Initialize the work queue manager
  *
  */
-__intrinsic void data_coproc_init_workq_manager(void);
+void data_coproc_init_workq_manager(int poll_interval);

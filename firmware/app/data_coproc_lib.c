@@ -207,6 +207,7 @@ __shared __cls struct cls_workq cls_workq;
 static __shared __lmem struct cls_workq cls_workq_cache;
 static __shared __lmem uint32_t workq_rptr[DCPRC_MAX_WORKQS];
 static uint32_t workq_enables;
+static __shared int std_poll_interval;
 
 /*a Types */
 /*f do_work */
@@ -227,12 +228,233 @@ do_work(int queue_number)
     // work gatherer should DMA work from host to MU...
 }
 
+/*f gatherer_get_workqs_to_do */
+/**
+ * @brief Get bitmask of workqs to check for work from
+ *
+ * @returns Bitmask of workqs that may have work
+ *
+ * If no host work queues have work (i.e. none are enabled and
+ * indicated to have work by the workq manager) then do not busy-poll;
+ * backoff for the standard poll interval.
+ *
+ **/
+static inline int
+gatherer_get_workqs_to_do(void)
+{
+    int workqs_to_do;
+    for (;;) {
+        workqs_to_do = workq_enables;
+        if (workqs_to_do) return workqs_to_do;
+        me_sleep(std_poll_interval);
+    }
+}
+
+/*f gatherer_get_workq */
+/**
+ * @brief Get workq to handle from bitmask of workqs that had work -
+ * checking that they still do first.
+ *
+ * @param workqs_to_do Bitmask of workqs to check for, from an earlier
+ * snapshot of workq_enables
+ *
+ * @returns Work queue to try to take work from; updated workqs_to_do
+ * removing this queue bit
+ *
+ * The @p workqs_to_do is a snapshot of work queues that had work
+ * earlier; to provide a degree of fairness the gatherer will work
+ * through this bitmask from the bottom bit up, provided those work
+ * queues still have work (i.e. @p workq_enables is ANDed with
+ * workqs_to_do).
+ *
+ * The 'ffs' instruction is used to find the bottom-most bit of the
+ * mask. This returns 0 if bit 0 is set, up to 31 if bit 31 is
+ * set. Hence this is the number @p workq_to_read.
+ *
+ * The bitmask @p workqs_to_do has this new queue cleared in its mask,
+ * so that the next bit in the snapshot will be handled next.
+ *
+ */
+static inline int
+gatherer_get_workq(int *workqs_to_do)
+{
+    int workq_to_read;
+    *workqs_to_do &= workq_enables;
+    if (*workqs_to_do==0)
+        break;
+
+    __asm {
+        ffs[workq_to_read, *workqs_to_do];
+    }
+    *workqs_to_do &= ~(1<<workq_to_read);
+    return workq_to_read;
+}
+
+/*f gatherer_get_num_work */
+/**
+ * @brief Get the number of work items to take from workq_to_read
+ *
+ * @param workq_to_read Host work queue number to take work from
+ *
+ * @param workq_desc Host work queue data (from the cache managed by
+ * data_coproc_workq_manager) for the host work queue '@p
+ * workq_to_read'
+ *
+ * @returns Number of work items to take; the global @p workq_rptr
+ * will have been updated for @p workq_to_read so that other threads
+ * can continue with working on the same queue.
+ *
+ * Determines if the host workq @workq_to_read is still active (bit 31
+ * set of the wptr indicates it has been shut down - although most of
+ * the time the workq_enables will be clear for any queue with wptr
+ * bit 31 set, this cannot be guaranteed)
+ *
+ * If the work queue is still active then work out how many items are
+ * on the work queue, up to 15. Limit further down to 4 items - this
+ * is to promote fairness amongst host work queues (the gatherer will
+ * do at most 4 work items per loop per queue). It is worth batching
+ * the work queue entry fetches above one work item though - to reduce
+ * the DMA overhead - hence batching up to 4 items.
+ *
+ * Also, to stop a work queue DMA (later) from failing to wrap in the
+ * host work queue (it is a circular buffer) when it should, the @p
+ * num_work_to_do is prohibited from making wptr wrap beyond 32 items
+ * (currently). If the host work queue is at least 32 entries long
+ * (which it has to be, but we do not enforce that yet) then @p
+ * num_work_to_do will be bounded by the queue length (or less), based
+ * on the value of wptr.
+ *
+ * Once the number of work items has been figured out, the @p
+ * workq_rptr can be moved on by this amount.
+ *
+ * Note that this function must not deschedule as it must be atomic
+ * with other gatherer threads.
+ *
+ */
+static inline int
+gatherer_get_num_work(int workq_to_read, struct workq_buffer_desc *workq_desc)
+{
+    int wptr;
+    wptr = workq_desc->wptr;
+    if (wptr&(1<<31))
+        return 0;
+
+    num_work_to_do = (workq_rptr[workq_to_read] - wptr) & 0xf;
+    if (num_work_to_do>4) { num_work_to_do=4; }
+    if (((wptr+num_work_to_do)&~31) != (wptr&~31)) {
+        num_work_to_do = ((wptr+32)&~31)-wptr;
+    }
+    workq_rptr[workq_to_read] = (workq_rptr[workq_to_read]+num_work_to_do) &~ DCPRC_WORKQ_PTR_CLEAR_MASK;
+    return num_work_to_do;
+}
+
+/*f gatherer_dma_and_give_work */
+/**
+ * @brief DMA workq entries from wost work queue to MU, and add work to MU work queue
+ *
+ * @param workq_to_read Host work queue number to take work from
+ *
+ * @param num_work_to_do Number of work items to take from @p workq_to_read
+ *
+ * @param workq_desc Host work queue data (from the cache managed by
+ * data_coproc_workq_manager) for the host work queue '@p
+ * workq_to_read'; this contains the correct @p wptr for the queue
+ *
+ * Determine where in MU to put the work queue entries. This will be
+ * in the MU workq buffer, which is managed through an atomic
+ * test-and-add in the CLS. The MU workq buffer is not quite a
+ * circular buffer - it is just a litle bit more fluffy than that. In
+ * particular, this call may overflow the end of what would normally
+ * be the circular buffer as @p num_work_to_do items are DMAed to the
+ * @p mu_work_wptr, which may be pointing one entry before the end of
+ * the standard buffer. Also, the ordering of entries is a bit
+ * fluffier - there is perhaps no guarantee that wptr 2 for host work
+ * queue 10 will use an MU workq buffer entry earlier than, for
+ * example, wptr 3. The aim, though, it so have storage that can be
+ * DMAed. The actual MU pointer for each work item is included in the
+ * MU workq entry to the workers anyway.
+ *
+ * DMA the work queue entries from wptr to wptr+num_work_to_do in to
+ * the MU workq buffer. Currently we wait for this to complete.
+ *
+ * Add work to the MU workq for the workers, with each entry being the
+ * @p workq_to_read, @p wptr, and MU workq buffer offset where the
+ * host work queue entry was DMAed to.
+ *
+ * The worker can take this information and perform work, and then
+ * update the host workq entry (how does it know where exactly this
+ * is?)
+ *
+ */
+static inline void
+gatherer_dma_and_give_work(int workq_to_read,
+                           int num_work_to_do,
+                           struct workq_buffer_desc *workq_desc)
+{
+    uint64_32_t cpp_addr;
+    uint64_32_t pcie_addr;
+    __xrw mu_work_wptr;
+
+    mu_work_wptr = num_work_to_do;
+    cls_test_add(&mu_work_wptr, cls_mu_work_wptr, 0, sizeof(data));
+
+    mu_work_wptr &= blah;
+
+    wptr = workq_desc->wptr;
+
+    cpp_addr.uint32_lo = blah + mu_work_wptr*sizeof(mu_work_entry);
+    pcie_addr.uint32_lo = workq_desc.host_physical_address_lo + wptr*sizeof(struct workq_entry);
+    pcie_addr.uint32_hi = workq_desc.host_physical_address_hi;
+    dma_size = num_work_to_do * sizeof(struct workq_entry);
+
+    pcie_dma_buffer(0, pcie_addr, cpp_addr, dma_size, NFP_PCIE_DMA_TOPCI_HI, 0, PCAP_PCIE_DMA_CFG);
+
+    for (i=0; i<num_work_to_do; i++) {
+        __xwrite mu_work_entry mu_work_entry;
+        mu_work_entry.workq = workq_to_read;
+        mu_work_entry.wptr  = wptr+i;
+        mu_work_entry.mu_ofs = data+i;
+        mem_workq_add_work(mu_qdesc, mu_work_entry, sizeof(mu_work_entry));
+    }
+}
+
+/*f data_coproc_work_gatherer */
+/**
+ * @callgraph
+ */
+void
+data_coproc_work_gatherer(void)
+{
+    for (;;) {
+        int workqs_to_do;
+        workqs_to_do = gatherer_get_workqs_to_do();
+
+        for (;;) {
+            int workq_to_read;
+            struct workq_buffer_desc workq_desc;
+            int num_work_to_do;
+            int wptr;
+
+            workq_to_read = gatherer_get_workq(&workqs_to_do);
+
+            workq_desc = cls_workq_cache.workqs[workq_to_read];
+
+            num_work_to_do = gatherer_get_num_work(workq_to_read, &workq_desc);
+            if (num_work_to_do==0)
+                continue;
+
+            gatherer_dma_and_give_work(workq_to_read, num_work_to_do,
+                                       &workq_desc);
+        }
+    }
+}
+
 /*f data_coproc_workq_manager */
 /**
  * @callgraph
  */
-__intrinsic void
-data_coproc_workq_manager(void)
+void
+data_coproc_workq_manager(int max_queue)
 {
     __cls void *cls_workq_base;
     
@@ -257,24 +479,24 @@ data_coproc_workq_manager(void)
         }
         workq_to_read = (workq_to_read+1);
         workq_bit = workq_bit<<1;
-        if (workq_to_read>=DCPRC_MAX_WORKQS) {
+        if (workq_to_read>=max_queue) {
             workq_to_read = 0;
             workq_bit = 1;
         }
 
-        //if (workq_to_read===1000) break;
     }
 }
 
 /*f data_coproc_init_workq_manager
  */
-__intrinsic void
-data_coproc_init_workq_manager(void)
+void
+data_coproc_init_workq_manager(int poll_interval)
 {
     int i;
+    std_poll_interval = poll_interval;
     workq_enables = 0;
-//    for (i=0; i<DCPRC_MAX_WORKQS; i++) {
-//        cls_workq_cache.workqs[i].max_entries=0;
-//    }
+    for (i=0; i<DCPRC_MAX_WORKQS; i++) {
+        cls_workq_cache.workqs[i].max_entries=0;
+    }
 }
 
