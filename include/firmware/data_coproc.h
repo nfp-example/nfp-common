@@ -29,7 +29,7 @@
 
 /*a Defines
  */
-#define MAX_WORKQS 64
+#define DCPRC_MAX_WORKQS 64
 
 #ifdef __NFCC_VERSION
 #ifndef __DATA_BIG_ENDIAN
@@ -96,6 +96,6 @@ struct workq_buffer_desc {
 /** struct cls_workq
  */
 struct cls_workq {
-    struct workq_buffer_desc workqs[MAX_WORKQS];
+    struct workq_buffer_desc workqs[DCPRC_MAX_WORKQS];
 };
 

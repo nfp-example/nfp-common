@@ -198,6 +198,16 @@
 #define DMA_MAX_BURST 1024
 
 /*a Static data used globally */
+/*t cls_workq 
+ */
+/**
+ * Local cache copy of cluster scratch work queue, in the local memory
+ **/
+__shared __cls struct cls_workq cls_workq;
+static __shared __lmem struct cls_workq cls_workq_cache;
+static __shared __lmem uint32_t workq_rptr[DCPRC_MAX_WORKQS];
+static uint32_t workq_enables;
+
 /*a Types */
 /*f do_work */
 static void
@@ -220,50 +230,51 @@ do_work(int queue_number)
 /*f data_coproc_workq_manager */
 /**
  * @callgraph
- *  @dot
- *  digraph workq_manager {
- *      node [shape=record, fontname=Helvetica, fontsize=10];
- *      a [ label="work_in_hand?" URL="\ref B"];
- *      b [ label="read_write_pointer" URL="\ref B"];
- *      c [ label="determine if work ready" URL="\ref C"];
- *      d [ label="Work ready?" URL="\ref C"];
- *      e [ label="SLEEP" URL="\ref C"];
- *      f [ label="launch_work" URL="\ref C"];
- *      a -> b, f;
- *      b -> c;
- *      c -> d;
- *      d -> e, f;
- *      e -> a;
- *      f -> a;
- *  }
- *  @enddot
  */
 __intrinsic void
 data_coproc_workq_manager(void)
 {
-    /*    for (;;) {
-        if (!has_work) {
-            read_wptr();
-            has_work = (wptr!=rptr);
-            if (!has_work) {
-                sleep;
-                continue;
-            }
+    __cls void *cls_workq_base;
+    
+    int workq_to_read=0;
+    int workq_bit = 1;
+    cls_workq_base = (void *)&cls_workq;
+    for (;;) {
+
+        __xread struct workq_buffer_desc cls_buffer_desc;
+        int ofs;
+
+        ofs = sizeof(struct workq_buffer_desc)*workq_to_read;
+        cls_read(&cls_buffer_desc, cls_workq_base, ofs, sizeof(cls_buffer_desc));
+        cls_workq_cache.workqs[workq_to_read] = cls_buffer_desc;
+
+        if (cls_buffer_desc.wptr&(1<<31)) {
+            workq_enables &= ~workq_bit;
+        } else if (cls_buffer_desc.wptr != workq_rptr[workq_to_read]) {
+            workq_enables |= workq_bit;
+        } else {
+            workq_enables &= ~workq_bit;
         }
-        if (wptr<0) {
-            disable_queue();
-            sleep_forever();
+        workq_to_read = (workq_to_read+1);
+        workq_bit = workq_bit<<1;
+        if (workq_to_read>=DCPRC_MAX_WORKQS) {
+            workq_to_read = 0;
+            workq_bit = 1;
         }
-        do_work();
-        }*/
+
+        //if (workq_to_read===1000) break;
+    }
 }
 
-/** data_coproc_init_workq_manager
+/*f data_coproc_init_workq_manager
  */
 __intrinsic void
 data_coproc_init_workq_manager(void)
 {
-//    read_workq_desc_into_lmem();
-//    init_cls_workq();
+    int i;
+    workq_enables = 0;
+//    for (i=0; i<DCPRC_MAX_WORKQS; i++) {
+//        cls_workq_cache.workqs[i].max_entries=0;
+//    }
 }
 
