@@ -14,9 +14,8 @@
  * used in the island, and for each ME the number of contexts used
  *
  */
-#define DCPRC_ISLANDS    1
-#define DCPRC_HOST_CTXTS 8
-#define DCPRC_HOST_MES   1
+#define DCPRC_ISLANDS     1
+#define DCPRC_MES_PCIE0   1
 #define DCPRC_INIT_STAGES 8
 #define DCPRC_INIT_STAGE_CSR_INIT      2
 #define DCPRC_INIT_STAGE_PREHOST_LOAD  4
