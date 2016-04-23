@@ -52,6 +52,7 @@ $(eval $(call micro_c.compile,data_coproc_host,app,data_coproc_host.c))
 $(eval $(call nffw.add_obj_with_mes,data_coproc,data_coproc_host,i4.me2))
 $(eval $(call nffw.add_obj_with_mes,data_coproc,dcprc_worker_me,i32.me0))
 #$(eval $(call nffw.add_init_obj,data_coproc,data_coproc_init))
+$(eval $(call nffw.add_rtsyms,data_coproc))
 $(eval $(call nffw.link,data_coproc))
 
 #a Packet capture firmware

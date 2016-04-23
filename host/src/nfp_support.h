@@ -60,6 +60,9 @@ struct nfp_cppid {
  *
  * @param device_num   NFP device number to attach to (-1 => none)
  *
+ * @param sig_term     Set to 1 if a signal handler for SIGTERM
+ * should be installed
+ *
  * @returns NULL on error, otherwise an allocated NFP structure
  *
  * Initialize NFP structure, attaching to specified device number
@@ -73,7 +76,7 @@ struct nfp_cppid {
  * Adds atexit handler to shut down NFP cleanly at exit if required.
  *
  */
-extern struct nfp *nfp_init(int device_num);
+extern struct nfp *nfp_init(int device_num, int sig_term);
 
 /*f nfp_shutdown */
 /**

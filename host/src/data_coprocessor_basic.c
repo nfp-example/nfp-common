@@ -46,7 +46,7 @@ struct data_coproc {
 };
 
 /*a Global variables */
-static const char *nffw_filename="/tmp/nfp_dcb_shm.lock";
+static const char *nffw_filename="firmware/nffw/data_coproc.nffw";
 static const char *shm_filename="/tmp/nfp_dcb_shm.lock";
 static int shm_key = 0x0d0c0b0a;
 static const char *options = "hf:";
@@ -79,7 +79,7 @@ static struct option long_options[] = {
 static int
 data_coproc_initialize(struct data_coproc *data_coproc, int dev_num, size_t shm_size)
 {
-    data_coproc->nfp = nfp_init(dev_num);
+    data_coproc->nfp = nfp_init(dev_num, 1);
     if (!data_coproc->nfp) {
         fprintf(stderr, "Failed to open NFP\n");
         return 1;
@@ -91,7 +91,7 @@ data_coproc_initialize(struct data_coproc *data_coproc, int dev_num, size_t shm_
     }
 
     if (nfp_get_rtsym_cppid(data_coproc->nfp,
-                            "i4.cls_workq",
+                            "cls_workq",
                             &data_coproc->cls_workq) < 0) {
         fprintf(stderr, "Failed to find necessary symbols\n");
         return 3;
@@ -113,12 +113,13 @@ data_coproc_initialize(struct data_coproc *data_coproc, int dev_num, size_t shm_
         return 5;
     }
 
-    struct workq_buffer_desc workq;
+    struct dcprc_workq_buffer_desc workq;
     workq.host_physical_address = data_coproc->phys_addr[0];
     workq.max_entries = 4;
     workq.wptr        = 0;
-    if (nfp_write(data_coproc->nfp, &data_coproc->cls_workq, offsetof(struct cls_workq, workqs[0]),
-                  &workq, sizeof(workq))!=sizeof(workq)) {
+    fprintf(stderr,"%08lx %08x %ld\n",data_coproc->cls_workq.addr,data_coproc->cls_workq.cpp_id,sizeof(workq));
+    if (nfp_write(data_coproc->nfp, &data_coproc->cls_workq, offsetof(struct dcprc_cls_workq, workqs[0]),
+                  &workq, sizeof(workq))<0) {
         fprintf(stderr,"Failed to configure firmware with work queues\n");
         return 6;
     }
@@ -142,11 +143,11 @@ data_coproc_initialize(struct data_coproc *data_coproc, int dev_num, size_t shm_
 static void
 data_coproc_shutdown(struct data_coproc *data_coproc)
 {
-    struct workq_buffer_desc workq;
+    struct dcprc_workq_buffer_desc workq;
     workq.host_physical_address = 0;
     workq.max_entries = 0;
     workq.wptr        = -1;
-    nfp_write(data_coproc->nfp, &data_coproc->cls_workq, offsetof(struct cls_workq, workqs[0]),
+    nfp_write(data_coproc->nfp, &data_coproc->cls_workq, offsetof(struct dcprc_cls_workq, workqs[0]),
               &workq, sizeof(workq));
     // wait
     // check coprocessor has shut down

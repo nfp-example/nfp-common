@@ -207,15 +207,16 @@
  **/
 #define DCPRC_MU_WORK_BUFFER_CLEAR_MASK ((1<<16)-1)
 __asm {
-    .alloc_mem mu_work_buffer emem global (DCPRC_MU_WORK_BUFFER_CLEAR_MASK+0x200) 0x10000
-    .alloc_mem mu_scratch emem global 0x100 0x100
+    .alloc_mem mu_work_buffer emem global (DCPRC_MU_WORK_BUFFER_CLEAR_MASK+1+0x200) 0x10000;
+    .alloc_mem mu_scratch emem global 0x100 0x100;
+    .alloc_mem cls_workq i4.cls global 0x400 /*sizeof(struct dcprc_cls_workq)*/ 0;
 }
+static int check_dcprc_cls_workq_is_0x400_long[(sizeof(struct dcprc_cls_workq)==0x400)?1:-1];
 
-__shared __cls struct dcprc_cls_workq cls_workq;
 __shared __cls int          cls_mu_work_wptr;
 static __shared __lmem struct dcprc_cls_workq cls_workq_cache;
 static __shared __lmem uint32_t workq_rptr[DCPRC_MAX_WORKQS];
-static uint32_t workq_enables;
+static __shared uint32_t workq_enables;
 static __shared int std_poll_interval;
 struct shared_data {
     __cls void *cls_mu_work_wptr_ptr;
@@ -518,7 +519,7 @@ data_coproc_workq_manager(int max_queue)
     
     int workq_to_read=0;
     int workq_bit = 1;
-    cls_workq_base = (void *)&cls_workq;
+    cls_workq_base = (__cls void *)U32_LINK_SYM(cls_workq,0);
     for (;;) {
 
         __xread struct dcprc_workq_buffer_desc cls_buffer_desc;

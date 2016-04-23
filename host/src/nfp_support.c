@@ -27,6 +27,7 @@
 #include <sys/stat.h> 
 #include <fcntl.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/shm.h>
 #include <sys/ipc.h>
 #include <inttypes.h>
@@ -114,9 +115,19 @@ static int read_file(const char *filename, char **file_data_ptr)
 static void
 exit_handler(void)
 {
+    fprintf(stderr,"Exit handler called\n");
     while (nfp_list) {
+        fprintf(stderr,"Shutdown %p\n",nfp_list);
         nfp_shutdown(nfp_list);
     }
+}
+
+/*f sigterm_handler
+ */
+static void
+sigterm_handler(int sig)
+{
+    exit(0);
 }
 
 /*f nfp_link */
@@ -135,7 +146,6 @@ nfp_link(struct nfp *nfp)
     nfp_list = nfp;
     nfp->prev=NULL;
 }
-
 /*f nfp_unlink */
 /**
  */
@@ -169,7 +179,7 @@ nfp_unlink(struct nfp *nfp)
  * @param device_num   NFP device number to attach to (-1 => none)
  */
 extern struct nfp *
-nfp_init(int device_num)
+nfp_init(int device_num, int sig_term)
 {
     struct nfp *nfp;
     nfp = malloc(sizeof(struct nfp));
@@ -184,6 +194,17 @@ nfp_init(int device_num)
         exit_handler_registered=1;
         atexit(exit_handler);
     }
+    if (sig_term) {
+        if (signal(SIGTERM, sigterm_handler) == SIG_ERR) {
+            fprintf(stderr, "Failed to attach signal handler for SIGTERM\n");
+            goto err;
+        }
+        if (signal(SIGINT, sigterm_handler) == SIG_ERR) {
+            fprintf(stderr, "Failed to attach signal handler for SIGINT\n");
+            goto err;
+        }
+    }
+
     nfp_link(nfp);
 
     nfp->pagemap.page_size      = getpagesize();
@@ -234,10 +255,8 @@ nfp_shutdown(struct nfp *nfp)
 /*f nfp_fw_load
  *
  * Load firmware from an 'nffw' file
- * Return 0 on success, <0 on failure
  *
- * @param nfp       NFP structure of NFP device to unload firmware for
- * @param filename  Full filename of file to load
+ * Return 0 on success, <0 on failure
  *
  */
 int
@@ -247,7 +266,11 @@ nfp_fw_load(struct nfp *nfp, const char *filename)
     int nffw_size, err;
 
     nffw_size=read_file(filename,&nffw);
-    if (nffw_size<0) return -1;
+    if (nffw_size<0) {
+        fprintf(stderr,"Failed to read firmware file %s\n",filename);
+        return -1;
+    }
+
     err=nfp_nffw_load(nfp->dev, nffw, nffw_size, &nfp->firmware_id);
     free(nffw);
     return err;
