@@ -1,4 +1,5 @@
-/*
+/*a Copyright */
+/**
  * Copyright (C) 2015,  Gavin J Stark.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,16 +18,16 @@
  * @brief         Memory unit library functions
  *
  */
+/*a Open guard
+ */
 #ifndef _NFP__MEM_H_
 #define _NFP__MEM_H_
 
-/** Includes required
- */
+/*a Includes required */
 #include <stdint.h>
 #include <nfp.h>
 
-/** Defines
- */
+/*a Defines  */
 #define QSTR(s) #s
 #define QSYM(sym,size,qa,mem) sym
 #define QSIZE(sym,size,qa,mem) size
@@ -46,6 +47,7 @@
 #define MU_QDESC_QA(mu_qdesc) ((mu_qdesc)&0x3ff)
 #define MU_QDESC_MU(mu_qdesc) ((mu_qdesc)&0xff000000)
 
+/*a Functions */
 /** mem_read64
  *
  * @param data   Transfer registers to read
@@ -55,6 +57,18 @@
  */
 __intrinsic void mem_read64(__xread void *data, __mem void *addr,
                             const size_t size);
+
+/** mem_read64_hl
+ *
+ * @param data    Transfer registers to read
+ * @param addr_hi High 32 (8 really) bits of the address
+ * @param addr_lo Low 32 bits of the address
+ * @param size    Size in bytes to read (must be multiple of 8)
+ *
+ */
+__intrinsic void mem_read64_hl(__xread void *data, uint32_t addr_hi,
+                               uint32_t addr_lo,
+                               const size_t size);
 
 /** mem_read64_s8
  *
@@ -76,6 +90,18 @@ __intrinsic void mem_read64_s8(__xread void *data, uint32_t base_s8,
  */
 __intrinsic void mem_write64(__xwrite void *data, __mem void *addr,
                              const size_t size);
+
+/** mem_write64_hl
+ *
+ * @param data    Transfer registers to write
+ * @param addr_hi High 32 (8 really) bits of the address
+ * @param addr_lo Low 32 bits of the address
+ * @param size    Size in bytes to read (must be multiple of 8)
+ *
+ */
+__intrinsic void mem_write64_hl(__xwrite void *data, uint32_t addr_hi,
+                               uint32_t addr_lo,
+                               const size_t size);
 
 /** mem_write64_s8
  *
@@ -113,24 +139,24 @@ __intrinsic void mem_atomic_write_s8(__xwrite void *data,
 /** mem_ring_journal
  */
 __intrinsic void mem_ring_journal(uint32_t mu_qdesc,
-                                    __xwrite uint32_t *data, int size);
+                                    __xwrite void *data, int size);
 
 /** mem_workq_add_work
  */
 __intrinsic void mem_workq_add_work(uint32_t mu_qdesc,
-                                    __xwrite uint32_t *data, int size);
+                                    __xwrite void *data, int size);
 
 /** mem_workq_add_work_async
  */
 __intrinsic void mem_workq_add_work_async(uint32_t mu_qdesc,
-                                          __xwrite uint32_t *data,
+                                          __xwrite void *data,
                                           int size,
                                           SIGNAL *sig);
 
 /** mem_workq_add_thread
  */
 __intrinsic void mem_workq_add_thread(uint32_t mu_qdesc,
-                                      __xread uint32_t *data, int size);
+                                      __xread void *data, int size);
 
 /** mem_queue_config_write
  *
@@ -159,6 +185,6 @@ mem_queue_config_get(int qa, uint64_t base, int log_size)
 {
     return ((base>>8)&0xff000000) | qa;
 }
-/** Close guard
+/*a Close guard
  */
 #endif /*_NFP__MEM_H_ */

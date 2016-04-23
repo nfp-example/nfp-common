@@ -24,48 +24,43 @@
 #include <stdint.h>
 #include <nfp.h>
 
-/** cls_read
+/*f CLS_LOCAL_OP */
+/**
+ * Local CLS 32-bit operation
  *
- * @param data   Transfer registers to read
- * @param addr   32-bit CLS island-local address
- * @param ofs    Offset from address
- * @param size   Size in bytes to read (must be multiple of 4)
- *
- */
-__intrinsic void
-cls_read(__xread void *data, __cls void *addr, int ofs,
-         const size_t size)
-{
-    uint32_t size_in_uint32 = (size >> 2);
-    SIGNAL sig;
-
-    __asm {
-        cls[read, *data, addr, ofs, size_in_uint32],\
-            ctx_swap[sig];
-    }
-}
-
-/** cls_write
- * Write a number of words of data to the local cluster scratch
- *
- * @param data   Transfer registers to write
- * @param addr   32-bit CLS island-local address
- * @param ofs    Offset from address
- * @param size   Size in bytes to write (must be multiple of 4)
+ * @param fn_name    Function to define
+ * @param cls_op     Operation to do
+ * @param data_type  Data type (__xread, __xwrite, __xwr void *) 
  *
  */
-__intrinsic void
-cls_write(__xwrite void *data, __cls void *addr, int ofs,
-          const size_t size)
-{
-    uint32_t size_in_uint32 = (size >> 2);
-    SIGNAL sig;
-
-    __asm {
-        cls[write, *data, addr, ofs, size_in_uint32],\
-            ctx_swap[sig];
-    }
+#define CLS_LOCAL_OP(fn_name,cls_op,data_type) \
+__intrinsic void \
+fn_name(data_type data, __cls void *addr, int ofs, const size_t size) \
+{ \
+    uint32_t size_in_uint32 = (size >> 2); \
+    SIGNAL sig; \
+    __asm { \
+        cls[cls_op, *data, addr, ofs, size_in_uint32], ctx_swap[sig] \
+    } \
 }
+
+/*f cls_read */
+CLS_LOCAL_OP(cls_read,read,__xread void *);
+
+/*f cls_write */
+CLS_LOCAL_OP(cls_write,write,__xwrite void *);
+
+/*f cls_add */
+CLS_LOCAL_OP(cls_add,add,__xwrite void *);
+
+/*f cls_test_add */
+CLS_LOCAL_OP(cls_test_add,add,__xrw void *);
+
+/*f cls_sub */
+CLS_LOCAL_OP(cls_sub,sub,__xwrite void *);
+
+/*f cls_test_sub */
+CLS_LOCAL_OP(cls_test_sub,test_sub,__xrw void *);
 
 /** cls_incr
  *

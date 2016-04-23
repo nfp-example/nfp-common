@@ -22,7 +22,39 @@
  */
 
 
+/*a Open guard
+ */
+#ifndef _DATA_COPROC_LIB_H_
+#define _DATA_COPROC_LIB_H_
+
+/*a Includes */
+#include "firmware/data_coproc.h"
+
 /*a Defines */
+
+/*a Types */
+/*t dcprc_worker_me */
+/**
+ * Structure used to contain global data needed for any data coproc worker, filled out by dcprc_worker_init
+ */
+struct dcprc_worker_me {
+    uint32_t muq_mu_workq;
+    uint32_t mu_work_buffer_s8;
+};
+
+/*t dcprc_mu_work_entry */
+/**
+ * Structure used by data_coproc internally, needed by workers not
+ * because of its contents, just so that one can be instantiated for
+ * getting work and returning result (it must remain untouched between
+ * dcprc_worker_get_work and dcprc_worker_write_results)
+ */
+struct dcprc_mu_work_entry {
+    uint32_t host_physical_address_lo;
+    uint32_t host_physical_address_hi;
+    uint32_t mu_ofs;
+    uint32_t pad;
+};
 
 /*a Functions */
 /*f data_coproc_work_gatherer */
@@ -62,3 +94,43 @@ void data_coproc_workq_manager(int max_queue);
  *
  */
 void data_coproc_init_workq_manager(int poll_interval);
+
+/*f dcprc_worker_get_work */
+/**
+ * @brief Get work for a data coprocessor worker
+ *
+ * @param dcprc_worker_me Data structure initialized when worker ME
+ * started with @p dcprc_worker_init()
+ *
+ * Add worker as a thread to MU workq, and get struct dcprc_mu_work_entry
+ * delivered.
+ *
+ * Read work from MU work buffer that was DMAed by the @p
+ * data_coproc_work_gatherer thread(s).
+ *
+ */
+void
+dcprc_worker_get_work(const struct dcprc_worker_me *restrict dcprc_worker_me,
+                      __xread struct dcprc_mu_work_entry *restrict mu_work_entry,
+                      struct dcprc_workq_entry *restrict workq_entry);
+
+/*f dcprc_worker_write_results */
+/**
+ * @brief Write results back to the host work queue for work done
+ *
+ * @param dcprc_worker_me Data structure initialized when worker ME
+ * started with @p dcprc_worker_init()
+ *
+ */
+void
+dcprc_worker_write_results(const struct dcprc_worker_me *restrict dcprc_worker_me,
+                           const __xread struct dcprc_mu_work_entry *restrict mu_work_entry,
+                           const struct dcprc_workq_entry *restrict workq_entry);
+/*f dcprc_worker_init */
+/**
+ */
+__intrinsic void dcprc_worker_init(struct dcprc_worker_me *restrict dcprc_worker_me);
+
+/*a Close guard
+ */
+#endif /*_DATA_COPROC_LIB_H_ */

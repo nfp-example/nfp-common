@@ -172,6 +172,8 @@
  *   mu_work_completed -> workq_gatherer  [ minlen=1; dir=both; arrowhead=normal; arrowtail=inv; label="Atomic\nread" ];
  * }
  * @enddot
+ *
+ * STILL TO DO - IMPLEMENT CREDITS IN WORKQ MANAGER/GATHERER IN TO THE SYSTEM
  */
 
 /*a Includes
@@ -203,29 +205,78 @@
 /**
  * Local cache copy of cluster scratch work queue, in the local memory
  **/
-__shared __cls struct cls_workq cls_workq;
-static __shared __lmem struct cls_workq cls_workq_cache;
+#define DCPRC_MU_WORK_BUFFER_CLEAR_MASK ((1<<16)-1)
+__asm {
+    .alloc_mem mu_work_buffer emem global (DCPRC_MU_WORK_BUFFER_CLEAR_MASK+0x200) 0x10000
+    .alloc_mem mu_scratch emem global 0x100 0x100
+}
+
+__shared __cls struct dcprc_cls_workq cls_workq;
+__shared __cls int          cls_mu_work_wptr;
+static __shared __lmem struct dcprc_cls_workq cls_workq_cache;
 static __shared __lmem uint32_t workq_rptr[DCPRC_MAX_WORKQS];
 static uint32_t workq_enables;
 static __shared int std_poll_interval;
+struct shared_data {
+    __cls void *cls_mu_work_wptr_ptr;
+    uint64_32_t mu_work_buffer;
+    uint32_t    muq_mu_workq;
+};
+__shared struct shared_data shared_data;
+/* MU workq from gatherer to workers */
+#define QDEF_MU_WORKQ  dcprc_mu_workq,16,24,i24.emem
+MU_QUEUE_ALLOC(QDEF_MU_WORKQ);
 
 /*a Types */
-/*f do_work */
-static void
-do_work(int queue_number)
+/*f dcprc_worker_get_work */
+void
+dcprc_worker_get_work(const struct dcprc_worker_me *restrict dcprc_worker_me,
+                      __xread struct dcprc_mu_work_entry *restrict mu_work_entry,
+                      struct dcprc_workq_entry *restrict workq_entry)
 {
-//    get_next_mu_work_address(and add up to 4);
-//    start_dma_of_up_to_four_desc_from_workq();
-//    add_up_to_four_to_rptr();
-//    add_work_to_internal_workqueue(); // work is queue number, MU work address (16B there)
-    // use credits for internal work queue
-    // have a cache of credits in ME
-    // Out of kindness, atomically add number to 'write ptr' in MU when adding work
-    // 'completed_ptr' incremented when workers complete all the processing
-    // cache that completed_ptr in a caching thread
-    // caching thread can also manage which queues are active
-    // THAT should be the workq manager...
-    // work gatherer should DMA work from host to MU...
+    int mu_work_wptr;
+    mem_workq_add_thread(dcprc_worker_me->muq_mu_workq, mu_work_entry, sizeof(*mu_work_entry));
+
+    mu_work_wptr = mu_work_entry->mu_ofs;
+    // DO NOT DO THIS - mu_work_wptr &= DCPRC_MU_WORK_BUFFER_CLEAR_MASK;
+    // one may be tempted to do so, but this has already been done if necessary by the gatherer
+    // in particular sometimes the mu_work_wptr is SUPPOSED TO BE beyond DCPRC_MU_WORK_BUFFER_CLEAR_MASK
+
+    for (;;) {
+        __xread struct dcprc_workq_entry workq_entry_in;
+        mem_read64_s8(&workq_entry_in, dcprc_worker_me->mu_work_buffer_s8, mu_work_wptr*sizeof(struct dcprc_workq_entry), sizeof(workq_entry_in));
+        if (workq_entry_in.work.valid_work) {
+            *workq_entry = workq_entry_in;
+            break;
+        }
+    }
+    return;
+}
+
+/*f dcprc_worker_write_results */
+void
+dcprc_worker_write_results(const struct dcprc_worker_me *restrict dcprc_worker_me,
+                           const __xread struct dcprc_mu_work_entry *restrict mu_work_entry,
+                           const struct dcprc_workq_entry *restrict workq_entry)
+{
+    __xwrite struct dcprc_workq_entry workq_entry_out;
+    uint64_32_t mu_base;
+    uint64_32_t cpp_addr;
+    uint64_32_t pcie_addr;
+    uint32_t dma_size;
+
+    workq_entry_out.__raw[0] = workq_entry->__raw[0];
+    workq_entry_out.__raw[1] = workq_entry->__raw[1];
+    workq_entry_out.__raw[2] = workq_entry->__raw[2];
+    workq_entry_out.__raw[3] = workq_entry->__raw[3] &~ (1>>31);
+    mu_base.uint64 = __link_sym("mu_scratch");
+    mem_write64_hl(&workq_entry_out, mu_base.uint32_hi, mu_base.uint32_lo, sizeof(workq_entry_out));
+
+    cpp_addr = mu_base;
+    pcie_addr.uint32_lo = mu_work_entry->host_physical_address_lo;
+    pcie_addr.uint32_hi = mu_work_entry->host_physical_address_hi;
+    dma_size = sizeof(struct dcprc_workq_entry);
+    pcie_dma_buffer(0, pcie_addr, cpp_addr, dma_size, NFP_PCIE_DMA_TOPCI_HI, 0, PCIE_DMA_CFG);
 }
 
 /*f gatherer_get_workqs_to_do */
@@ -239,7 +290,7 @@ do_work(int queue_number)
  * backoff for the standard poll interval.
  *
  **/
-static inline int
+static __inline int
 gatherer_get_workqs_to_do(void)
 {
     int workqs_to_do;
@@ -248,6 +299,7 @@ gatherer_get_workqs_to_do(void)
         if (workqs_to_do) return workqs_to_do;
         me_sleep(std_poll_interval);
     }
+    return 0;
 }
 
 /*f gatherer_get_workq */
@@ -275,13 +327,13 @@ gatherer_get_workqs_to_do(void)
  * so that the next bit in the snapshot will be handled next.
  *
  */
-static inline int
+static __inline int
 gatherer_get_workq(int *workqs_to_do)
 {
     int workq_to_read;
     *workqs_to_do &= workq_enables;
     if (*workqs_to_do==0)
-        break;
+        return -1;
 
     __asm {
         ffs[workq_to_read, *workqs_to_do];
@@ -331,10 +383,12 @@ gatherer_get_workq(int *workqs_to_do)
  * with other gatherer threads.
  *
  */
-static inline int
-gatherer_get_num_work(int workq_to_read, struct workq_buffer_desc *workq_desc)
+static __inline int
+gatherer_get_num_work(int workq_to_read, struct dcprc_workq_buffer_desc *workq_desc)
 {
     int wptr;
+    int num_work_to_do;
+
     wptr = workq_desc->wptr;
     if (wptr&(1<<31))
         return 0;
@@ -386,35 +440,39 @@ gatherer_get_num_work(int workq_to_read, struct workq_buffer_desc *workq_desc)
  * is?)
  *
  */
-static inline void
+static __inline void
 gatherer_dma_and_give_work(int workq_to_read,
                            int num_work_to_do,
-                           struct workq_buffer_desc *workq_desc)
+                           struct dcprc_workq_buffer_desc *workq_desc)
 {
     uint64_32_t cpp_addr;
     uint64_32_t pcie_addr;
-    __xrw mu_work_wptr;
+    __xrw int mu_work_wptr;
+    int wptr;
+    uint32_t dma_size;
+    int i;
 
     mu_work_wptr = num_work_to_do;
-    cls_test_add(&mu_work_wptr, cls_mu_work_wptr, 0, sizeof(data));
+    cls_test_add(&mu_work_wptr, shared_data.cls_mu_work_wptr_ptr, 0, sizeof(mu_work_wptr));
 
-    mu_work_wptr &= blah;
+    mu_work_wptr &= DCPRC_MU_WORK_BUFFER_CLEAR_MASK;
 
     wptr = workq_desc->wptr;
 
-    cpp_addr.uint32_lo = blah + mu_work_wptr*sizeof(mu_work_entry);
-    pcie_addr.uint32_lo = workq_desc.host_physical_address_lo + wptr*sizeof(struct workq_entry);
-    pcie_addr.uint32_hi = workq_desc.host_physical_address_hi;
-    dma_size = num_work_to_do * sizeof(struct workq_entry);
+    cpp_addr.uint32_lo = shared_data.mu_work_buffer.uint32_lo + mu_work_wptr*sizeof(struct dcprc_workq_entry);
+    cpp_addr.uint32_hi = shared_data.mu_work_buffer.uint32_hi;
+    pcie_addr.uint32_lo = workq_desc->host_physical_address_lo + wptr*sizeof(struct dcprc_workq_entry);
+    pcie_addr.uint32_hi = workq_desc->host_physical_address_hi;
+    dma_size = num_work_to_do * sizeof(struct dcprc_workq_entry);
 
-    pcie_dma_buffer(0, pcie_addr, cpp_addr, dma_size, NFP_PCIE_DMA_TOPCI_HI, 0, PCAP_PCIE_DMA_CFG);
+    pcie_dma_buffer(0, pcie_addr, cpp_addr, dma_size, NFP_PCIE_DMA_TOPCI_HI, 0, PCIE_DMA_CFG);
 
     for (i=0; i<num_work_to_do; i++) {
-        __xwrite mu_work_entry mu_work_entry;
-        mu_work_entry.workq = workq_to_read;
-        mu_work_entry.wptr  = wptr+i;
-        mu_work_entry.mu_ofs = data+i;
-        mem_workq_add_work(mu_qdesc, mu_work_entry, sizeof(mu_work_entry));
+        __xwrite struct dcprc_mu_work_entry mu_work_entry;
+        mu_work_entry.host_physical_address_lo = workq_desc->host_physical_address_lo + (wptr+i)*sizeof(struct dcprc_workq_entry);
+        mu_work_entry.host_physical_address_hi = workq_desc->host_physical_address_hi;
+        mu_work_entry.mu_ofs = mu_work_wptr+i;
+        mem_workq_add_work(shared_data.muq_mu_workq, &mu_work_entry, sizeof(mu_work_entry));
     }
 }
 
@@ -431,11 +489,11 @@ data_coproc_work_gatherer(void)
 
         for (;;) {
             int workq_to_read;
-            struct workq_buffer_desc workq_desc;
+            struct dcprc_workq_buffer_desc workq_desc;
             int num_work_to_do;
-            int wptr;
 
             workq_to_read = gatherer_get_workq(&workqs_to_do);
+            if (workq_to_read<0) break;
 
             workq_desc = cls_workq_cache.workqs[workq_to_read];
 
@@ -463,10 +521,10 @@ data_coproc_workq_manager(int max_queue)
     cls_workq_base = (void *)&cls_workq;
     for (;;) {
 
-        __xread struct workq_buffer_desc cls_buffer_desc;
+        __xread struct dcprc_workq_buffer_desc cls_buffer_desc;
         int ofs;
 
-        ofs = sizeof(struct workq_buffer_desc)*workq_to_read;
+        ofs = sizeof(struct dcprc_workq_buffer_desc)*workq_to_read;
         cls_read(&cls_buffer_desc, cls_workq_base, ofs, sizeof(cls_buffer_desc));
         cls_workq_cache.workqs[workq_to_read] = cls_buffer_desc;
 
@@ -487,6 +545,14 @@ data_coproc_workq_manager(int max_queue)
     }
 }
 
+/*f data_coproc_init_workq_gatherer
+ */
+void
+data_coproc_init_workq_gatherer(void)
+{
+    shared_data.muq_mu_workq  = MU_QUEUE_CONFIG_GET(QDEF_MU_WORKQ);
+}
+
 /*f data_coproc_init_workq_manager
  */
 void
@@ -494,9 +560,20 @@ data_coproc_init_workq_manager(int poll_interval)
 {
     int i;
     std_poll_interval = poll_interval;
+    shared_data.muq_mu_workq   = MU_QUEUE_CONFIG_WRITE(QDEF_MU_WORKQ);
+    shared_data.mu_work_buffer.uint64 = __link_sym("mu_work_buffer");
+    shared_data.cls_mu_work_wptr_ptr = (void *)&cls_mu_work_wptr;
     workq_enables = 0;
     for (i=0; i<DCPRC_MAX_WORKQS; i++) {
         cls_workq_cache.workqs[i].max_entries=0;
     }
+}
+
+/*f dcprc_worker_init */
+__intrinsic void
+dcprc_worker_init(struct dcprc_worker_me *restrict dcprc_worker_me)
+{
+    dcprc_worker_me->muq_mu_workq   = MU_QUEUE_CONFIG_GET(QDEF_MU_WORKQ);
+    dcprc_worker_me->mu_work_buffer_s8 = U32_LINK_SYM(mu_work_buffer,8);
 }
 

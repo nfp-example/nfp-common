@@ -1,5 +1,6 @@
-/*
- * Copyright (C) 2015,  Gavin J Stark.  All rights reserved.
+/*a Copyright */
+/**
+ * Copyright (C) 2015-2016,  Gavin J Stark.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,15 +21,18 @@
  * utilize the CLS features
  * 
  */
+/*a Open wrapper */
 #ifndef _NFP__CLS_H_
 #define _NFP__CLS_H_
 
-/** Includes required
- */
+/*a Includes required */
 #include <stdint.h>
 #include <nfp.h>
 
-/** cls_read
+/*a Functions */
+/*f cls_read */
+/**
+ * @brief Read data from the local CLS, waiting for completion
  *
  * @param data   Transfer registers to read
  * @param addr   32-bit CLS island-local address
@@ -39,7 +43,9 @@
 __intrinsic void cls_read(__xread void *data, __cls void *addr,
                           int ofs, const size_t size);
 
-/** cls_write
+/*f cls_write */
+/**
+ * @brief Write data to the local CLS, waiting for completion
  *
  * @param data   Transfer registers to write
  * @param addr   32-bit CLS island-local address
@@ -50,7 +56,61 @@ __intrinsic void cls_read(__xread void *data, __cls void *addr,
 __intrinsic void cls_write(__xwrite void *data, __cls void *addr,
                            int ofs, const size_t size);
 
-/** cls_incr
+/*f cls_add */
+/**
+ * @brief Add data to the local CLS, waiting for completion
+ *
+ * @param data   Data to add to CLS memory
+ * @param addr   32-bit CLS island-local address
+ * @param ofs    Offset from address
+ * @param size   Size in bytes to write (must be multiple of 4)
+ *
+ */
+__intrinsic void cls_add(__xwrite void *data, __cls void *addr,
+                              int ofs, const size_t size);
+
+/*f cls_sub */
+/**
+ * @brief Sub data to the local CLS, waiting for completion
+ *
+ * @param data   Data to sub to CLS memory
+ * @param addr   32-bit CLS island-local address
+ * @param ofs    Offset from address
+ * @param size   Size in bytes to write (must be multiple of 4)
+ *
+ */
+__intrinsic void cls_sub(__xwrite void *data, __cls void *addr,
+                              int ofs, const size_t size);
+
+/*f cls_test_add */
+/**
+ * @brief Read-and-add data to the local CLS, waiting for completion
+ *
+ * @param data   Data to add to CLS memory, and premodified data return
+ * @param addr   32-bit CLS island-local address
+ * @param ofs    Offset from address
+ * @param size   Size in bytes to write (must be multiple of 4)
+ *
+ */
+__intrinsic void cls_test_add(__xrw void *data, __cls void *addr,
+                              int ofs, const size_t size);
+
+/*f cls_test_sub */
+/**
+ * @brief Read-and-sub data to the local CLS, waiting for completion
+ *
+ * @param data   Data to sub to CLS memory, and premodified data return
+ * @param addr   32-bit CLS island-local address
+ * @param ofs    Offset from address
+ * @param size   Size in bytes to write (must be multiple of 4)
+ *
+ */
+__intrinsic void cls_test_sub(__xrw void *data, __cls void *addr,
+                              int ofs, const size_t size);
+
+/*f cls_incr */
+/**
+ * @brief Increment a (32-bit) value in the local CLS - no waiting required
  *
  * @param addr   32-bit CLS island-local address
  * @param ofs    Offset from address
@@ -58,7 +118,9 @@ __intrinsic void cls_write(__xwrite void *data, __cls void *addr,
  */
 __intrinsic void cls_incr(__cls void *addr, int ofs);
 
-/** cls_incr_rem
+/*f cls_incr_rem */
+/**
+ * @brief Increment a (32-bit) value in a remote CLS - no waiting required
  *
  * @param cls_base_s8  40-bit CLS address >> 8
  * @param ofs          Offset from base
@@ -67,7 +129,9 @@ __intrinsic void cls_incr(__cls void *addr, int ofs);
 __intrinsic void cls_incr_rem(uint32_t cls_base_s8,
                               uint32_t ofs);
 
-/** cls_ring_journal_rem
+/*f cls_ring_journal_rem */
+/**
+ * @brief Journal data in a remote CLS ring
  *
  * @param data         Transfer registers to write
  * @param cls_base_s8  40-bit CLS address >> 8

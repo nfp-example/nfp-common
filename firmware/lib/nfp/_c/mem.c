@@ -102,19 +102,19 @@ __intrinsic void fn_name(uint32_t mu_qdesc, \
 
 /** MEM_QUEUE_READ_OP
  */
-#define MEM_QUEUE_READ_OP(fn_name,queue_op) MEM_QUEUE_OP(fn_name,queue_op,__xread uint32_t *)
+#define MEM_QUEUE_READ_OP(fn_name,queue_op) MEM_QUEUE_OP(fn_name,queue_op,__xread void *)
 
 /** MEM_QUEUE_READ_OP_ASYNC
  */
-#define MEM_QUEUE_READ_OP_ASYNC(fn_name,queue_op) MEM_QUEUE_OP_ASYNC(fn_name,queue_op,__xread uint32_t *)
+#define MEM_QUEUE_READ_OP_ASYNC(fn_name,queue_op) MEM_QUEUE_OP_ASYNC(fn_name,queue_op,__xread void *)
 
 /** MEM_QUEUE_WRITE_OP
  */
-#define MEM_QUEUE_WRITE_OP(fn_name,queue_op) MEM_QUEUE_OP(fn_name,queue_op,__xwrite uint32_t *)
+#define MEM_QUEUE_WRITE_OP(fn_name,queue_op) MEM_QUEUE_OP(fn_name,queue_op,__xwrite void *)
 
 /** MEM_QUEUE_WRITE_OP_ASYNC
  */
-#define MEM_QUEUE_WRITE_OP_ASYNC(fn_name,queue_op) MEM_QUEUE_OP_ASYNC(fn_name,queue_op,__xwrite uint32_t *)
+#define MEM_QUEUE_WRITE_OP_ASYNC(fn_name,queue_op) MEM_QUEUE_OP_ASYNC(fn_name,queue_op,__xwrite void *)
 
 /** mem_read64
  *
@@ -137,15 +137,7 @@ mem_read64(__xread void *data, __mem void *addr, const size_t size)
     }
 }
 
-/** mem_read64_s8
- *
- * @param data     Transfer registers to read
- * @param base_s8  Base address in MU >> 8
- * @param ofs      Offset in bytes from MU base
- * @param size     Size in bytes to write (must be multiple of 8)
- *
- */
-#include <nfp.h>
+/*f mem_read64_s8 */
 __intrinsic void
 mem_read64_s8(__xread void *data,
               uint32_t base_s8,
@@ -176,13 +168,7 @@ mem_read64_s8(__xread void *data,
     }
 }
 
-/** mem_write64
- *
- * @param data   Transfer registers to write
- * @param addr   Full 40-bit pointer in to memory
- * @param size   Size in bytes to write (must be multiple of 8)
- *
- */
+/*f mem_write64 */
 __intrinsic void
 mem_write64(__xwrite void *data, __mem void *addr, const size_t size)
 {
@@ -193,6 +179,21 @@ mem_write64(__xwrite void *data, __mem void *addr, const size_t size)
     addr_hi = (uint32_t)(((uint64_t)addr)>>8);
     __asm {
         mem[write, *data, addr_hi, <<8, addr_lo, \
+            __ct_const_val(size_in_uint64)], ctx_swap[sig];
+    }
+}
+
+/*f mem_write64_hl */
+__intrinsic void
+mem_write64_hl(__xwrite void *data, uint32_t addr_hi, uint32_t addr_lo, const size_t size)
+{
+    SIGNAL sig;
+    uint32_t size_in_uint64;
+    uint32_t addr_s8;
+    size_in_uint64 = size>>3;
+    addr_s8 = addr_hi>>24;
+    __asm {
+        mem[write, *data, addr_s8, <<8, addr_lo, \
             __ct_const_val(size_in_uint64)], ctx_swap[sig];
     }
 }

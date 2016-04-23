@@ -115,6 +115,7 @@ pcie_dma_buffer(int island, uint64_32_t pcie_addr, uint64_32_t cpp_addr,
     int meid;
     int ctx;
     int signal;
+    int length_to_do;
     SIGNAL sig;
 
     if ((length&0xfffe0000)!=0) {
@@ -136,10 +137,11 @@ pcie_dma_buffer(int island, uint64_32_t pcie_addr, uint64_32_t cpp_addr,
              ((ctx & 7) << 4) |
              __signal_number(&sig) );
 
-    while (length > 0) {
+    length_to_do = length;
+    while (length_to_do > 0) {
         int length_to_dma;
 
-        length_to_dma = length;
+        length_to_dma = length_to_do;
         if (length_to_dma > PCIE_BURST_SIZE) {
             length_to_dma = PCIE_BURST_SIZE;
         }
@@ -152,8 +154,8 @@ pcie_dma_buffer(int island, uint64_32_t pcie_addr, uint64_32_t cpp_addr,
                         &cmd_out,
                         queue);
 
-        length -= length_to_dma;
-        if (length > 0) {
+        length_to_do -= length_to_dma;
+        if (length_to_do > 0) {
             cmd.__raw[0] += length_to_dma;
             cmd.__raw[2] += length_to_dma;
         }

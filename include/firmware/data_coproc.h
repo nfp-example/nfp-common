@@ -23,6 +23,11 @@
  *
  */
 
+/*a Open guard
+ */
+#ifndef _DATA_COPROC_H_
+#define _DATA_COPROC_H_
+
 /*a Includes
  */
 #include <stdint.h> 
@@ -40,7 +45,7 @@
 
 /*a Types
  */
-/*t struct workq_entry */
+/*t struct dcprc_workq_entry */
 /**
  *
  * Work queue entry; the work queue in host memory is populated by
@@ -55,23 +60,48 @@
  * little-endian
  */
 #ifdef __DATA_BIG_ENDIAN
-struct workq_entry {
-    uint32_t host_physical_address_lo;
-    uint32_t host_physical_address_hi;
-    uint32_t operand_0;
-    uint32_t operand_1:31;
-    uint32_t valid_work:1;
+struct dcprc_workq_entry {
+    union {
+        struct {
+            uint32_t host_physical_address_lo;
+            uint32_t host_physical_address_hi;
+            uint32_t operand_0;
+            uint32_t operand_1:31;
+            uint32_t valid_work:1;
+        } work;
+        struct {
+            uint32_t data_0;
+            uint32_t data_1;
+            uint32_t data_2;
+            uint32_t flags:31;
+            uint32_t valid_work:1;
+        } result;
+        uint32_t __raw[4];
+    };
 };
 #else
-struct workq_entry {
-    uint64_t host_physical_address;
-    uint32_t operand_0;
-    uint32_t valid_work:1;
-    uint32_t operand_1:31;
+struct dcprc_workq_entry {
+    union {
+        struct {
+            uint64_t host_physical_address;
+            uint32_t operand_0;
+            uint32_t valid_work:1;
+            uint32_t operand_1:31;
+        } work;
+        struct {
+            uint32_t data_0;
+            uint32_t data_1;
+            uint32_t data_2;
+            uint32_t flags:31;
+            uint32_t valid_work:1;
+        } result;
+        uint32_t __raw[4];
+    };
 };
 #endif
 
-/** struct workq_buffer_desc
+/*t struct dcprc_workq_buffer_desc */
+/**
  *
  * Host workq circular buffer information - base address, size, and write pointer
  *
@@ -80,23 +110,26 @@ struct workq_entry {
  * Note that this structure is 16B long. DO NOT CHANGE THIS.
  */
 #ifdef __DATA_BIG_ENDIAN
-struct workq_buffer_desc {
+struct dcprc_workq_buffer_desc {
     uint32_t host_physical_address_lo;
     uint32_t host_physical_address_hi;
     uint32_t max_entries;
     uint32_t wptr;
 };
 #else
-struct workq_buffer_desc {
+struct dcprc_workq_buffer_desc {
     uint64_t host_physical_address;
     uint32_t max_entries;
     uint32_t wptr;
 };
 #endif
 
-/** struct cls_workq
+/** struct dcprc_cls_workq
  */
-struct cls_workq {
-    struct workq_buffer_desc workqs[DCPRC_MAX_WORKQS];
+struct dcprc_cls_workq {
+    struct dcprc_workq_buffer_desc workqs[DCPRC_MAX_WORKQS];
 };
 
+/*a Close guard
+ */
+#endif /*_DATA_COPROC_H_ */

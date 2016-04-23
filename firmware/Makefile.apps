@@ -26,11 +26,15 @@ NFCC_BASE_CLIBS = $(NETRONOME_STD_MICROC)/src/rtl.c
 NFAS_CODELESS_FIXUP = sed -ie 's/\(\(\.%init_csr "default assembler setting"\)\|\(\.%third_party_addressing\)\|\(\.%indirect_ref_mode\)\).*//'
 
 #a Data coprocessor firmware
-#$(eval $(call micro_c.force_include,data_coproc_rx,app,data_coproc_config))
-#$(eval $(call micro_c.add_src_lib,data_coproc_rx,app,data_coproc_lib))
-#$(eval $(call micro_c.add_fw_libs,data_coproc_rx,nfp sync))
-#$(eval $(call micro_c.add_define,data_coproc_rx,DATA_COPROC_RX_ISLAND))
-#$(eval $(call micro_c.compile,data_coproc_rx,app,data_coproc_rx.c))
+$(eval $(call micro_c.add_src_lib,dcprc_worker_null,app,data_coproc_lib))
+$(eval $(call micro_c.add_fw_libs,dcprc_worker_null,nfp))
+$(eval $(call micro_c.compile,dcprc_worker_null,app,dcprc_worker_null.c))
+
+$(eval $(call micro_c.force_include,dcprc_worker_me,app,data_coproc_config))
+$(eval $(call micro_c.add_src_lib,dcprc_worker_me,app,data_coproc_lib))
+$(eval $(call micro_c.add_src_lib,dcprc_worker_me,app,dcprc_worker_null))
+$(eval $(call micro_c.add_fw_libs,dcprc_worker_me,nfp sync))
+$(eval $(call micro_c.compile,dcprc_worker_me,app,dcprc_worker_me.c))
 
 $(eval $(call micro_c.force_include,data_coproc_host,app,data_coproc_config))
 $(eval $(call micro_c.add_src_lib,data_coproc_host,app,data_coproc_lib))
@@ -46,8 +50,7 @@ $(eval $(call micro_c.compile,data_coproc_host,app,data_coproc_host.c))
 #$(eval $(call microcode.assemble_init,data_coproc_init,app,data_coproc_init.uc))
 
 $(eval $(call nffw.add_obj_with_mes,data_coproc,data_coproc_host,i4.me2))
-#$(eval $(call nffw.add_obj_with_mes,data_coproc,data_coproc_recycle,i4.me3))
-#$(eval $(call nffw.add_obj_with_mes,data_coproc,data_coproc_rx,i32.me0 i33.me0 i34.me0))
+$(eval $(call nffw.add_obj_with_mes,data_coproc,dcprc_worker_me,i32.me0))
 #$(eval $(call nffw.add_init_obj,data_coproc,data_coproc_init))
 $(eval $(call nffw.link,data_coproc))
 
