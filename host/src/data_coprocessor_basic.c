@@ -218,6 +218,7 @@ data_coproc_commit_work(struct data_coproc *data_coproc,
 }
 
 /*f data_coproc_get_results */
+volatile int fred;
 static struct dcprc_workq_entry *
 data_coproc_get_results(struct data_coproc *data_coproc,
                         int queue)
@@ -229,7 +230,14 @@ data_coproc_get_results(struct data_coproc *data_coproc,
     rptr = data_coproc->work_queues[queue].rptr;
     mask = data_coproc->work_queues[queue].max_entries-1;
     workq_entry = &(data_coproc->work_queues[queue].entries[rptr & mask]);
-    while (workq_entry->result.not_valid);
+    while (workq_entry->result.not_valid) {
+        int i;
+        for (i=0; i<100; i++) {
+            int j=SL_TIMER_CPU_CLOCKS;
+            j = j;//fred += j;
+            //usleep(10);
+        }
+    };
     rptr += 1;
     data_coproc->work_queues[queue].rptr = rptr;
     return workq_entry;
@@ -279,15 +287,28 @@ main(int argc, char **argv)
     if (data_coproc_initialize(&data_coproc, dev_num, shm_size)!=0)
         return 4;
 
-    data_coproc_add_work(&data_coproc, 0, 0x123456789abcdefll );
-    data_coproc_commit_work(&data_coproc, 0);
-    struct dcprc_workq_entry *dcprc_workq_entry;
-    dcprc_workq_entry = data_coproc_get_results(&data_coproc, 0);
+    if (1) {
+        t_sl_timer timer;
+        int i;
+        for (i=0; i<100; i++) {
+            data_coproc_add_work(&data_coproc, 0, 0x123456789abcd00ll+i );
+        }
+        SL_TIMER_INIT(timer);
+        SL_TIMER_ENTRY(timer);
+        data_coproc_commit_work(&data_coproc, 0);
+        for (i=0; i<100; i++) {
+            struct dcprc_workq_entry *dcprc_workq_entry;
 
-    fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[0]);
-    fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[1]);
-    fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[2]);
-    fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[3]);
+            dcprc_workq_entry = data_coproc_get_results(&data_coproc, 0);
+            dcprc_workq_entry =dcprc_workq_entry;
+/*            fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[0]);
+            fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[1]);
+            fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[2]);
+            fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[3]);*/
+        }
+        SL_TIMER_EXIT(timer);
+        printf("From commit to all work done took %fus\n",SL_TIMER_VALUE_US(timer));
+    }
     
     data_coproc_shutdown(&data_coproc);
     return 0;

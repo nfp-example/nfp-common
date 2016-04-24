@@ -401,7 +401,7 @@ gatherer_get_num_work(int workq_to_read,
         return 0;
 
     *rptr = workq_rptr[workq_to_read];
-    num_work_to_do = (wptr - *rptr) & 0xf;
+    num_work_to_do = (wptr - *rptr) & DCPRC_WORKQ_PTR_CLEAR_MASK;
     if (num_work_to_do>4) { num_work_to_do=4; }
     if (((*rptr+num_work_to_do)&~31) != (*rptr&~31)) {
         num_work_to_do = ((*rptr+32)&~31)-*rptr;
