@@ -35,6 +35,17 @@
 #include "firmware/data_coproc.h"
 
 /*a Types */
+/*t data_coproc_work_queue */
+/**
+ **/
+struct data_coproc_work_queue {
+    struct dcprc_workq_entry *entries;
+    uint64_t phys_addr;
+    int      max_entries;
+    int      wptr;
+    int      rptr;
+};
+
 /*t data_coproc */
 /**
  **/
@@ -43,6 +54,7 @@ struct data_coproc {
     struct nfp_cppid cls_workq;
     void *shm_base;
     uint64_t phys_addr[1];
+    struct data_coproc_work_queue work_queues[1];
 };
 
 /*a Global variables */
@@ -124,10 +136,18 @@ data_coproc_initialize(struct data_coproc *data_coproc, int dev_num, size_t shm_
         return 5;
     }
 
+    data_coproc->work_queues[0].entries   = (struct dcprc_workq_entry *)data_coproc->shm_base;
+    data_coproc->work_queues[0].phys_addr = nfp_huge_physical_address(data_coproc->nfp,
+                                                                      data_coproc->work_queues[0].entries,
+                                                                      0);
+    data_coproc->work_queues[0].max_entries = 256;
+    data_coproc->work_queues[0].wptr = 0;
+    data_coproc->work_queues[0].rptr = 0;
+
     struct dcprc_workq_buffer_desc workq;
-    workq.host_physical_address = data_coproc->phys_addr[0];
-    workq.max_entries = 4;
-    workq.wptr        = 0;
+    workq.host_physical_address = data_coproc->work_queues[0].phys_addr;
+    workq.max_entries           = data_coproc->work_queues[0].max_entries;
+    workq.wptr                  = data_coproc->work_queues[0].wptr;
 
     if (nfp_write(data_coproc->nfp, &data_coproc->cls_workq, offsetof(struct dcprc_cls_workq, workqs[0]),
                   &workq, sizeof(workq))<0) {
@@ -163,6 +183,56 @@ data_coproc_shutdown(struct data_coproc *data_coproc)
     // wait
     // check coprocessor has shut down
     nfp_shutdown(data_coproc->nfp);
+}
+
+/*f data_coproc_add_work */
+static void
+data_coproc_add_work(struct data_coproc *data_coproc,
+                     int queue,
+                     uint64_t host_physical_address )
+{
+    int wptr;
+    int mask;
+    struct dcprc_workq_entry *workq_entry;
+    wptr = data_coproc->work_queues[queue].wptr;
+    mask = data_coproc->work_queues[queue].max_entries-1;
+    workq_entry = &(data_coproc->work_queues[queue].entries[wptr&mask]);
+
+    workq_entry->work.host_physical_address = host_physical_address;
+    workq_entry->work.operand_0 = 0x12345678;
+    workq_entry->__raw[3] = 0xdeadbeef;
+    data_coproc->work_queues[queue].wptr = (wptr+1) & DCPRC_WORKQ_PTR_CLEAR_MASK;
+}
+
+/*f data_coproc_commit_work */
+static void
+data_coproc_commit_work(struct data_coproc *data_coproc,
+                        int queue )
+{
+    int wptr;
+    wptr = data_coproc->work_queues[queue].wptr;
+    nfp_write(data_coproc->nfp,
+              &data_coproc->cls_workq,
+              offsetof(struct dcprc_cls_workq, workqs[queue].wptr),
+              &wptr, sizeof(wptr));
+}
+
+/*f data_coproc_get_results */
+static struct dcprc_workq_entry *
+data_coproc_get_results(struct data_coproc *data_coproc,
+                        int queue)
+{
+    int rptr;
+    int mask;
+    struct dcprc_workq_entry *workq_entry;
+
+    rptr = data_coproc->work_queues[queue].rptr;
+    mask = data_coproc->work_queues[queue].max_entries-1;
+    workq_entry = &(data_coproc->work_queues[queue].entries[rptr & mask]);
+    while (workq_entry->result.not_valid);
+    rptr += 1;
+    data_coproc->work_queues[queue].rptr = rptr;
+    return workq_entry;
 }
 
 /*f usage */
@@ -209,40 +279,16 @@ main(int argc, char **argv)
     if (data_coproc_initialize(&data_coproc, dev_num, shm_size)!=0)
         return 4;
 
-    fprintf(stderr,"Phys: %016lx\n",data_coproc.phys_addr[0]);
-    struct dcprc_workq_entry *ptr;
-    ptr = (struct dcprc_workq_entry *)data_coproc.shm_base;
-    ptr[0].work.host_physical_address = data_coproc.phys_addr[0]+256;
-    ptr[0].work.operand_0 = 0x12345678;
-    ptr[0].__raw[3] = 0xdeadbeef;
-/*    fprintf(stderr,"Ptr: %p\n",ptr);
-    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[0]);
-    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[1]);
-    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[2]);
-    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[3]);
-*/
-    int wptr;
-    int count;
-    wptr=1;
-    if (nfp_write(data_coproc.nfp, &data_coproc.cls_workq, offsetof(struct dcprc_cls_workq, workqs[0].wptr),
-                  &wptr, sizeof(wptr))<0) {
-        fprintf(stderr,"Failed to write wptr\n");
-        return 4;
-    }
-    count=0;
-    while (ptr[0].result.not_valid) {
-        count++;
-        if (count>1E8) break;
-    }
-    fprintf(stderr,"Took %d counts\n",count);
-    for (;;) {
-    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[0]);
-    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[1]);
-    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[2]);
-    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[3]);
-    usleep(1000*1000);
-    }
+    data_coproc_add_work(&data_coproc, 0, 0x123456789abcdefll );
+    data_coproc_commit_work(&data_coproc, 0);
+    struct dcprc_workq_entry *dcprc_workq_entry;
+    dcprc_workq_entry = data_coproc_get_results(&data_coproc, 0);
 
+    fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[0]);
+    fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[1]);
+    fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[2]);
+    fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[3]);
+    
     data_coproc_shutdown(&data_coproc);
     return 0;
 }

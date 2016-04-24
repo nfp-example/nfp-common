@@ -35,7 +35,7 @@
 /*a Defines
  */
 #define DCPRC_MAX_WORKQS 64
-#define DCPRC_WORKQ_PTR_CLEAR_MASK (1<<16)-1
+#define DCPRC_WORKQ_PTR_CLEAR_MASK ((1<<16)-1)
 
 #ifdef __NFCC_VERSION
 #ifndef __DATA_BIG_ENDIAN
