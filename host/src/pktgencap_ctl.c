@@ -90,7 +90,7 @@ main(int argc, char **argv)
     int nfp_ipc_client;
     int i;
 
-    pktgen_nfp.nfp = nfp_init(-1);
+    pktgen_nfp.nfp = nfp_init(-1,0);
 
     if (pktgen_alloc_shm(&pktgen_nfp)<0) {
         fprintf(stderr, "Failed to find pktgencap shared memory\n");

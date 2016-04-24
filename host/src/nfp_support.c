@@ -43,6 +43,18 @@
 
 /*a Types
  */
+/*t sync_stage_set_hdr */
+/**
+ */
+struct sync_stage_set_hdr
+{
+    /** Total number of MEs/islands being synchronized by this
+     * structure **/
+    int total_users;
+    /** Total number of initialization stages to synchonize **/
+    int total_stages;
+};
+
 /*a Structures
  */
 /** struct pagemap_data
@@ -381,6 +393,7 @@ nfp_shm_close(struct nfp *nfp)
     }
 }
 
+/*a Huge pages */
 /*f nfp_huge_malloc
  *
  * Malloc using hugepages, and get pointer to it,
@@ -461,6 +474,7 @@ nfp_huge_free(struct nfp *nfp, void *ptr)
     free_huge_pages(ptr);
 }
 
+/*a Run-time symbols */
 /*f nfp_show_rtsyms
  *
  * @param nfp      Nfp with loaded firmware whose run-time symbols are to be displayed
@@ -509,6 +523,92 @@ nfp_get_rtsym_cppid(struct nfp *nfp, const char *sym_name, struct nfp_cppid *cpp
     return 0;
 }
 
+/*a Firmware sync support */
+/*f nfp_sync_resolve */
+/**
+ * @brief Resolve NFP sync library memory contents based on run-time
+ * symbols of firmware that has loaded
+ *
+ * @param nfp      Nfp with loaded firmware whose run-time symbols are to be displayed
+ *
+ */
+extern int
+nfp_sync_resolve(struct nfp *nfp)
+{
+    int i, num_symbols;
+    const struct nfp_rtsym *rtsym;
+    int island_me_counts[100];
+    int total_islands_to_sync;
+
+    if ((!nfp) || (!nfp->dev)) return -1;
+
+    nfp_rtsym_reload(nfp->dev);
+    num_symbols=nfp_rtsym_count(nfp->dev);
+
+    for (i=0; i<sizeof(island_me_counts)/sizeof(int); i++) {
+        island_me_counts[i] = 0;
+    }
+    total_islands_to_sync = 0;
+    for (i=0; i<num_symbols; i++) {
+        int island;
+        int me;
+        char check[2];
+        rtsym = nfp_rtsym_get(nfp->dev,i);
+        if (sscanf(rtsym->name,"i%d.me%d.__me_sync_stage_se%c",&island,&me,&check[0])==3) {
+            if (island_me_counts[island]==0)
+                total_islands_to_sync ++;
+            island_me_counts[island]++;
+        }
+    }
+
+    for (i=0; i<num_symbols; i++) {
+        int island;
+        char check[2];
+        struct nfp_cppid cppid;
+
+        rtsym = nfp_rtsym_get(nfp->dev,i);
+        if (sscanf(rtsym->name,"i%d.island_sync_stage_se%c",&island,&check[0])==2) {
+            if (island_me_counts[island]==0) {
+                fprintf(stderr, "Sync requested for island %d but there were no MEs specified for that island\n", island);
+                return -1;
+            }
+            cppid.cpp_id = NFP_CPP_ISLAND_ID(rtsym->target, NFP_CPP_ACTION_RW, 0, rtsym->domain);
+            cppid.addr   = rtsym->addr;
+            if (nfp_write(nfp,
+                          &cppid,
+                          offsetof(struct sync_stage_set_hdr, total_users),
+                          &(island_me_counts[island]),
+                          sizeof(int) )!=0) {
+                fprintf(stderr, "Failed to set sync total users_completed for island %d\n", island);
+                return -1;
+            }
+            island_me_counts[island] = -1;
+        }
+
+        if (!strcmp(rtsym->name,"global_sync_stage_set")) {
+            cppid.cpp_id = NFP_CPP_ISLAND_ID(rtsym->target, NFP_CPP_ACTION_RW, 0, rtsym->domain);
+            cppid.addr   = rtsym->addr;
+            if (nfp_write(nfp,
+                          &cppid,
+                          offsetof(struct sync_stage_set_hdr, total_users),
+                          &total_islands_to_sync,
+                          sizeof(int) )!=0) {
+                fprintf(stderr, "Failed to set sync total users_completed for device\n");
+                return -1;
+            }
+        }
+    }
+
+    for (i=0; i<sizeof(island_me_counts)/sizeof(int); i++) {
+        if (island_me_counts[i]>0) {
+            fprintf(stderr, "Failed to set sync for island %d as MEs syncs were found but island sync was not\n",i);
+            return -1;
+        }
+    }
+    return 0;
+}
+
+/*a NFP CPP read/write */
 /*f nfp_write
  *
  * Write data to an NFP memory or register

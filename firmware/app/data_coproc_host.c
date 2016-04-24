@@ -17,8 +17,7 @@
 
 /*a Synchronization
  */
-SYNC_STAGE_SET_PREINIT(DCPRC_INIT_STAGES,8,DCPRC_MES_PCIE0,DCPRC_ISLANDS);
-SYNC_STAGE_SET_PREINIT_ME(8);
+SYNC_STAGE_SET_GLOBALS(DCPRC_INIT_STAGES);
 
 /*a Code */
 /*f main */
@@ -28,6 +27,8 @@ void main(void)
 {
     int poll_interval;
     poll_interval = 1000;
+
+    SYNC_STAGE_SET_PREINIT();
 
     sync_state_set_stage_complete(DCPRC_INIT_STAGE_CSR_INIT);
 

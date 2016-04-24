@@ -123,7 +123,7 @@ main(int argc, char **argv)
     struct pktgen_nfp pktgen_nfp;
     int nfp_ipc_client;
 
-    pktgen_nfp.nfp = nfp_init(-1);
+    pktgen_nfp.nfp = nfp_init(-1,1);
 
     pktgen_alloc_shm(&pktgen_nfp);
 

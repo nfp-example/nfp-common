@@ -62,6 +62,7 @@
 
 /*a Types */
 /*t struct sync_stage_set_hdr - CHANGE PREINIT MACRO IF YOU CHANGE THIS */
+/* Also CLONED in nfp_support.c in part - change that too... */
 /**
  * Structure used to keep up to date with which MEs/islands have
  * completed the current stage, and how many MEs/islands there are to
@@ -73,11 +74,11 @@
  */
 struct sync_stage_set_hdr
 {
-    /** Total number of initialization stages to synchonize **/
-    int total_stages;
     /** Total number of MEs/islands being synchronized by this
      * structure **/
     int total_users;
+    /** Total number of initialization stages to synchonize **/
+    int total_stages;
     /** Last initialization stage completed by all of the users of
      * this structure **/
     int last_stage_completed;
@@ -125,6 +126,7 @@ struct sync_stage_set
 
 /*a Macros
  */
+/*f __SYNC_STAGE_SET_GLOBALS */
 /**
  * For internal use
  *
@@ -150,10 +152,10 @@ struct sync_stage_set
  * but that broke in SDK 6.0 alpha
  *
  **/
-#define __SYNC_STAGE_SET_PREINIT(num_stages,num_users,scope,mem,ql_init) \
+#define __SYNC_STAGE_SET_GLOBALS(num_stages,scope,mem,ql_init) \
     __asm { .alloc_mem        scope ## _sync_stage_set mem scope 256 256 } \
-    __asm { .init             scope ## _sync_stage_set+0 num_stages }   \
-    __asm { .init             scope ## _sync_stage_set+4 num_users }    \
+    __asm { .init             scope ## _sync_stage_set+0 0 }            \
+    __asm { .init             scope ## _sync_stage_set+4 num_stages }   \
     __asm { .init             scope ## _sync_stage_set+8 0 }            \
     __asm { .init             scope ## _sync_stage_set+12 0 }           \
     __asm { .init             scope ## _sync_stage_set+16 0 }           \
@@ -169,54 +171,68 @@ struct sync_stage_set
     __asm { .init             scope ## _sync_stage_set+56 0 }           \
     __asm { .init             scope ## _sync_stage_set+60 0 }
 
-#define __SYNC_STAGE_SET_PREINIT_EXTERN(scope) \
-    extern __mem int scope ## _sync_stage_set;
-
+/*f __SYNC_STAGE_SET_DEVICE_GLOBALS */
 /**
  * Internal use only
  *
  * Declare and initialize memory structure used in a global memory for
  * managing multiple islands synchronization.
  **/
-#define __SYNC_STAGE_SET_GLOBAL_PREINIT(num_stages,num_islands)       \
-    __SYNC_STAGE_SET_PREINIT(num_stages,num_islands,global,emem,0)
+#define __SYNC_STAGE_SET_DEVICE_GLOBALS(num_stages)       \
+    __SYNC_STAGE_SET_GLOBALS(num_stages,global,emem,0)
 
+/*f __SYNC_STAGE_SET_ISLAND_PREINIT */
 /**
  * Internal use only
  *
  * Declare and initialize memory structure used in an island memory for
  * managing multiple MEs synchronization.
  **/
-#define __SYNC_STAGE_SET_ISLAND_PREINIT(num_stages,num_mes)       \
-    __SYNC_STAGE_SET_PREINIT(num_stages,num_mes,island,ctm,16)
+#define __SYNC_STAGE_SET_ISLAND_GLOBALS(num_stages)       \
+    __SYNC_STAGE_SET_GLOBALS(num_stages,island,ctm,16)
 
+/*f __SYNC_STAGE_SET_ME_GLOBALS */
 /**
  * Internal use only
  *
  * Declare and initialize memory structure used for synchronizing
- * contexts within a microengine
+ * contexts within a microengine, and ensure at least one structure
+ * will be visible per ME as a run-time symbol
  **/
-#define __SYNC_STAGE_SET_ME_PREINIT(num_ctx)        \
-    __declspec(shared) int __sss_num_ctx=num_ctx;
+#define __SYNC_STAGE_SET_ME_GLOBALS()        \
+    __asm { .alloc_mem        __me_sync_stage_set ctm me 8 8 } \
+    __declspec(shared) int __sss_num_ctx=0;
 
+/*f __SYNC_STAGE_SET_ME_PREINIT */
+/**
+ * Internal use only
+ *
+ * Increment number of contexts running in the ME, and make sure other
+ * contexts get the chance to do this too before any call of
+ * @p sync_stage_set_stage_complete() can occur
+ **/
+#define __SYNC_STAGE_SET_ME_PREINIT()        \
+    __sss_num_ctx += 1;           \
+    __asm { ctx_arb[voluntary] }; \
+    __asm { ctx_arb[voluntary] }; \
+
+/*f SYNC_STAGE_SET_GLOBALS */
 /**
  * Declare and initialize memory structures used for synchronizing
  * contexts, microengines, and islands - at least one ME per islands
  * must have this in its code
  **/
-#define SYNC_STAGE_SET_PREINIT(num_stages,num_ctxts,num_mes,num_islands) \
-    __SYNC_STAGE_SET_ME_PREINIT(num_ctxts)                              \
-    __SYNC_STAGE_SET_ISLAND_PREINIT(num_stages,num_mes)                   \
-    __SYNC_STAGE_SET_GLOBAL_PREINIT(num_stages,num_islands)
+#define SYNC_STAGE_SET_GLOBALS(num_stages) \
+    __SYNC_STAGE_SET_ME_GLOBALS()               \
+    __SYNC_STAGE_SET_ISLAND_GLOBALS(num_stages) \
+    __SYNC_STAGE_SET_DEVICE_GLOBALS(num_stages)
 
+/*f SYNC_STAGE_SET_PREINIT */
 /**
- * Declare and initialize memory structures used for synchronizing just
- * contexts - can br 
+ * Required before any calls to sync_stage_set_stage_complete() for every context
  **/
-#define SYNC_STAGE_SET_PREINIT_ME(num_ctxts) \
-    __SYNC_STAGE_SET_ME_PREINIT(num_ctxts)     \
-    __SYNC_STAGE_SET_PREINIT_EXTERN(island) \
-    __SYNC_STAGE_SET_PREINIT_EXTERN(global)
+#define SYNC_STAGE_SET_PREINIT() \
+    __SYNC_STAGE_SET_ME_PREINIT()
 
 /*f sync_stage_set_stage_complete */
 /**

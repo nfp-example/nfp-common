@@ -273,6 +273,16 @@ extern void nfp_show_rtsyms(struct nfp *nfp);
 extern int nfp_get_rtsym_cppid(struct nfp *nfp,
                                const char *sym_name, struct nfp_cppid *cppid);
 
+/*f nfp_sync_resolve */
+/**
+ * @brief Resolve NFP sync library memory contents based on run-time
+ * symbols of firmware that has loaded
+ *
+ * @param nfp      Nfp with loaded firmware whose run-time symbols are to be displayed
+ *
+ */
+extern int nfp_sync_resolve(struct nfp *nfp);
+
 /*f nfp_write */
 /**
  *

@@ -90,6 +90,8 @@ data_coproc_initialize(struct data_coproc *data_coproc, int dev_num, size_t shm_
         return 2;
     }
 
+    nfp_sync_resolve(data_coproc->nfp);
+
     if (nfp_get_rtsym_cppid(data_coproc->nfp,
                             "cls_workq",
                             &data_coproc->cls_workq) < 0) {
