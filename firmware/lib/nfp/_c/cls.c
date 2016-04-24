@@ -54,7 +54,7 @@ CLS_LOCAL_OP(cls_write,write,__xwrite void *);
 CLS_LOCAL_OP(cls_add,add,__xwrite void *);
 
 /*f cls_test_add */
-CLS_LOCAL_OP(cls_test_add,add,__xrw void *);
+CLS_LOCAL_OP(cls_test_add,test_add,__xrw void *);
 
 /*f cls_sub */
 CLS_LOCAL_OP(cls_sub,sub,__xwrite void *);

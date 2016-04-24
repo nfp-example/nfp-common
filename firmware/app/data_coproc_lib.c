@@ -349,6 +349,8 @@ gatherer_get_workq(int *workqs_to_do)
  *
  * @param workq_to_read Host work queue number to take work from
  *
+ * @param rptr Read pointer to fill out, to start reading workq from
+ *
  * @param workq_desc Host work queue data (from the cache managed by
  * data_coproc_workq_manager) for the host work queue '@p
  * workq_to_read'
@@ -385,7 +387,9 @@ gatherer_get_workq(int *workqs_to_do)
  *
  */
 static __inline int
-gatherer_get_num_work(int workq_to_read, struct dcprc_workq_buffer_desc *workq_desc)
+gatherer_get_num_work(int workq_to_read,
+                      int *rptr,
+                      struct dcprc_workq_buffer_desc *workq_desc)
 {
     int wptr;
     int num_work_to_do;
@@ -394,12 +398,13 @@ gatherer_get_num_work(int workq_to_read, struct dcprc_workq_buffer_desc *workq_d
     if (wptr&(1<<31))
         return 0;
 
-    num_work_to_do = (workq_rptr[workq_to_read] - wptr) & 0xf;
+    *rptr = workq_rptr[workq_to_read];
+    num_work_to_do = (wptr - *rptr) & 0xf;
     if (num_work_to_do>4) { num_work_to_do=4; }
-    if (((wptr+num_work_to_do)&~31) != (wptr&~31)) {
-        num_work_to_do = ((wptr+32)&~31)-wptr;
+    if (((*rptr+num_work_to_do)&~31) != (*rptr&~31)) {
+        num_work_to_do = ((*rptr+32)&~31)-*rptr;
     }
-    workq_rptr[workq_to_read] = (workq_rptr[workq_to_read]+num_work_to_do) &~ DCPRC_WORKQ_PTR_CLEAR_MASK;
+    workq_rptr[workq_to_read] = (*rptr+num_work_to_do) & DCPRC_WORKQ_PTR_CLEAR_MASK;
     return num_work_to_do;
 }
 
@@ -408,6 +413,8 @@ gatherer_get_num_work(int workq_to_read, struct dcprc_workq_buffer_desc *workq_d
  * @brief DMA workq entries from wost work queue to MU, and add work to MU work queue
  *
  * @param workq_to_read Host work queue number to take work from
+ *
+ * @param rptr Read pointer to start reading workq from
  *
  * @param num_work_to_do Number of work items to take from @p workq_to_read
  *
@@ -443,6 +450,7 @@ gatherer_get_num_work(int workq_to_read, struct dcprc_workq_buffer_desc *workq_d
  */
 static __inline void
 gatherer_dma_and_give_work(int workq_to_read,
+                           int rptr,
                            int num_work_to_do,
                            struct dcprc_workq_buffer_desc *workq_desc)
 {
@@ -458,24 +466,24 @@ gatherer_dma_and_give_work(int workq_to_read,
 
     mu_work_wptr &= DCPRC_MU_WORK_BUFFER_CLEAR_MASK;
 
-    wptr = workq_desc->wptr;
-
     cpp_addr.uint32_lo = shared_data.mu_work_buffer.uint32_lo + mu_work_wptr*sizeof(struct dcprc_workq_entry);
     cpp_addr.uint32_hi = shared_data.mu_work_buffer.uint32_hi;
-    pcie_addr.uint32_lo = workq_desc->host_physical_address_lo + wptr*sizeof(struct dcprc_workq_entry);
+    pcie_addr.uint32_lo = workq_desc->host_physical_address_lo + rptr*sizeof(struct dcprc_workq_entry);
     pcie_addr.uint32_hi = workq_desc->host_physical_address_hi;
     dma_size = num_work_to_do * sizeof(struct dcprc_workq_entry);
 
+    pcie_dma_buffer(0, pcie_addr, cpp_addr, dma_size, NFP_PCIE_DMA_TOPCI_HI, 0, PCIE_DMA_CFG);
+
+
     local_csr_write(local_csr_mailbox0, cpp_addr.uint32_lo);
     local_csr_write(local_csr_mailbox1, cpp_addr.uint32_hi);
-    local_csr_write(local_csr_mailbox2, pcie_addr.uint32_lo);
-    local_csr_write(local_csr_mailbox3, pcie_addr.uint32_hi);
+    local_csr_write(local_csr_mailbox2, shared_data.cls_mu_work_wptr_ptr);//pcie_addr.uint32_lo);
+    local_csr_write(local_csr_mailbox3, mu_work_wptr);
     __asm{ctx_arb[bpt]};
-    pcie_dma_buffer(0, pcie_addr, cpp_addr, dma_size, NFP_PCIE_DMA_TOPCI_HI, 0, PCIE_DMA_CFG);
 
     for (i=0; i<num_work_to_do; i++) {
         __xwrite struct dcprc_mu_work_entry mu_work_entry;
-        mu_work_entry.host_physical_address_lo = workq_desc->host_physical_address_lo + (wptr+i)*sizeof(struct dcprc_workq_entry);
+        mu_work_entry.host_physical_address_lo = workq_desc->host_physical_address_lo + (rptr+i)*sizeof(struct dcprc_workq_entry);
         mu_work_entry.host_physical_address_hi = workq_desc->host_physical_address_hi;
         mu_work_entry.mu_ofs = mu_work_wptr+i;
         mem_workq_add_work(shared_data.muq_mu_workq, &mu_work_entry, sizeof(mu_work_entry));
@@ -491,10 +499,13 @@ data_coproc_work_gatherer(void)
 {
     for (;;) {
         int workqs_to_do;
+        int work_done;
         workqs_to_do = gatherer_get_workqs_to_do();
-
+        
+        work_done = 0;
         for (;;) {
             int workq_to_read;
+            int rptr;
             struct dcprc_workq_buffer_desc workq_desc;
             int num_work_to_do;
 
@@ -503,12 +514,17 @@ data_coproc_work_gatherer(void)
 
             workq_desc = cls_workq_cache.workqs[workq_to_read];
 
-            num_work_to_do = gatherer_get_num_work(workq_to_read, &workq_desc);
+            num_work_to_do = gatherer_get_num_work(workq_to_read, &rptr, &workq_desc);
             if (num_work_to_do==0)
                 continue;
 
-            gatherer_dma_and_give_work(workq_to_read, num_work_to_do,
+            gatherer_dma_and_give_work(workq_to_read, rptr, num_work_to_do,
                                        &workq_desc);
+            work_done = 1;
+        }
+
+        if (!work_done) {
+            me_sleep(std_poll_interval);
         }
     }
 }
