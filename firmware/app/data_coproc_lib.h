@@ -30,7 +30,37 @@
 /*a Includes */
 #include "firmware/data_coproc.h"
 
-/*a Defines */
+/*a Initialization */
+/* DMA config */
+#ifndef STRINGIFY
+#define __STRINGIFY(x) #x
+#define STRINGIFY(x) __STRINGIFY(x)
+#endif
+
+#ifdef DCPRC_INIT_CSRS
+#define __PCIE_DMA_CSR(r) pcie:i4.PcieInternalTargets.DMAController.r
+#define __PCIE_DMA_CFG(f) __PCIE_DMA_CSR(PCIE_DMA_CFG_CSR).f
+__asm {
+    .init_csr __PCIE_DMA_CFG(CppTargetIDEven)     0x7 const;
+    .init_csr __PCIE_DMA_CFG(Target64bitEven)     1   const;
+    .init_csr __PCIE_DMA_CFG(NoSnoopEven)         0   const;
+    .init_csr __PCIE_DMA_CFG(RelaxedOrderingEven) 0   const;
+    .init_csr __PCIE_DMA_CFG(IdBasedOrderingEven) 0   const;
+    .init_csr __PCIE_DMA_CFG(StartPaddingEven)    0   const;
+    .init_csr __PCIE_DMA_CFG(EndPaddingEven)      0   const;
+    .init_csr __PCIE_DMA_CFG(SignalOnlyEven)      0   const;
+}
+#undef __PCIE_DMA_CFG
+#undef __PCIE_DMA_CSR
+
+/* Memory to ensure this is done at least once
+ */
+__asm {
+    .alloc_mem dcprc_init_csrs_included ctm global 8 8;
+}
+
+/* End guard */
+#endif // DCPRC_INIT_CSRS
 
 /*a Types */
 /*t dcprc_worker_me */

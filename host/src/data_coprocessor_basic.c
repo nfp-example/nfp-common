@@ -90,7 +90,15 @@ data_coproc_initialize(struct data_coproc *data_coproc, int dev_num, size_t shm_
         return 2;
     }
 
-    nfp_sync_resolve(data_coproc->nfp);
+    if (nfp_get_rtsym_cppid(data_coproc->nfp, "dcprc_init_csrs_included", NULL)<0) {
+        fprintf(stderr, "Firmware is missing CSR initialization (symbol 'dcprc_init_csrs_included' is missing)\n");
+        return 2;
+    }
+
+    if (nfp_sync_resolve(data_coproc->nfp)<0) {
+        fprintf(stderr, "Failed to resolve firmware synchronization configuration - firmware would not start correctly\n");
+        return 3;
+    }
 
     if (nfp_get_rtsym_cppid(data_coproc->nfp,
                             "cls_workq",
@@ -119,7 +127,7 @@ data_coproc_initialize(struct data_coproc *data_coproc, int dev_num, size_t shm_
     workq.host_physical_address = data_coproc->phys_addr[0];
     workq.max_entries = 4;
     workq.wptr        = 0;
-    fprintf(stderr,"%08lx %08x %ld\n",data_coproc->cls_workq.addr,data_coproc->cls_workq.cpp_id,sizeof(workq));
+
     if (nfp_write(data_coproc->nfp, &data_coproc->cls_workq, offsetof(struct dcprc_cls_workq, workqs[0]),
                   &workq, sizeof(workq))<0) {
         fprintf(stderr,"Failed to configure firmware with work queues\n");
@@ -200,6 +208,16 @@ main(int argc, char **argv)
     if (data_coproc_initialize(&data_coproc, dev_num, shm_size)!=0)
         return 4;
 
+    fprintf(stderr,"Phys: %016lx\n",data_coproc.phys_addr[0]);
+    struct dcprc_workq_entry *ptr;
+    ptr = (struct dcprc_workq_entry *)data_coproc->shm_base;
+    ptr[0].work.host_physical_address = data_coproc->phys_addr[0]+256;
+    ptr[0].work.operand_0 = 0x12345678;
+    ptr[0].work.__raw[3] = 0xdeadbeef;
+    int wptr;
+    wptr=1;
+    if (nfp_write(data_coproc.nfp, &data_coproc.cls_workq, offsetof(struct dcprc_cls_workq, workqs[0].wptr),
+                  &wptr, sizeof(wptr))<0) {
     for (;;) {
     }
 

@@ -12,8 +12,9 @@
 /*a Includes
  */
 #include "sync/stage.h"
-#include "data_coproc_lib.h"
 #include <stdint.h>
+#define DCPRC_INIT_CSRS
+#include "data_coproc_lib.h"
 
 /*a Synchronization
  */

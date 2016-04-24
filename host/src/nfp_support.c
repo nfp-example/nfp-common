@@ -518,6 +518,9 @@ nfp_get_rtsym_cppid(struct nfp *nfp, const char *sym_name, struct nfp_cppid *cpp
         return -1;
     }
 
+    if (cppid==NULL) // Just checking the symbol exists
+        return 0;
+
     cppid->cpp_id = NFP_CPP_ISLAND_ID(rtsym->target, NFP_CPP_ACTION_RW, 0, rtsym->domain);
     cppid->addr   = rtsym->addr;
     return 0;
@@ -525,13 +528,6 @@ nfp_get_rtsym_cppid(struct nfp *nfp, const char *sym_name, struct nfp_cppid *cpp
 
 /*a Firmware sync support */
 /*f nfp_sync_resolve */
-/**
- * @brief Resolve NFP sync library memory contents based on run-time
- * symbols of firmware that has loaded
- *
- * @param nfp      Nfp with loaded firmware whose run-time symbols are to be displayed
- *
- */
 extern int
 nfp_sync_resolve(struct nfp *nfp)
 {

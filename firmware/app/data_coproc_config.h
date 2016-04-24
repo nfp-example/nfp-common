@@ -26,6 +26,7 @@
 /** Defines
  */
 #define PCIE_ISLAND 4
+// Note that the CSR name is DMADescrConfig<n/2> for PCIE_DMA_CFG=n
 #define PCIE_DMA_CFG 0
-#define PCIE_DMA_CFG_CSR 0
+#define PCIE_DMA_CFG_CSR DMADescrConfig0
 

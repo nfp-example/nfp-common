@@ -466,6 +466,11 @@ gatherer_dma_and_give_work(int workq_to_read,
     pcie_addr.uint32_hi = workq_desc->host_physical_address_hi;
     dma_size = num_work_to_do * sizeof(struct dcprc_workq_entry);
 
+    local_csr_write(local_csr_mailbox0, cpp_addr.uint32_lo);
+    local_csr_write(local_csr_mailbox1, cpp_addr.uint32_hi);
+    local_csr_write(local_csr_mailbox2, pcie_addr.uint32_lo);
+    local_csr_write(local_csr_mailbox3, pcie_addr.uint32_hi);
+    __asm{ctx_arb[bpt]};
     pcie_dma_buffer(0, pcie_addr, cpp_addr, dma_size, NFP_PCIE_DMA_TOPCI_HI, 0, PCIE_DMA_CFG);
 
     for (i=0; i<num_work_to_do; i++) {

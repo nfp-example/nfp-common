@@ -278,7 +278,22 @@ extern int nfp_get_rtsym_cppid(struct nfp *nfp,
  * @brief Resolve NFP sync library memory contents based on run-time
  * symbols of firmware that has loaded
  *
- * @param nfp      Nfp with loaded firmware whose run-time symbols are to be displayed
+ * @param nfp      Nfp with loaded firmware with sync to be resolved
+ *
+ * @returns -1 on failure (e.g. symbol not found), 0 for success
+ *
+ * Will find all the i*.me*.__me_sync_stage_set symbols, and count
+ * these to find the number of MEs in each island that uses the sync
+ * primitives.
+ *
+ * Will find all the i*.island_sync_stage_set symbols and write the
+ * correct number of MEs in to each one
+ *
+ * Will find the global_sync_stage_set symbol and write the correct
+ * number of islands into it
+ *
+ * If the firmware does not use the sync primitives at all then this
+ * code will do nothing, but it will return success.
  *
  */
 extern int nfp_sync_resolve(struct nfp *nfp);
