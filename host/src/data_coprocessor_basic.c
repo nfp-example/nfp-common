@@ -215,6 +215,12 @@ main(int argc, char **argv)
     ptr[0].work.host_physical_address = data_coproc.phys_addr[0]+256;
     ptr[0].work.operand_0 = 0x12345678;
     ptr[0].__raw[3] = 0xdeadbeef;
+/*    fprintf(stderr,"Ptr: %p\n",ptr);
+    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[0]);
+    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[1]);
+    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[2]);
+    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[3]);
+*/
     int wptr;
     wptr=1;
     if (nfp_write(data_coproc.nfp, &data_coproc.cls_workq, offsetof(struct dcprc_cls_workq, workqs[0].wptr),

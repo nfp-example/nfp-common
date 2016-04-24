@@ -150,7 +150,7 @@ pcie_dma_buffer(int island, uint64_32_t pcie_addr, uint64_32_t cpp_addr,
         cmd_out.__raw[2] = cmd.__raw[2];
         cmd_out.__raw[3] = cmd.__raw[3] | ((length_to_dma - 1) << 20);
 
-       pcie_dma_enqueue(island,
+        pcie_dma_enqueue(island,
                         &cmd_out,
                         queue);
 

@@ -271,12 +271,14 @@ dcprc_worker_write_results(const struct dcprc_worker_me *restrict dcprc_worker_m
     workq_entry_out.__raw[2] = workq_entry->__raw[2];
     workq_entry_out.__raw[3] = workq_entry->__raw[3] &~ (1>>31);
     mu_base.uint64 = __link_sym("mu_scratch");
+
     mem_write64_hl(&workq_entry_out, mu_base.uint32_hi, mu_base.uint32_lo, sizeof(workq_entry_out));
 
     cpp_addr = mu_base;
     pcie_addr.uint32_lo = mu_work_entry->host_physical_address_lo;
     pcie_addr.uint32_hi = mu_work_entry->host_physical_address_hi;
     dma_size = sizeof(struct dcprc_workq_entry);
+
     pcie_dma_buffer(0, pcie_addr, cpp_addr, dma_size, NFP_PCIE_DMA_TOPCI_HI, 0, PCIE_DMA_CFG);
 }
 
@@ -472,20 +474,14 @@ gatherer_dma_and_give_work(int workq_to_read,
     pcie_addr.uint32_hi = workq_desc->host_physical_address_hi;
     dma_size = num_work_to_do * sizeof(struct dcprc_workq_entry);
 
-    pcie_dma_buffer(0, pcie_addr, cpp_addr, dma_size, NFP_PCIE_DMA_TOPCI_HI, 0, PCIE_DMA_CFG);
-
-
-    local_csr_write(local_csr_mailbox0, cpp_addr.uint32_lo);
-    local_csr_write(local_csr_mailbox1, cpp_addr.uint32_hi);
-    local_csr_write(local_csr_mailbox2, shared_data.cls_mu_work_wptr_ptr);//pcie_addr.uint32_lo);
-    local_csr_write(local_csr_mailbox3, mu_work_wptr);
-    __asm{ctx_arb[bpt]};
+    pcie_dma_buffer(0, pcie_addr, cpp_addr, dma_size, NFP_PCIE_DMA_FROMPCI_HI, 0, PCIE_DMA_CFG);
 
     for (i=0; i<num_work_to_do; i++) {
         __xwrite struct dcprc_mu_work_entry mu_work_entry;
         mu_work_entry.host_physical_address_lo = workq_desc->host_physical_address_lo + (rptr+i)*sizeof(struct dcprc_workq_entry);
         mu_work_entry.host_physical_address_hi = workq_desc->host_physical_address_hi;
         mu_work_entry.mu_ofs = mu_work_wptr+i;
+
         mem_workq_add_work(shared_data.muq_mu_workq, &mu_work_entry, sizeof(mu_work_entry));
     }
 }

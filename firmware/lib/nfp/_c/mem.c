@@ -191,7 +191,7 @@ mem_write64_hl(__xwrite void *data, uint32_t addr_hi, uint32_t addr_lo, const si
     uint32_t size_in_uint64;
     uint32_t addr_s8;
     size_in_uint64 = size>>3;
-    addr_s8 = addr_hi>>24;
+    addr_s8 = addr_hi<<24;
     __asm {
         mem[write, *data, addr_s8, <<8, addr_lo, \
             __ct_const_val(size_in_uint64)], ctx_swap[sig];

@@ -212,7 +212,14 @@ dcprc_worker_null(void)
         dcprc_worker_get_work(&dcprc_worker_me,
                               &mu_work_entry,
                               &workq_entry);
-        __asm {ctx_arb[bpt]}
+
+        if (0) {
+            local_csr_write(local_csr_mailbox0, workq_entry.__raw[0]);
+            local_csr_write(local_csr_mailbox1, workq_entry.__raw[1]);
+            local_csr_write(local_csr_mailbox2, workq_entry.__raw[2]);
+            local_csr_write(local_csr_mailbox3, workq_entry.__raw[3]);
+            __asm {ctx_arb[bpt]}
+        }
         dcprc_worker_write_results(&dcprc_worker_me,
                                    &mu_work_entry,
                                    &workq_entry);
