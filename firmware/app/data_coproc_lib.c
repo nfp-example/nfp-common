@@ -269,7 +269,7 @@ dcprc_worker_write_results(const struct dcprc_worker_me *restrict dcprc_worker_m
     workq_entry_out.__raw[0] = workq_entry->__raw[0];
     workq_entry_out.__raw[1] = workq_entry->__raw[1];
     workq_entry_out.__raw[2] = workq_entry->__raw[2];
-    workq_entry_out.__raw[3] = workq_entry->__raw[3] &~ (1>>31);
+    workq_entry_out.__raw[3] = workq_entry->__raw[3] &~ (1<<31);
     mu_base.uint64 = __link_sym("mu_scratch");
 
     mem_write64_hl(&workq_entry_out, mu_base.uint32_hi, mu_base.uint32_lo, sizeof(workq_entry_out));

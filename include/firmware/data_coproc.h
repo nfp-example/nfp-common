@@ -93,7 +93,7 @@ struct dcprc_workq_entry {
             uint32_t data_1;
             uint32_t data_2;
             uint32_t flags:31;
-            uint32_t valid_work:1;
+            uint32_t not_valid:1;
         } result;
         uint32_t __raw[4];
     };

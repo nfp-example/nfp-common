@@ -222,13 +222,25 @@ main(int argc, char **argv)
     fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[3]);
 */
     int wptr;
+    int count;
     wptr=1;
     if (nfp_write(data_coproc.nfp, &data_coproc.cls_workq, offsetof(struct dcprc_cls_workq, workqs[0].wptr),
                   &wptr, sizeof(wptr))<0) {
         fprintf(stderr,"Failed to write wptr\n");
         return 4;
     }
+    count=0;
+    while (ptr[0].result.not_valid) {
+        count++;
+        if (count>1E8) break;
+    }
+    fprintf(stderr,"Took %d counts\n",count);
     for (;;) {
+    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[0]);
+    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[1]);
+    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[2]);
+    fprintf(stderr,"%8x\n",((unsigned int *)(&ptr[0]))[3]);
+    usleep(1000*1000);
     }
 
     data_coproc_shutdown(&data_coproc);
