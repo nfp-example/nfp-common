@@ -223,7 +223,7 @@ data_coproc_add_work(struct data_coproc *data_coproc,
 
     workq_entry->work.host_physical_address = host_physical_address;
     workq_entry->work.operand_0 = operand_0;
-    workq_entry->__raw[3] = 0xde000001 | operand_1;
+    workq_entry->__raw[3] = 0x80000000 | operand_1;
     data_coproc->work_queues[queue].wptr = (wptr+1) & DCPRC_WORKQ_PTR_CLEAR_MASK;
 }
 
@@ -249,16 +249,28 @@ data_coproc_get_results(struct data_coproc *data_coproc,
     int rptr;
     int mask;
     struct dcprc_workq_entry *workq_entry;
+    int iterations;
 
     rptr = data_coproc->work_queues[queue].rptr;
     mask = data_coproc->work_queues[queue].max_entries-1;
     workq_entry = &(data_coproc->work_queues[queue].entries[rptr & mask]);
+    iterations = 0;
     while (workq_entry->result.not_valid) {
         int i;
         for (i=0; i<100; i++) {
             int j=SL_TIMER_CPU_CLOCKS;
             j = j;//fred += j;
             //usleep(10);
+        }
+        iterations++;
+        if (iterations>0x80000) {
+            fprintf(stderr,"%08x %08x %08x %08x\n",
+                    workq_entry->__raw[0],
+                    workq_entry->__raw[1],
+                    workq_entry->__raw[2],
+                    workq_entry->__raw[3] );
+            fprintf(stderr,"Timeout waiting for data %d\n",rptr);
+            exit(4);
         }
     };
     rptr += 1;

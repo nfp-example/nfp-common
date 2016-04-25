@@ -5,6 +5,8 @@ import subprocess
 import fcntl
 import os
 import time
+import tempfile
+import re
 
 #a Test
 #c Basic tests
@@ -46,6 +48,7 @@ class nonblocking_stdfile(object):
 
 class BasicTests(unittest.TestCase):
     host_bin_dir = "./host/bin/"
+    log_re = re.compile("\s*([0-9]+):\s*([0-9]+):([0-9a-f]+), ([0-9a-f]+), ([0-9a-f]+), ([0-9a-f]+)")
     def run_process(self, host_app, host_app_args, timeout=1000.0, verbose=False ):
         time_in = time.clock()
         host_test = subprocess.Popen(host_app_args,
@@ -82,7 +85,7 @@ class BasicTests(unittest.TestCase):
         time_taken = time_out-time_in
         return (rc, stdout, stderr, time_taken)
     def run_without_log(self, host_app, host_app_args, **kwargs):
-        run_output = self.run_process(host_app, host_app_args, **kwargs) 
+        run_output = self.run_process(host_app, [""]+host_app_args, **kwargs) 
         rc = run_output[0]
         stdout = run_output[1]
         stderr = run_output[2]
@@ -92,21 +95,51 @@ class BasicTests(unittest.TestCase):
             pass
         self.assertEqual(rc,0, ('Expected return code of 0, got %d'%rc))
         pass
-    def check_rotation(self,q,value_angle,value_axis):
-        (angle, axis) = q.to_rotation(degrees=True)
-        self.assertTrue(abs(angle-value_angle)<epsilon, 'Angle mismatches (%s, %s)'%(str(angle),str(value_angle)))
-        self.assertEqual(len(value_axis),len(axis), 'BUG: Length of axis test value is not 3!!')
-        for i in range(len(axis)):
-            self.assertTrue(abs(value_axis[i]-axis[i])<epsilon, 'Coordinate %d mismatches (%s, %s)'%(i,str(axis),str(value_axis)))
+    def run_with_log(self, host_app, host_app_args, log_check_callback, **kwargs):
+        log_file = tempfile.NamedTemporaryFile()
+        run_output = self.run_process(host_app, [""]+host_app_args+["-L",log_file.name], **kwargs) 
+        rc = run_output[0]
+        stdout = run_output[1]
+        stderr = run_output[2]
+        time_taken = run_output[3]
+        if rc is None:
+            self.assertEqual(rc,0, ('Timed out (expected to finish before %sseconds)'%str(time_taken)))
+            pass
+        self.assertEqual(rc,0, ('Expected return code of 0, got %d'%rc))
+        log_file.seek(0)
+        for l in log_file:
+            m = self.log_re.match(l)
+            self.assertNotEqual(m,None,"Log file line incorrect format %s"%l)
+            if m is not None:
+                iteration = int(m.group(1))
+                batch = int(m.group(2))
+                data = (int(m.group(3),16),
+                        int(m.group(4),16),
+                        int(m.group(5),16),
+                        int(m.group(6),16))
+                log_check_callback(l,iteration,batch,data)
+                pass
             pass
         pass
     def test_small_batch(self):
-        self.run_without_log("data_coprocessor_basic",["-i","1","-b","100"])
+        self.run_without_log("data_coprocessor_basic",["-i","1","-b","100"],timeout=10.0)
         pass
     def test_many_batches(self):
         #host_bin_dir+"data_coprocessor_basic",["-i","1000","-b","250","-L","fred.log"]
-        self.run_without_log("data_coprocessor_basic",["-i","1000","-b","250"])
+        self.run_without_log("data_coprocessor_basic",["-i","1000","-b","250"],timeout=10.0)
         return
+    def test_small_batch_with_log(self):
+        def check_log(line, iteration,batch,data):
+            self.assertEqual(data[3],batch,"Bad data for %d:%d:%s"%(iteration, batch, line))
+            pass
+        self.run_with_log("data_coprocessor_basic",["-i","1","-b","100"],check_log,timeout=10.0)
+        pass
+    def test_many_small_batches_with_log(self):
+        def check_log(line, iteration,batch,data):
+            self.assertEqual(data[3],batch,"Bad data for %d:%d:%s"%(iteration, batch, line))
+            pass
+        self.run_with_log("data_coprocessor_basic",["-i","100","-b","10"],check_log,timeout=10.0)
+        pass
 
 #a Toplevel
 loader = unittest.TestLoader().loadTestsFromTestCase

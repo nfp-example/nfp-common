@@ -66,15 +66,15 @@ struct dcprc_workq_entry {
             uint32_t host_physical_address_lo;
             uint32_t host_physical_address_hi;
             uint32_t operand_0;
-            uint32_t operand_1:31;
             uint32_t valid_work:1;
+            uint32_t operand_1:31;
         } work;
         struct {
             uint32_t data_0;
             uint32_t data_1;
             uint32_t data_2;
-            uint32_t flags:31;
             uint32_t valid_work:1;
+            uint32_t flags:31;
         } result;
         uint32_t __raw[4];
     };
@@ -85,8 +85,8 @@ struct dcprc_workq_entry {
         struct {
             uint64_t host_physical_address;
             uint32_t operand_0;
-            uint32_t valid_work:1;
             uint32_t operand_1:31;
+            uint32_t valid_work:1;
         } work;
         struct {
             uint32_t data_0;
@@ -99,6 +99,7 @@ struct dcprc_workq_entry {
     };
 };
 #endif
+int assert_me[sizeof(struct dcprc_workq_entry)==16?1:-1];
 
 /*t struct dcprc_workq_buffer_desc */
 /**
