@@ -57,17 +57,33 @@ struct data_coproc {
     struct data_coproc_work_queue work_queues[1];
 };
 
+/*t data_coproc_options */
+/**
+ */
+struct data_coproc_options {
+    int dev_num;
+    int batch_size;
+    int iterations;
+    const char *firmware;
+    const char *data_filename;
+    const char *log_filename;
+    int data_size;
+};
+
 /*a Global variables */
-static const char *nffw_filename="firmware/nffw/data_coproc.nffw";
+static const char *nffw_filename="firmware/nffw/data_coproc_null_many.nffw";
 static const char *shm_filename="/tmp/nfp_dcb_shm.lock";
 static int shm_key = 0x0d0c0b0a;
-static const char *options = "b:d:f:i:h";
+static const char *options = "b:d:f:i:hD:S:L:";
 static struct option long_options[] = {
     {"help",       no_argument, 0,  'h' },
-    {"batch_size", required_argument, 0, 'b' },
+    {"batch-size", required_argument, 0, 'b' },
     {"device",     required_argument, 0, 'd' },
     {"firmware",   required_argument, 0, 'f' },
     {"iterations", required_argument, 0, 'i' },
+    {"data-file",  required_argument, 0, 'D' },
+    {"data-size",  required_argument, 0, 'S' },
+    {"log-file",   required_argument, 0, 'L' },
     {0,         0,                 0,  0 }
     };
 
@@ -92,9 +108,11 @@ static struct option long_options[] = {
  *
  **/
 static int
-data_coproc_initialize(struct data_coproc *data_coproc, int dev_num, size_t shm_size)
+data_coproc_initialize(struct data_coproc *data_coproc,
+                       struct data_coproc_options *data_coproc_options,
+                       size_t shm_size)
 {
-    data_coproc->nfp = nfp_init(dev_num, 1);
+    data_coproc->nfp = nfp_init(data_coproc_options->dev_num, 1);
     if (!data_coproc->nfp) {
         fprintf(stderr, "Failed to open NFP\n");
         return 1;
@@ -192,7 +210,9 @@ data_coproc_shutdown(struct data_coproc *data_coproc)
 static void
 data_coproc_add_work(struct data_coproc *data_coproc,
                      int queue,
-                     uint64_t host_physical_address )
+                     uint64_t host_physical_address,
+                     uint32_t operand_0,
+                     uint32_t operand_1 )
 {
     int wptr;
     int mask;
@@ -202,8 +222,8 @@ data_coproc_add_work(struct data_coproc *data_coproc,
     workq_entry = &(data_coproc->work_queues[queue].entries[wptr&mask]);
 
     workq_entry->work.host_physical_address = host_physical_address;
-    workq_entry->work.operand_0 = 0x12345678;
-    workq_entry->__raw[3] = 0xdeadbeef;
+    workq_entry->work.operand_0 = operand_0;
+    workq_entry->__raw[3] = 0xde000001 | operand_1;
     data_coproc->work_queues[queue].wptr = (wptr+1) & DCPRC_WORKQ_PTR_CLEAR_MASK;
 }
 
@@ -259,6 +279,177 @@ usage(int error)
     return 0;
 }
 
+/*f run_test */
+static void
+run_test(struct data_coproc *data_coproc,
+         struct data_coproc_options *data_coproc_options)
+{
+    t_sl_timer timer_do_work;
+    t_sl_timer timer_add_work;
+    uint64_t phys_addr;
+    char *data_space;
+    struct dcprc_workq_entry *log_buffer;
+    FILE *log_file;
+
+    int iterations;
+    int batch_size;
+    int data_size;
+
+    int iter;
+
+    iterations = data_coproc_options->iterations;
+    batch_size = data_coproc_options->batch_size;
+    data_size  = data_coproc_options->data_size;
+
+    if (iterations<1) iterations=1;
+    if (data_size<1024) data_size=1024;
+
+    log_file = NULL;
+    log_buffer = NULL;
+    if (data_coproc_options->log_filename) {
+        log_file=fopen(data_coproc_options->log_filename,"w");
+        if (!log_file) {
+            fprintf(stderr, "Failed to open log file '%s'\n",data_coproc_options->log_filename);
+            usage(1);
+            return;
+        }
+        log_buffer = malloc(sizeof(struct dcprc_workq_entry)*iterations*batch_size);
+        if (log_buffer==NULL) {
+            fprintf(stderr, "Failed to malloc log buffer\n");
+            usage(1);
+            return;
+        }
+    }
+
+    data_space = ((char *)data_coproc->shm_base) + 2*1024*1024;
+    if (data_coproc_options->data_filename) {
+        FILE *f;
+        f = fopen(data_coproc_options->data_filename,"rb");
+        if (!f) {
+            fprintf(stderr,"Failed to open data-file '%s'\n", data_coproc_options->data_filename);
+            usage(1);
+            return;
+        }
+        data_size = fread(data_space, 1, 2*1024*1024, f);
+        if (data_size==0) {
+            usage(1);
+            return;
+        }
+        fclose(f);
+    } else {
+        int i;
+        for (i=0; i<data_size; i++) {
+            data_space[i] = i;
+        }
+    }
+
+    phys_addr = nfp_huge_physical_address(data_coproc->nfp, data_space, 0);
+    SL_TIMER_INIT(timer_do_work);
+    SL_TIMER_INIT(timer_add_work);
+    for (iter=0; iter<iterations; iter++) {
+        int i;
+        SL_TIMER_ENTRY(timer_add_work);
+        for (i=0; i<batch_size; i++) {
+            data_coproc_add_work(data_coproc, 0, phys_addr, data_size, i );
+        }
+        SL_TIMER_EXIT(timer_add_work);
+        SL_TIMER_ENTRY(timer_do_work);
+        data_coproc_commit_work(data_coproc, 0);
+        for (i=0; i<batch_size; i++) {
+            struct dcprc_workq_entry *dcprc_workq_entry;
+
+            dcprc_workq_entry = data_coproc_get_results(data_coproc, 0);
+            if (log_buffer) {
+                memcpy(log_buffer+i+iter*batch_size, dcprc_workq_entry, sizeof(*dcprc_workq_entry));
+            }
+        }
+        SL_TIMER_EXIT(timer_do_work);
+    }
+    printf("Time adding work per iteration %fus\n",SL_TIMER_VALUE_US(timer_add_work)/iterations);
+    printf("Time adding work per work item %fus\n",SL_TIMER_VALUE_US(timer_add_work)/iterations/batch_size);
+    printf("Time doing work (from commit to all work) per iteration %fus\n",SL_TIMER_VALUE_US(timer_do_work)/iterations);
+    printf("Time doing work (from commit to all work) per work item %fus\n",SL_TIMER_VALUE_US(timer_do_work)/iterations/batch_size);
+
+    if (log_file) {
+        int i, n;
+        n = 0;
+        for (iter=0; iter<iterations; iter++) {
+            for (i=0; i<batch_size; i++) {
+                fprintf(log_file, "%4d:%4d:%08x, %08x, %08x, %08x\n",
+                        iter, i, 
+                        log_buffer[n].__raw[0],
+                        log_buffer[n].__raw[1],
+                        log_buffer[n].__raw[2],
+                        log_buffer[n].__raw[3] );
+                n++;
+            }
+        }
+        fclose(log_file);
+        log_file = NULL;
+    }
+}
+
+/*f read_options */
+/**
+ **/
+static int
+read_options(int argc, char **argv, struct data_coproc_options *data_coproc_options)
+{
+    data_coproc_options->dev_num = 0;
+    data_coproc_options->batch_size=100;
+    data_coproc_options->iterations=10000;
+    data_coproc_options->firmware=NULL;
+    data_coproc_options->data_filename=NULL;
+    data_coproc_options->log_filename=NULL;
+    data_coproc_options->data_size=0;
+
+    for (;;) {
+        int option_index = 0;
+        int c = getopt_long(argc, argv, options, long_options, &option_index);
+        if (c == -1)
+            break;
+
+        switch (c) {
+        case 'd': {
+            if (sscanf(optarg,"%d",&data_coproc_options->dev_num)!=1)
+                return usage(1);
+            break;
+        }
+        case 'b': {
+            if (sscanf(optarg,"%d",&data_coproc_options->batch_size)!=1)
+                return usage(1);
+            break;
+        }
+        case 'i': {
+            if (sscanf(optarg,"%d",&data_coproc_options->iterations)!=1)
+                return usage(1);
+            break;
+        }
+        case 'f': {
+            data_coproc_options->firmware = optarg;
+            break;
+        }
+        case 'S': {
+            if (sscanf(optarg,"%d",&data_coproc_options->data_size)!=1)
+                return usage(1);
+            break;
+        }
+        case 'D': {
+            data_coproc_options->data_filename = optarg;
+            break;
+        }
+        case 'L': {
+            data_coproc_options->log_filename = optarg;
+            break;
+        }
+        case 'h': {
+            return usage(0);
+        }
+        }
+    }
+    return 0;
+}
+
 /*f main */
 /**
  * Initialize the system, run data, and stop
@@ -269,85 +460,25 @@ extern int
 main(int argc, char **argv)
 {
     struct data_coproc data_coproc;
-    int dev_num = 0;
-    int batch_size=100;
-    int iterations=10000;
-    const char *firmware=NULL;
+    struct data_coproc_options data_coproc_options;
     size_t shm_size = 16 * 2 * 1024 * 104;
-    int iter;
 
-    for (;;) {
-        int option_index = 0;
-        int c = getopt_long(argc, argv, options, long_options, &option_index);
-        if (c == -1)
-            break;
-
-        switch (c) {
-        case 'd': {
-            if (sscanf(optarg,"%d",&dev_num)!=1)
-                return usage(1);
-            break;
-        }
-        case 'b': {
-            if (sscanf(optarg,"%d",&batch_size)!=1)
-                return usage(1);
-            break;
-        }
-        case 'i': {
-            if (sscanf(optarg,"%d",&iterations)!=1)
-                return usage(1);
-            break;
-        }
-        case 'f': {
-            firmware = optarg;
-            break;
-        }
-        case 'h': {
-            return usage(0);
-        }
-        }
-    }
-    if (data_coproc_initialize(&data_coproc, dev_num, shm_size)!=0)
+    if (read_options(argc, argv, &data_coproc_options)!=0)
         return 4;
 
-    if ((batch_size<1) || (batch_size>data_coproc.work_queues[0].max_entries-1)) {
-        fprintf(stderr, "Batch size %d out of range 1..%d\n",batch_size,data_coproc.work_queues[0].max_entries-1);
+    if (data_coproc_initialize(&data_coproc, &data_coproc_options, shm_size)!=0)
+        return 4;
+
+    if ((data_coproc_options.batch_size<1) ||
+        (data_coproc_options.batch_size>data_coproc.work_queues[0].max_entries-1)) {
+        fprintf(stderr, "Batch size %d out of range 1..%d\n",
+                data_coproc_options.batch_size,
+                data_coproc.work_queues[0].max_entries-1);
         return 4;
     }
 
-    if (iterations<1) iterations=1;
-    firmware=firmware;
+    run_test(&data_coproc, &data_coproc_options);
 
-    t_sl_timer timer_do_work;
-    t_sl_timer timer_add_work;
-    SL_TIMER_INIT(timer_do_work);
-    SL_TIMER_INIT(timer_add_work);
-    for (iter=0; iter<iterations; iter++) {
-        int i;
-        SL_TIMER_ENTRY(timer_add_work);
-        for (i=0; i<100; i++) {
-            data_coproc_add_work(&data_coproc, 0, 0x123456789abcd00ll+i );
-        }
-        SL_TIMER_EXIT(timer_add_work);
-        SL_TIMER_ENTRY(timer_do_work);
-        data_coproc_commit_work(&data_coproc, 0);
-        for (i=0; i<batch_size; i++) {
-            struct dcprc_workq_entry *dcprc_workq_entry;
-
-            dcprc_workq_entry = data_coproc_get_results(&data_coproc, 0);
-            dcprc_workq_entry = dcprc_workq_entry;
-            /*fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[0]);
-            fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[1]);
-            fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[2]);
-            fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[3]);*/
-        }
-        SL_TIMER_EXIT(timer_do_work);
-    }
-    printf("Time adding work per iteration %fus\n",SL_TIMER_VALUE_US(timer_add_work)/iterations);
-    printf("Time adding work per work item %fus\n",SL_TIMER_VALUE_US(timer_add_work)/iterations/batch_size);
-    printf("Time doing work (from commit to all work) per iteration %fus\n",SL_TIMER_VALUE_US(timer_do_work)/iterations);
-    printf("Time doing work (from commit to all work) per work item %fus\n",SL_TIMER_VALUE_US(timer_do_work)/iterations/batch_size);
-    
     data_coproc_shutdown(&data_coproc);
     return 0;
 }

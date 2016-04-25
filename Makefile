@@ -19,6 +19,7 @@
 NFP_COMMON    := $(abspath $(CURDIR))
 NETRONOME = /opt/netronome
 
+PYTHON_DIR    = $(NFP_COMMON)/python
 SCRIPTS_DIR   = $(NFP_COMMON)/scripts
 FIRMWARE_DIR  = $(NFP_COMMON)/firmware
 INCLUDE_DIR   = $(NFP_COMMON)/include
