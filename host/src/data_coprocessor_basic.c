@@ -61,10 +61,13 @@ struct data_coproc {
 static const char *nffw_filename="firmware/nffw/data_coproc.nffw";
 static const char *shm_filename="/tmp/nfp_dcb_shm.lock";
 static int shm_key = 0x0d0c0b0a;
-static const char *options = "hf:";
+static const char *options = "b:d:f:i:h";
 static struct option long_options[] = {
-    {"help",     no_argument, 0,  'h' },
-    {"firmware", required_argument, 0,  'f' },
+    {"help",       no_argument, 0,  'h' },
+    {"batch_size", required_argument, 0, 'b' },
+    {"device",     required_argument, 0, 'd' },
+    {"firmware",   required_argument, 0, 'f' },
+    {"iterations", required_argument, 0, 'i' },
     {0,         0,                 0,  0 }
     };
 
@@ -107,7 +110,7 @@ data_coproc_initialize(struct data_coproc *data_coproc, int dev_num, size_t shm_
         return 2;
     }
 
-    nfp_show_rtsyms(data_coproc->nfp);
+    //nfp_show_rtsyms(data_coproc->nfp);
     if (nfp_sync_resolve(data_coproc->nfp)<0) {
         fprintf(stderr, "Failed to resolve firmware synchronization configuration - firmware would not start correctly\n");
         return 3;
@@ -247,10 +250,13 @@ data_coproc_get_results(struct data_coproc *data_coproc,
 /**
  * Display help
  */
-static void
-usage(void)
+static int
+usage(int error)
 {
     printf("Help goes here\n");
+    if (error)
+        return 4;
+    return 0;
 }
 
 /*f main */
@@ -264,7 +270,11 @@ main(int argc, char **argv)
 {
     struct data_coproc data_coproc;
     int dev_num = 0;
+    int batch_size=100;
+    int iterations=10000;
+    const char *firmware=NULL;
     size_t shm_size = 16 * 2 * 1024 * 104;
+    int iter;
 
     for (;;) {
         int option_index = 0;
@@ -273,42 +283,70 @@ main(int argc, char **argv)
             break;
 
         switch (c) {
+        case 'd': {
+            if (sscanf(optarg,"%d",&dev_num)!=1)
+                return usage(1);
+            break;
+        }
+        case 'b': {
+            if (sscanf(optarg,"%d",&batch_size)!=1)
+                return usage(1);
+            break;
+        }
+        case 'i': {
+            if (sscanf(optarg,"%d",&iterations)!=1)
+                return usage(1);
+            break;
+        }
         case 'f': {
-            printf("option d with value '%s'\n", optarg);
+            firmware = optarg;
             break;
         }
         case 'h': {
-            usage();
-            return 0;
+            return usage(0);
         }
         }
     }
-
     if (data_coproc_initialize(&data_coproc, dev_num, shm_size)!=0)
         return 4;
 
-    if (1) {
-        t_sl_timer timer;
+    if ((batch_size<1) || (batch_size>data_coproc.work_queues[0].max_entries-1)) {
+        fprintf(stderr, "Batch size %d out of range 1..%d\n",batch_size,data_coproc.work_queues[0].max_entries-1);
+        return 4;
+    }
+
+    if (iterations<1) iterations=1;
+    firmware=firmware;
+
+    t_sl_timer timer_do_work;
+    t_sl_timer timer_add_work;
+    SL_TIMER_INIT(timer_do_work);
+    SL_TIMER_INIT(timer_add_work);
+    for (iter=0; iter<iterations; iter++) {
         int i;
+        SL_TIMER_ENTRY(timer_add_work);
         for (i=0; i<100; i++) {
             data_coproc_add_work(&data_coproc, 0, 0x123456789abcd00ll+i );
         }
-        SL_TIMER_INIT(timer);
-        SL_TIMER_ENTRY(timer);
+        SL_TIMER_EXIT(timer_add_work);
+        SL_TIMER_ENTRY(timer_do_work);
         data_coproc_commit_work(&data_coproc, 0);
-        for (i=0; i<100; i++) {
+        for (i=0; i<batch_size; i++) {
             struct dcprc_workq_entry *dcprc_workq_entry;
 
             dcprc_workq_entry = data_coproc_get_results(&data_coproc, 0);
-            dcprc_workq_entry =dcprc_workq_entry;
-/*            fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[0]);
+            dcprc_workq_entry = dcprc_workq_entry;
+            /*fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[0]);
             fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[1]);
             fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[2]);
             fprintf(stderr,"%8x\n",dcprc_workq_entry->__raw[3]);*/
         }
-        SL_TIMER_EXIT(timer);
-        printf("From commit to all work done took %fus\n",SL_TIMER_VALUE_US(timer));
+        SL_TIMER_EXIT(timer_do_work);
     }
+    printf("Time adding work per iteration %fus\n",SL_TIMER_VALUE_US(timer_add_work)/iterations);
+    printf("Time adding work per work item %fus\n",SL_TIMER_VALUE_US(timer_add_work)/iterations/batch_size);
+    printf("Time doing work (from commit to all work) per iteration %fus\n",SL_TIMER_VALUE_US(timer_do_work)/iterations);
+    printf("Time doing work (from commit to all work) per work item %fus\n",SL_TIMER_VALUE_US(timer_do_work)/iterations/batch_size);
     
     data_coproc_shutdown(&data_coproc);
     return 0;

@@ -208,10 +208,10 @@
 #define DCPRC_MU_WORK_BUFFER_CLEAR_MASK ((1<<16)-1)
 __asm {
     .alloc_mem mu_work_buffer emem global (DCPRC_MU_WORK_BUFFER_CLEAR_MASK+1+0x200) 0x10000;
-    .alloc_mem mu_scratch emem global 0x100 0x100;
     .alloc_mem cls_workq i4.cls global 0x400 /*sizeof(struct dcprc_cls_workq)*/ 0;
 }
 static int check_dcprc_cls_workq_is_0x400_long[(sizeof(struct dcprc_cls_workq)==0x400)?1:-1];
+static __imem int ctm_scratch[32]; // Scratch thread-local storage
 
 __shared __cls int          cls_mu_work_wptr;
 static __shared __lmem struct dcprc_cls_workq cls_workq_cache;
@@ -270,7 +270,7 @@ dcprc_worker_write_results(const struct dcprc_worker_me *restrict dcprc_worker_m
     workq_entry_out.__raw[1] = workq_entry->__raw[1];
     workq_entry_out.__raw[2] = workq_entry->__raw[2];
     workq_entry_out.__raw[3] = workq_entry->__raw[3] &~ (1<<31);
-    mu_base.uint64 = __link_sym("mu_scratch");
+    mu_base.uint64 = (uint64_t)&ctm_scratch[0];
 
     mem_write64_hl(&workq_entry_out, mu_base.uint32_hi, mu_base.uint32_lo, sizeof(workq_entry_out));
 
@@ -395,6 +395,7 @@ gatherer_get_num_work(int workq_to_read,
 {
     int wptr;
     int num_work_to_do;
+    int mask;
 
     wptr = workq_desc->wptr;
     if (wptr&(1<<31))
@@ -407,6 +408,8 @@ gatherer_get_num_work(int workq_to_read,
         num_work_to_do = ((*rptr+32)&~31)-*rptr;
     }
     workq_rptr[workq_to_read] = (*rptr+num_work_to_do) & DCPRC_WORKQ_PTR_CLEAR_MASK;
+    mask = workq_desc->max_entries-1;
+    *rptr = *rptr & mask;
     return num_work_to_do;
 }
 
