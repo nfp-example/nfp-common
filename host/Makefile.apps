@@ -35,7 +35,7 @@ clean_host__data_coprocessor_basic:
 data_coprocessor_basic: $(HOST_BIN_DIR)/data_coprocessor_basic
 
 test_data_coprocessor_basic: data_coprocessor_basic
-	sudo python $(PYTHON_DIR)/tests/data_coprocessor_basic.py
+	(sudo VERBOSE=$(VERBOSE) python $(PYTHON_DIR)/tests/data_coprocessor_basic.py)
 
 test: test_data_coprocessor_basic
 

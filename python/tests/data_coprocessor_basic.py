@@ -49,7 +49,14 @@ class nonblocking_stdfile(object):
 class BasicTests(unittest.TestCase):
     host_bin_dir = "./host/bin/"
     log_re = re.compile("\s*([0-9]+):\s*([0-9]+):([0-9a-f]+), ([0-9a-f]+), ([0-9a-f]+), ([0-9a-f]+)")
-    def run_process(self, host_app, host_app_args, timeout=1000.0, verbose=False ):
+    def run_process(self, host_app, host_app_args, timeout=1000.0, verbose=None ):
+        if verbose is None:
+            verbose = False
+            if "VERBOSE" in os.environ and os.environ["VERBOSE"]=="1":
+                verbose = True
+                pass
+            pass
+                
         time_in = time.clock()
         host_test = subprocess.Popen(host_app_args,
                                      bufsize=1, # line buffered
