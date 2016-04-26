@@ -71,7 +71,6 @@ struct data_coproc_options {
 };
 
 /*a Global variables */
-static const char *nffw_filename="firmware/nffw/data_coproc_null_many.nffw";
 static const char *shm_filename="/tmp/nfp_dcb_shm.lock";
 static int shm_key = 0x0d0c0b0a;
 static const char *options = "b:d:f:i:hD:S:L:";
@@ -118,7 +117,7 @@ data_coproc_initialize(struct data_coproc *data_coproc,
         return 1;
     }
 
-    if (nfp_fw_load(data_coproc->nfp, nffw_filename) < 0) {
+    if (nfp_fw_load(data_coproc->nfp, data_coproc_options->firmware) < 0) {
         fprintf(stderr, "Failed to load NFP firmware\n");
         return 2;
     }
@@ -410,7 +409,7 @@ read_options(int argc, char **argv, struct data_coproc_options *data_coproc_opti
     data_coproc_options->dev_num = 0;
     data_coproc_options->batch_size=100;
     data_coproc_options->iterations=10000;
-    data_coproc_options->firmware=NULL;
+    data_coproc_options->firmware="firmware/nffw/data_coproc_null_one.nffw";
     data_coproc_options->data_filename=NULL;
     data_coproc_options->log_filename=NULL;
     data_coproc_options->data_size=0;
@@ -459,6 +458,15 @@ read_options(int argc, char **argv, struct data_coproc_options *data_coproc_opti
         }
         }
     }
+
+    printf("data_coproc_options->dev_num %d\n",data_coproc_options->dev_num );
+    printf("data_coproc_options->batch_size %d\n",data_coproc_options->batch_size);
+    printf("data_coproc_options->iterations %d\n",data_coproc_options->iterations);
+    printf("data_coproc_options->firmware '%s'\n",data_coproc_options->firmware);
+    printf("data_coproc_options->data_filename '%s'\n",data_coproc_options->data_filename);
+    printf("data_coproc_options->log_filename '%s'\n",data_coproc_options->log_filename);
+    printf("data_coproc_options->data_size %d\n",data_coproc_options->data_size);
+    
     return 0;
 }
 

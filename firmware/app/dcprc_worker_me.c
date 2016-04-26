@@ -32,8 +32,8 @@ void main(void)
 
     // Could do the following just for context 0 if it sets up
     // shared registers. But it might not.
-    dcprc_worker_null_init();
+    dcprc_worker_thread_init();
 
     sync_state_set_stage_complete(DCPRC_INIT_STAGE_READY_TO_RUN);
-    dcprc_worker_null();
+    dcprc_worker_thread();
 }

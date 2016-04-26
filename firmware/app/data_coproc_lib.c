@@ -257,7 +257,7 @@ dcprc_worker_get_work(const struct dcprc_worker_me *restrict dcprc_worker_me,
 /*f dcprc_worker_write_results */
 void
 dcprc_worker_write_results(const struct dcprc_worker_me *restrict dcprc_worker_me,
-                           const __xread struct dcprc_mu_work_entry *restrict mu_work_entry,
+                           const struct dcprc_mu_work_entry *restrict mu_work_entry,
                            const struct dcprc_workq_entry *restrict workq_entry)
 {
     __xwrite struct dcprc_workq_entry workq_entry_out;

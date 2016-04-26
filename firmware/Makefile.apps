@@ -36,6 +36,12 @@ $(eval $(call micro_c.add_src_lib,dcprc_worker_null_me,app,dcprc_worker_null))
 $(eval $(call micro_c.add_fw_libs,dcprc_worker_null_me,nfp sync))
 $(eval $(call micro_c.compile,dcprc_worker_null_me,app,dcprc_worker_me.c))
 
+$(eval $(call micro_c.force_include,dcprc_worker_fetch_sum_me,app,data_coproc_config))
+$(eval $(call micro_c.add_src_lib,dcprc_worker_fetch_sum_me,app,data_coproc_lib))
+$(eval $(call micro_c.add_src_lib,dcprc_worker_fetch_sum_me,app,dcprc_worker_fetch_sum))
+$(eval $(call micro_c.add_fw_libs,dcprc_worker_fetch_sum_me,nfp sync))
+$(eval $(call micro_c.compile,dcprc_worker_fetch_sum_me,app,dcprc_worker_me.c))
+
 $(eval $(call micro_c.force_include,data_coproc_host,app,data_coproc_config))
 $(eval $(call micro_c.add_src_lib,data_coproc_host,app,data_coproc_lib))
 $(eval $(call micro_c.add_fw_libs,data_coproc_host,nfp sync))
@@ -45,6 +51,11 @@ $(eval $(call nffw.add_obj_with_mes,data_coproc_null_one,data_coproc_host,i4.me2
 $(eval $(call nffw.add_obj_with_mes,data_coproc_null_one,dcprc_worker_null_me,i32.me0))
 $(eval $(call nffw.add_rtsyms,data_coproc_null_one))
 $(eval $(call nffw.link,data_coproc_null_one))
+
+$(eval $(call nffw.add_obj_with_mes,data_coproc_fetch_sum_one,data_coproc_host,i4.me2))
+$(eval $(call nffw.add_obj_with_mes,data_coproc_fetch_sum_one,dcprc_worker_fetch_sum_me,i32.me0))
+$(eval $(call nffw.add_rtsyms,data_coproc_fetch_sum_one))
+$(eval $(call nffw.link,data_coproc_fetch_sum_one))
 
 i32_mes = i32.me0 i32.me1 i32.me2 i32.me3 i32.me4 i32.me5 i32.me6 i32.me7 i32.me8 i32.me9 i32.me10 i32.me11
 i33_mes = i33.me0 i33.me1 i33.me2 i33.me3 i33.me4 i33.me5 i33.me6 i33.me7 i33.me8 i33.me9 i33.me10 i33.me11

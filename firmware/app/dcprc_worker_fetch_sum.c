@@ -199,36 +199,55 @@
 // so make it thread-local
 struct dcprc_worker_me dcprc_worker_me;
 
+#define BUFFER_SIZE (1<<16)
+static __mem unsigned char data_buffer[BUFFER_SIZE];
+
+struct dcprc_workq_entry_fetch_sum {
+    union {
+        struct {
+            uint32_t host_physical_address_lo;
+            uint32_t host_physical_address_hi;
+            uint32_t size;
+            uint32_t other_top_bit_set;
+        };
+        struct dcprc_workq_entry dcprc_workq_entry;
+    };
+};
+
+static __inline void
+fetch_and_sum(struct dcprc_workq_entry_fetch_sum *workq_entry)
+{
+    //uint64_32_t cpp_addr;
+    //uint64_32_t pcie_addr;
+    //uint32_t dma_size;
+    //pcie_dma_buffer(0, pcie_addr, cpp_addr, dma_size, NFP_PCIE_DMA_TOPCI_HI, 0, PCIE_DMA_CFG);
+}
+
 /*f dcprc_worker_thread */
 /**
- * @brief Main loop for the 'thread' data coprocessor worker
+ * @brief Main loop for the data coprocessor worker thread
  */
 void
 dcprc_worker_thread(void)
 {
     for (;;) {
         __xread struct dcprc_mu_work_entry mu_work_entry;
-        struct dcprc_workq_entry workq_entry;
+        struct dcprc_workq_entry_fetch_sum workq_entry;
         dcprc_worker_get_work(&dcprc_worker_me,
                               &mu_work_entry,
-                              &workq_entry);
+                              &workq_entry.dcprc_workq_entry);
 
-        if (0) {
-            local_csr_write(local_csr_mailbox0, workq_entry.__raw[0]);
-            local_csr_write(local_csr_mailbox1, workq_entry.__raw[1]);
-            local_csr_write(local_csr_mailbox2, workq_entry.__raw[2]);
-            local_csr_write(local_csr_mailbox3, workq_entry.__raw[3]);
-            __asm {ctx_arb[bpt]}
-        }
+        fetch_and_sum(&workq_entry);
+
         dcprc_worker_write_results(&dcprc_worker_me,
                                    &mu_work_entry,
-                                   &workq_entry);
+                                   &workq_entry.dcprc_workq_entry);
     }
 }
 
 /*f dcprc_worker_thread_init */
 /**
- * @brief Initialize a 'thread' data coprocessor worker
+ * @brief Initialize the data coprocessor worker thread
  */
 void
 dcprc_worker_thread_init(void)

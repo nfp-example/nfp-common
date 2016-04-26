@@ -30,17 +30,24 @@
 /*a Includes */
 #include "firmware/data_coproc.h"
 
-/*f dcprc_worker_null */
+/*f dcprc_worker_thread */
 /**
- * @brief Main loop for the 'null' data coprocessor worker
+ * @brief Main loop for the data coprocessor worker thread
+ *
+ * Different worker types have a different implementation for this
  */
-void dcprc_worker_null(void);
+void dcprc_worker_thread(void);
 
-/*f dcprc_worker_null_init */
+/*f dcprc_worker_thread_init */
 /**
- * @brief Initialize a 'null' data coprocessor worker
+ * @brief Initialize a data coprocessor worker thread
+/*f dcprc_worker_thread */
+/**
+ * @brief Main loop for the data coprocessor worker thread
+ *
+ * Different worker types have a different implementation for this
  */
-void dcprc_worker_null_init(void);
+void dcprc_worker_thread_init(void);
 
 /*a Close guard
  */
