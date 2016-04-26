@@ -255,8 +255,8 @@ dcprc_worker_get_work(const struct dcprc_worker_me *restrict dcprc_worker_me,
 }
 
 /*f dcprc_worker_claim_dma */
-__shared __mem __declspec(aligned(16)) uint32_t dcprc_worker_dma_credits[4];
-#define DCPRC_DMAS_IN_FLIGHT (64)
+__shared __emem __declspec(aligned(16) scope(global) export) uint32_t dcprc_worker_dma_credits[4];
+#define DCPRC_DMAS_IN_FLIGHT (50)
 
 __intrinsic void
 dcprc_worker_claim_dma(int to_pcie, int poll_interval)
@@ -276,7 +276,7 @@ dcprc_worker_claim_dma(int to_pcie, int poll_interval)
         mem_atomic_read_hl(&(data[0]),
                            mem_address.uint32_hi,
                            mem_address.uint32_lo,
-                           sizeof(data));
+                           sizeof(data[0]));
                            }
 }
 

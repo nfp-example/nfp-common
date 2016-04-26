@@ -220,11 +220,8 @@ class FetchSumTests(TestBase):
     def test_fetch_sum_small_1M(self):
         self.fetch_sum_n(1024*1024,args=["-i","1","-b","100","-S","%d"%(1024*1024),"--firmware","firmware/nffw/data_coproc_fetch_sum_one.nffw"])
         pass
-    def xtest_fetch_sum_small_1M(self):
-        self.fetch_sum_n(1024*1024,args=["-i","1","-b","100","-S","%d"%(1024*1024),"--firmware","firmware/nffw/data_coproc_fetch_sum_one.nffw"])
-        pass
     def test_fetch_sum_many_1M(self):
-        self.fetch_sum_n(1024*1024,args=["-i","1","-b","10","-S","%d"%(1024*1024),"--firmware","firmware/nffw/data_coproc_fetch_sum_many.nffw"])
+        self.fetch_sum_n(1024*1024,args=["-i","1","-b","250","-S","%d"%(1024*1024),"--firmware","firmware/nffw/data_coproc_fetch_sum_many.nffw"])
         pass
 
 #a Toplevel
