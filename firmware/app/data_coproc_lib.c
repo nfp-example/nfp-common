@@ -254,6 +254,42 @@ dcprc_worker_get_work(const struct dcprc_worker_me *restrict dcprc_worker_me,
     return;
 }
 
+/*f dcprc_worker_claim_dma */
+__shared __mem __declspec(aligned(16)) uint32_t dcprc_worker_dma_credits[4];
+#define DCPRC_DMAS_IN_FLIGHT (64)
+
+__intrinsic void
+dcprc_worker_claim_dma(int to_pcie, int poll_interval)
+{
+    __xrw uint32_t data[2];
+    uint64_32_t mem_address;
+    data[0] = 0;
+    data[1] = 1;
+    mem_address.uint64 = (uint64_t)&dcprc_worker_dma_credits;
+    mem_address.uint32_lo += to_pcie*8;
+    mem_atomic_test_add_hl(data,
+                    mem_address.uint32_hi,
+                    mem_address.uint32_lo,
+                    sizeof(data));
+    while ((data[1]-data[0])>DCPRC_DMAS_IN_FLIGHT) {
+        me_sleep(poll_interval);
+        mem_atomic_read_hl(&(data[0]),
+                           mem_address.uint32_hi,
+                           mem_address.uint32_lo,
+                           sizeof(data));
+                           }
+}
+
+/*f dcprc_worker_release_dma */
+__intrinsic void
+dcprc_worker_release_dma(int to_pcie)
+{
+    uint64_32_t mem_address;
+    mem_address.uint64 = (uint64_t)&dcprc_worker_dma_credits;
+    mem_address.uint32_lo += to_pcie*8;
+    mem_atomic_incr_hl(mem_address.uint32_hi, mem_address.uint32_lo);
+}
+
 /*f dcprc_worker_write_results */
 void
 dcprc_worker_write_results(const struct dcprc_worker_me *restrict dcprc_worker_me,

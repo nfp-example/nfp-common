@@ -110,6 +110,7 @@ class TestBase(unittest.TestCase):
         stderr.flush_read()
         time_out = time.clock()
         time_taken = time_out-time_in
+        print "Test completed with rc %d in time %s"%(rc,str(time_taken))
         return (rc, stdout, stderr, time_taken)
     def run_without_log(self, host_app, host_app_args, **kwargs):
         run_output = self.run_process(host_app, [""]+host_app_args, **kwargs) 
@@ -188,7 +189,7 @@ class FetchSumTests(TestBase):
         def check_log(line, iteration,batch,data):
             self.assertEqual(data[3],(n*(n-1)/2)&0xff,"Bad data for %d:%d:%s"%(iteration, batch, line))
             pass
-        self.run_with_log("data_coprocessor_basic",args,check_log,timeout=10.0)
+        self.run_with_log("data_coprocessor_basic",args,check_log,timeout=30.0)
         pass
     def test_fetch_sum_small_96(self):
         self.fetch_sum_n(96,args=["-i","1","-b","100","-S","96","--firmware","firmware/nffw/data_coproc_fetch_sum_one.nffw"])
@@ -222,8 +223,8 @@ class FetchSumTests(TestBase):
     def xtest_fetch_sum_small_1M(self):
         self.fetch_sum_n(1024*1024,args=["-i","1","-b","100","-S","%d"%(1024*1024),"--firmware","firmware/nffw/data_coproc_fetch_sum_one.nffw"])
         pass
-    def xtest_fetch_sum_many_1M(self):
-        self.fetch_sum_n(1024*1024,args=["-i","1","-b","100","-S","%d"%(1024*1024),"--firmware","firmware/nffw/data_coproc_fetch_sum_many.nffw"])
+    def test_fetch_sum_many_1M(self):
+        self.fetch_sum_n(1024*1024,args=["-i","1","-b","10","-S","%d"%(1024*1024),"--firmware","firmware/nffw/data_coproc_fetch_sum_many.nffw"])
         pass
 
 #a Toplevel

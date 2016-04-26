@@ -123,7 +123,19 @@ __intrinsic void mem_write64_s8(__xwrite void *data, uint32_t base_s8,
  *
  */
 __intrinsic void mem_atomic_read_s8(__xread void *data, uint32_t base_s8,
-                                    uint32_t ofs, int size );
+                                    uint32_t ofs, const size_t size );
+
+/** mem_atomic_read_hl
+ *
+ * @param data    Transfer registers to read
+ * @param addr_hi High 32 (8 really) bits of the address
+ * @param addr_lo Low 32 bits of the address
+ * @param size    Size in bytes to read (must be multiple of 4)
+ *
+ */
+__intrinsic void mem_atomic_read_hl(__xread void *data, uint32_t addr_hi,
+                                    uint32_t addr_lo,
+                                    const size_t size);
 
 /** mem_atomic_write_s8
  *
@@ -135,7 +147,28 @@ __intrinsic void mem_atomic_read_s8(__xread void *data, uint32_t base_s8,
  */
 __intrinsic void mem_atomic_write_s8(__xwrite void *data,
                                      uint32_t base_s8, uint32_t ofs,
-                                     int size );
+                                     const size_t size );
+/** mem_atomic_incr_hl
+ *
+ * @param addr_hi High 32 (8 really) bits of the address
+ * @param addr_lo Low 32 bits of the address
+ *
+ */
+__intrinsic void mem_atomic_incr_hl(uint32_t addr_hi,
+                                    uint32_t addr_lo);
+
+/** mem_atomic_test_add_hl
+ *
+ * @param data    Transfer registers to add/read
+ * @param addr_hi High 32 (8 really) bits of the address
+ * @param addr_lo Low 32 bits of the address
+ * @param size    Size in bytes to read (must be multiple of 4)
+ *
+ */
+__intrinsic void mem_atomic_test_add_hl(__xrw void *data, uint32_t addr_hi,
+                                        uint32_t addr_lo,
+                                        const size_t size);
+
 /** mem_ring_journal
  */
 __intrinsic void mem_ring_journal(uint32_t mu_qdesc,

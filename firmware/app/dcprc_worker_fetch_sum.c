@@ -305,7 +305,9 @@ fetch_and_sum(struct dcprc_workq_entry_fetch_sum *workq_entry)
     while (size>0) {
         dma_size = size;
         if (dma_size>BUFFER_SIZE) dma_size=BUFFER_SIZE;
+        dcprc_worker_claim_dma(0,1000);
         pcie_dma_buffer(0, pcie_addr, cpp_addr, dma_size, NFP_PCIE_DMA_FROMPCI_HI, 0, PCIE_DMA_CFG);
+        dcprc_worker_release_dma(0);
         sum = sum_memory(sum, cpp_addr, dma_size);
         size -= dma_size;
     }

@@ -144,6 +144,14 @@ dcprc_worker_get_work(const struct dcprc_worker_me *restrict dcprc_worker_me,
                       __xread struct dcprc_mu_work_entry *restrict mu_work_entry,
                       struct dcprc_workq_entry *restrict workq_entry);
 
+/*f dcprc_worker_claim_dma */
+__intrinsic void
+dcprc_worker_claim_dma(int to_pcie, int poll_interval);
+
+/*f dcprc_worker_release_dma */
+__intrinsic void
+dcprc_worker_release_dma(int to_pcie);
+
 /*f dcprc_worker_write_results */
 /**
  * @brief Write results back to the host work queue for work done
