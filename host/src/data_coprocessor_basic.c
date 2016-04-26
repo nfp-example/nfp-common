@@ -313,7 +313,7 @@ run_test(struct data_coproc *data_coproc,
     data_size  = data_coproc_options->data_size;
 
     if (iterations<1) iterations=1;
-    if (data_size<1024) data_size=1024;
+    if (data_size<64) data_size=64;
 
     log_file = NULL;
     log_buffer = NULL;

@@ -25,6 +25,12 @@ NFCC_BASE_CLIBS = $(NETRONOME_STD_MICROC)/src/rtl.c
 # Need this to fix codeless ME assembles for initialization
 NFAS_CODELESS_FIXUP = sed -ie 's/\(\(\.%init_csr "default assembler setting"\)\|\(\.%third_party_addressing\)\|\(\.%indirect_ref_mode\)\).*//'
 
+#a Useful variables
+i32_mes = i32.me0 i32.me1 i32.me2 i32.me3 i32.me4 i32.me5 i32.me6 i32.me7 i32.me8 i32.me9 i32.me10 i32.me11
+i33_mes = i33.me0 i33.me1 i33.me2 i33.me3 i33.me4 i33.me5 i33.me6 i33.me7 i33.me8 i33.me9 i33.me10 i33.me11
+i34_mes = i34.me0 i34.me1 i34.me2 i34.me3 i34.me4 i34.me5 i34.me6 i34.me7 i34.me8 i34.me9 i34.me10 i34.me11
+i35_mes = i35.me0 i35.me1 i35.me2 i35.me3 i35.me4 i35.me5 i35.me6 i35.me7 i35.me8 i35.me9 i35.me10 i35.me11
+
 #a Data coprocessor firmware
 $(eval $(call micro_c.add_src_lib,dcprc_worker_null,app,data_coproc_lib))
 $(eval $(call micro_c.add_fw_libs,dcprc_worker_null,nfp))
@@ -57,10 +63,6 @@ $(eval $(call nffw.add_obj_with_mes,data_coproc_fetch_sum_one,dcprc_worker_fetch
 $(eval $(call nffw.add_rtsyms,data_coproc_fetch_sum_one))
 $(eval $(call nffw.link,data_coproc_fetch_sum_one))
 
-i32_mes = i32.me0 i32.me1 i32.me2 i32.me3 i32.me4 i32.me5 i32.me6 i32.me7 i32.me8 i32.me9 i32.me10 i32.me11
-i33_mes = i33.me0 i33.me1 i33.me2 i33.me3 i33.me4 i33.me5 i33.me6 i33.me7 i33.me8 i33.me9 i33.me10 i33.me11
-i34_mes = i34.me0 i34.me1 i34.me2 i34.me3 i34.me4 i34.me5 i34.me6 i34.me7 i34.me8 i34.me9 i34.me10 i34.me11
-i35_mes = i35.me0 i35.me1 i35.me2 i35.me3 i35.me4 i35.me5 i35.me6 i35.me7 i35.me8 i35.me9 i35.me10 i35.me11
 $(eval $(call nffw.add_obj_with_mes,data_coproc_null_many,data_coproc_host,i4.me2))
 $(eval $(call nffw.add_obj_with_mes,data_coproc_null_many,dcprc_worker_null_me,$(i32_mes)))
 $(eval $(call nffw.add_obj_with_mes,data_coproc_null_many,dcprc_worker_null_me,$(i33_mes)))
@@ -68,6 +70,14 @@ $(eval $(call nffw.add_obj_with_mes,data_coproc_null_many,dcprc_worker_null_me,$
 $(eval $(call nffw.add_obj_with_mes,data_coproc_null_many,dcprc_worker_null_me,$(i35_mes)))
 $(eval $(call nffw.add_rtsyms,data_coproc_null_many))
 $(eval $(call nffw.link,data_coproc_null_many))
+
+$(eval $(call nffw.add_obj_with_mes,data_coproc_fetch_sum_many,data_coproc_host,i4.me2))
+$(eval $(call nffw.add_obj_with_mes,data_coproc_fetch_sum_many,dcprc_worker_fetch_sum_me,$(i32_mes)))
+$(eval $(call nffw.add_obj_with_mes,data_coproc_fetch_sum_many,dcprc_worker_fetch_sum_me,$(i33_mes)))
+$(eval $(call nffw.add_obj_with_mes,data_coproc_fetch_sum_many,dcprc_worker_fetch_sum_me,$(i34_mes)))
+$(eval $(call nffw.add_obj_with_mes,data_coproc_fetch_sum_many,dcprc_worker_fetch_sum_me,$(i35_mes)))
+$(eval $(call nffw.add_rtsyms,data_coproc_fetch_sum_many))
+$(eval $(call nffw.link,data_coproc_fetch_sum_many))
 
 #a Packet capture firmware
 $(eval $(call micro_c.force_include,pcap_rx,app,pcap_config))

@@ -199,7 +199,7 @@
 // so make it thread-local
 struct dcprc_worker_me dcprc_worker_me;
 
-#define BUFFER_SIZE (1<<16)
+#define BUFFER_SIZE (1<<13)
 static __mem unsigned char data_buffer[BUFFER_SIZE];
 
 struct dcprc_workq_entry_fetch_sum {
@@ -208,19 +208,108 @@ struct dcprc_workq_entry_fetch_sum {
             uint32_t host_physical_address_lo;
             uint32_t host_physical_address_hi;
             uint32_t size;
-            uint32_t other_top_bit_set;
+            uint32_t result;
         };
         struct dcprc_workq_entry dcprc_workq_entry;
     };
 };
 
+static __intrinsic uint32_t
+sum_halves(uint32_t a, uint32_t b, uint32_t c, uint32_t d, int s)
+{
+    uint32_t m;
+    m=(((a>>s)&0xff00ff)+((b>>s)&0xff00ff)+
+       ((c>>s)&0xff00ff)+((d>>s)&0xff00ff));
+    m+=(m>>16);
+    return m&0xff;
+}
+
+#define SUM_WORDS(a,b,c,d) (sum_halves(a,b,c,d,0) + sum_halves(a,b,c,d,8))
+static __intrinsic uint32_t
+sum_memory(uint32_t sum_so_far, uint64_32_t cpp_addr, uint32_t size)
+{
+    __xread uint32_t data[16];
+    while (size>=sizeof(data)) {
+        mem_read64_hl(data, cpp_addr.uint32_hi, cpp_addr.uint32_lo, sizeof(data));
+        size -= sizeof(data);
+        cpp_addr.uint32_lo += sizeof(data);
+        sum_so_far += SUM_WORDS(data[ 0],data[ 1],data[ 2],data[ 3]);
+        sum_so_far += SUM_WORDS(data[ 4],data[ 5],data[ 6],data[ 7]);
+        sum_so_far += SUM_WORDS(data[ 8],data[ 9],data[10],data[11]);
+        sum_so_far += SUM_WORDS(data[12],data[13],data[14],data[15]);
+    }
+    if (size>0) {
+        uint32_t last_data[4];
+        mem_read64_hl(data, cpp_addr.uint32_hi, cpp_addr.uint32_lo, sizeof(data));
+        if (size>=48) {
+            last_data[0] = data[12];
+            last_data[1] = data[13];
+            last_data[2] = data[14];
+            last_data[3] = data[15];
+            sum_so_far += SUM_WORDS(data[ 0],data[ 1],data[ 2],data[ 3]);
+            sum_so_far += SUM_WORDS(data[ 4],data[ 5],data[ 6],data[ 7]);
+            sum_so_far += SUM_WORDS(data[ 8],data[ 9],data[10],data[11]);
+            size -= 48;
+        } else if (size>=32) {
+            last_data[0] = data[ 8];
+            last_data[1] = data[ 9];
+            last_data[2] = data[10];
+            last_data[3] = data[11];
+            sum_so_far += SUM_WORDS(data[ 0],data[ 1],data[ 2],data[ 3]);
+            sum_so_far += SUM_WORDS(data[ 4],data[ 5],data[ 6],data[ 7]);
+            size -= 32;
+        } else if (size>=16) {
+            last_data[0] = data[ 4];
+            last_data[1] = data[ 5];
+            last_data[2] = data[ 6];
+            last_data[3] = data[ 7];
+            sum_so_far += SUM_WORDS(data[ 0],data[ 1],data[ 2],data[ 3]);
+            size -= 16;
+        } else {
+            last_data[0] = data[ 0];
+            last_data[1] = data[ 1];
+            last_data[2] = data[ 2];
+            last_data[3] = data[ 3];
+        }
+        if (size>=8) {
+            sum_so_far += SUM_WORDS(last_data[0], last_data[1],0,0);
+            last_data[0] = last_data[ 2];
+            last_data[1] = last_data[ 3];
+            size-=8;
+        }
+        if (size>=4) {
+            sum_so_far += SUM_WORDS(last_data[0], 0,0,0);
+            last_data[0] = last_data[ 1];
+            size-=4;
+        }
+        if (size>2) sum_so_far += (last_data[0]>>16);
+        if (size>1) sum_so_far += (last_data[0]>>8);
+        if (size>0) sum_so_far += (last_data[0]>>0);
+    }
+    return sum_so_far&0xff;
+}
+
 static __inline void
 fetch_and_sum(struct dcprc_workq_entry_fetch_sum *workq_entry)
 {
-    //uint64_32_t cpp_addr;
-    //uint64_32_t pcie_addr;
-    //uint32_t dma_size;
-    //pcie_dma_buffer(0, pcie_addr, cpp_addr, dma_size, NFP_PCIE_DMA_TOPCI_HI, 0, PCIE_DMA_CFG);
+    uint64_32_t cpp_addr;
+    uint64_32_t pcie_addr;
+    uint32_t dma_size;
+    uint32_t size;
+    uint32_t sum;
+    size = workq_entry->size;
+    sum = 0;
+    pcie_addr.uint32_lo = workq_entry->host_physical_address_lo;
+    pcie_addr.uint32_hi = workq_entry->host_physical_address_hi;
+    cpp_addr.uint64 = (uint64_t) &(data_buffer[0]);
+    while (size>0) {
+        dma_size = size;
+        if (dma_size>BUFFER_SIZE) dma_size=BUFFER_SIZE;
+        pcie_dma_buffer(0, pcie_addr, cpp_addr, dma_size, NFP_PCIE_DMA_FROMPCI_HI, 0, PCIE_DMA_CFG);
+        sum = sum_memory(sum, cpp_addr, dma_size);
+        size -= dma_size;
+    }
+    workq_entry->result=sum;
 }
 
 /*f dcprc_worker_thread */

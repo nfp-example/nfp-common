@@ -137,6 +137,21 @@ mem_read64(__xread void *data, __mem void *addr, const size_t size)
     }
 }
 
+/*f mem_read64_hl */
+__intrinsic void
+mem_read64_hl(__xread void *data, uint32_t addr_hi, uint32_t addr_lo, const size_t size)
+{
+    SIGNAL sig;
+    uint32_t size_in_uint64;
+    uint32_t addr_s8;
+    size_in_uint64 = size>>3;
+    addr_s8 = addr_hi<<24;
+    __asm {
+        mem[read, *data, addr_s8, <<8, addr_lo, \
+            __ct_const_val(size_in_uint64)], ctx_swap[sig];
+    }
+}
+
 /*f mem_read64_s8 */
 __intrinsic void
 mem_read64_s8(__xread void *data,

@@ -56,7 +56,7 @@ class nonblocking_stdfile(object):
             pass
         pass
 
-class BasicTests(unittest.TestCase):
+class TestBase(unittest.TestCase):
     host_bin_dir = "./host/bin/"
     log_re = re.compile("\s*([0-9]+):\s*([0-9]+):([0-9a-f]+), ([0-9a-f]+), ([0-9a-f]+), ([0-9a-f]+)")
     nffw_re = re.compile("nfp6000_nffw.c:")
@@ -123,8 +123,15 @@ class BasicTests(unittest.TestCase):
         self.assertEqual(rc,0, ('Expected return code of 0, got %d'%rc))
         pass
     def run_with_log(self, host_app, host_app_args, log_check_callback, **kwargs):
-        log_file = tempfile.NamedTemporaryFile()
-        run_output = self.run_process(host_app, [""]+host_app_args+["-L",log_file.name], **kwargs) 
+        if "LOGFILE" in os.environ and os.environ["LOGFILE"]!="":
+            log_filename = os.environ["LOGFILE"]
+            log_file = open(log_filename,"rw")
+            pass
+        else:
+            log_file = tempfile.NamedTemporaryFile()
+            log_filename = log_file.name
+            pass
+        run_output = self.run_process(host_app, [""]+host_app_args+["-L",log_filename], **kwargs) 
         rc = run_output[0]
         stdout = run_output[1]
         stderr = run_output[2]
@@ -148,6 +155,8 @@ class BasicTests(unittest.TestCase):
                 pass
             pass
         pass
+
+class NullTests(TestBase):
     def test_small_batch(self):
         self.run_without_log("data_coprocessor_basic",["-i","1","-b","100"],timeout=10.0)
         pass
@@ -174,10 +183,57 @@ class BasicTests(unittest.TestCase):
         self.run_with_log("data_coprocessor_basic",["-i","100","-b","10"],check_log,timeout=10.0)
         pass
 
+class FetchSumTests(TestBase):
+    def fetch_sum_n(self, n, args):
+        def check_log(line, iteration,batch,data):
+            self.assertEqual(data[3],(n*(n-1)/2)&0xff,"Bad data for %d:%d:%s"%(iteration, batch, line))
+            pass
+        self.run_with_log("data_coprocessor_basic",args,check_log,timeout=10.0)
+        pass
+    def test_fetch_sum_small_96(self):
+        self.fetch_sum_n(96,args=["-i","1","-b","100","-S","96","--firmware","firmware/nffw/data_coproc_fetch_sum_one.nffw"])
+        pass
+    def test_fetch_sum_small_97(self):
+        self.fetch_sum_n(97,args=["-i","1","-b","100","-S","97","--firmware","firmware/nffw/data_coproc_fetch_sum_one.nffw"])
+        pass
+    def test_fetch_sum_small_75(self):
+        self.fetch_sum_n(75,args=["-i","1","-b","100","-S","75","--firmware","firmware/nffw/data_coproc_fetch_sum_one.nffw"])
+        pass
+    def test_fetch_sum_small_offset_1_to_15(self):
+        for i in range(15):
+            self.fetch_sum_n(256+i,args=["-i","1","-b","100","-S","%d"%(256+i),"--firmware","firmware/nffw/data_coproc_fetch_sum_one.nffw"])
+            pass
+        pass
+    def test_fetch_sum_small_1M(self):
+        self.fetch_sum_n(1024*1024,args=["-i","1","-b","100","-S","%d"%(1024*1024),"--firmware","firmware/nffw/data_coproc_fetch_sum_one.nffw"])
+        pass
+    def test_fetch_sum_many_1M(self):
+        self.fetch_sum_n(1024*1024,args=["-i","1","-b","100","-S","%d"%(1024*1024),"--firmware","firmware/nffw/data_coproc_fetch_sum_many.nffw"])
+        pass
+
 #a Toplevel
-loader = unittest.TestLoader().loadTestsFromTestCase
-suites = [ loader(BasicTests),
-           ]
+def prune(test_class):
+    if "TEST_RE" in os.environ:
+        test_re = re.compile(os.environ["TEST_RE"])
+        attrs = test_class.__dict__.keys()
+        for a in attrs:
+            if a[:5]=="test_":
+                m = test_re.search(a)
+                if m is None:
+                    delattr(test_class,a)
+                    pass
+                pass
+            pass
+        pass
+    pass
+    
+suite = unittest.TestSuite()
+for s in [ NullTests,
+           FetchSumTests,
+           ]:
+    prune(s)
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(s))
+    pass
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest.TextTestRunner(verbosity=2).run(suite)
