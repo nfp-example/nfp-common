@@ -85,7 +85,7 @@ class TestBase(unittest.TestCase):
         rc = None
         def line_callback(line, verbose=verbose):
             is_nffw = self.nffw_re.search(line)
-            if is_nffw is None:
+            if (is_nffw is None) or (verbose>4):
                 print line
                 pass
             pass
@@ -157,26 +157,26 @@ class TestBase(unittest.TestCase):
         pass
 
 class NullTests(TestBase):
-    def test_small_batch(self):
+    def test_null_small_batch(self):
         self.run_without_log("data_coprocessor_basic",["-i","1","-b","100"],timeout=10.0)
         pass
-    def test_small_batch_specify_firmware(self):
+    def test_null_small_batch_specify_firmware(self):
         self.run_without_log("data_coprocessor_basic",["-i","1","-b","100","--firmware","firmware/nffw/data_coproc_null_one.nffw"],timeout=10.0)
         pass
-    def test_many_batches_with_many_firmware(self):
+    def test_null_many_batches_with_many_firmware(self):
         self.run_without_log("data_coprocessor_basic",["-i","1000","-b","250","--firmware","firmware/nffw/data_coproc_null_many.nffw"],timeout=10.0)
         return
-    def test_many_batches(self):
+    def test_null_many_batches(self):
         #host_bin_dir+"data_coprocessor_basic",["-i","1000","-b","250","-L","fred.log"]
         self.run_without_log("data_coprocessor_basic",["-i","1000","-b","250"],timeout=10.0)
         return
-    def test_small_batch_with_log(self):
+    def test_null_small_batch_with_log(self):
         def check_log(line, iteration,batch,data):
             self.assertEqual(data[3],batch,"Bad data for %d:%d:%s"%(iteration, batch, line))
             pass
         self.run_with_log("data_coprocessor_basic",["-i","1","-b","100"],check_log,timeout=10.0)
         pass
-    def test_many_small_batches_with_log(self):
+    def test_null_many_small_batches_with_log(self):
         def check_log(line, iteration,batch,data):
             self.assertEqual(data[3],batch,"Bad data for %d:%d:%s"%(iteration, batch, line))
             pass
@@ -204,10 +204,25 @@ class FetchSumTests(TestBase):
             self.fetch_sum_n(256+i,args=["-i","1","-b","100","-S","%d"%(256+i),"--firmware","firmware/nffw/data_coproc_fetch_sum_one.nffw"])
             pass
         pass
+    def test_fetch_sum_small_1k(self):
+        self.fetch_sum_n(1024,args=["-i","1","-b","100","-S","1024","--firmware","firmware/nffw/data_coproc_fetch_sum_one.nffw"])
+        pass
+    def test_fetch_sum_small_1k1(self):
+        self.fetch_sum_n(1025,args=["-i","1","-b","100","-S","1025","--firmware","firmware/nffw/data_coproc_fetch_sum_one.nffw"])
+        pass
+    def test_fetch_sum_small_1k1_many(self):
+        self.fetch_sum_n(1025,args=["-i","1","-b","10","-S","1025","--firmware","firmware/nffw/data_coproc_fetch_sum_many.nffw"])
+        pass
+    def test_fetch_sum_one_1M(self):
+        self.fetch_sum_n(1024*1024,args=["-i","1","-b","1","-S","%d"%(1024*1024),"--firmware","firmware/nffw/data_coproc_fetch_sum_one.nffw"])
+        pass
     def test_fetch_sum_small_1M(self):
         self.fetch_sum_n(1024*1024,args=["-i","1","-b","100","-S","%d"%(1024*1024),"--firmware","firmware/nffw/data_coproc_fetch_sum_one.nffw"])
         pass
-    def test_fetch_sum_many_1M(self):
+    def xtest_fetch_sum_small_1M(self):
+        self.fetch_sum_n(1024*1024,args=["-i","1","-b","100","-S","%d"%(1024*1024),"--firmware","firmware/nffw/data_coproc_fetch_sum_one.nffw"])
+        pass
+    def xtest_fetch_sum_many_1M(self):
         self.fetch_sum_n(1024*1024,args=["-i","1","-b","100","-S","%d"%(1024*1024),"--firmware","firmware/nffw/data_coproc_fetch_sum_many.nffw"])
         pass
 

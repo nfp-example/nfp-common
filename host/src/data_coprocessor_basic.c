@@ -295,6 +295,8 @@ static void
 run_test(struct data_coproc *data_coproc,
          struct data_coproc_options *data_coproc_options)
 {
+    t_sl_timer timer_run_test;
+    t_sl_timer timer_init;
     t_sl_timer timer_do_work;
     t_sl_timer timer_add_work;
     uint64_t phys_addr;
@@ -308,6 +310,12 @@ run_test(struct data_coproc *data_coproc,
 
     int iter;
 
+    SL_TIMER_INIT(timer_init);
+    SL_TIMER_INIT(timer_run_test);
+    SL_TIMER_INIT(timer_do_work);
+    SL_TIMER_INIT(timer_add_work);
+
+    SL_TIMER_ENTRY(timer_init);
     iterations = data_coproc_options->iterations;
     batch_size = data_coproc_options->batch_size;
     data_size  = data_coproc_options->data_size;
@@ -353,10 +361,10 @@ run_test(struct data_coproc *data_coproc,
             data_space[i] = i;
         }
     }
+    SL_TIMER_EXIT(timer_init);
 
+    SL_TIMER_ENTRY(timer_run_test);
     phys_addr = nfp_huge_physical_address(data_coproc->nfp, data_space, 0);
-    SL_TIMER_INIT(timer_do_work);
-    SL_TIMER_INIT(timer_add_work);
     for (iter=0; iter<iterations; iter++) {
         int i;
         SL_TIMER_ENTRY(timer_add_work);
@@ -376,10 +384,14 @@ run_test(struct data_coproc *data_coproc,
         }
         SL_TIMER_EXIT(timer_do_work);
     }
+    SL_TIMER_EXIT(timer_run_test);
+
     printf("Time adding work per iteration %fus\n",SL_TIMER_VALUE_US(timer_add_work)/iterations);
     printf("Time adding work per work item %fus\n",SL_TIMER_VALUE_US(timer_add_work)/iterations/batch_size);
     printf("Time doing work (from commit to all work) per iteration %fus\n",SL_TIMER_VALUE_US(timer_do_work)/iterations);
     printf("Time doing work (from commit to all work) per work item %fus\n",SL_TIMER_VALUE_US(timer_do_work)/iterations/batch_size);
+    printf("Time taken for initialization %fs\n",SL_TIMER_VALUE_US(timer_init)/1000.0/1000.0);
+    printf("Time taken for running tests %fs\n",SL_TIMER_VALUE_US(timer_run_test)/1000.0/1000.0);
 
     if (log_file) {
         int i, n;
