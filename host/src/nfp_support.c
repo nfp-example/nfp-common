@@ -1,4 +1,4 @@
-/** Copyright (C) 2015,  Gavin J Stark.  All rights reserved.
+/** Copyright (C) 2015-2016,  Gavin J Stark.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
  *
  */
 
-/** Includes
+/*a Includes
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +27,7 @@
 #include <sys/stat.h> 
 #include <fcntl.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/shm.h>
 #include <sys/ipc.h>
 #include <inttypes.h>
@@ -40,6 +41,22 @@
 #endif
 #include "nfp_support.h"
 
+/*a Types
+ */
+/*t sync_stage_set_hdr */
+/**
+ */
+struct sync_stage_set_hdr
+{
+    /** Total number of MEs/islands being synchronized by this
+     * structure **/
+    int total_users;
+    /** Total number of initialization stages to synchonize **/
+    int total_stages;
+};
+
+/*a Structures
+ */
 /** struct pagemap_data
  */
 struct pagemap_data {
@@ -68,12 +85,15 @@ struct nfp {
     uint8_t firmware_id;
 };
 
-/** Statics
+/*a Statics
  */
 static struct nfp *nfp_list;
 static int exit_handler_registered=0;
 
-/** read_file
+/*a Static functions
+ */
+/*f read_file */
+/**
  * Malloc a buffer and read the file in; return length of file, or -1 on error
  *
  * @param filename       Filename to load
@@ -98,7 +118,8 @@ static int read_file(const char *filename, char **file_data_ptr)
     return file_len;
 }
 
-/** exit_handler
+/*f exit_handler */
+/**
  *
  * Shutdown all NFPs on the list
  *
@@ -106,12 +127,23 @@ static int read_file(const char *filename, char **file_data_ptr)
 static void
 exit_handler(void)
 {
+    fprintf(stderr,"Exit handler called\n");
     while (nfp_list) {
+        fprintf(stderr,"Shutdown %p\n",nfp_list);
         nfp_shutdown(nfp_list);
     }
 }
 
-/** nfp_link
+/*f sigterm_handler
+ */
+static void
+sigterm_handler(int sig)
+{
+    exit(0);
+}
+
+/*f nfp_link */
+/**
  */
 static void
 nfp_link(struct nfp *nfp)
@@ -126,8 +158,8 @@ nfp_link(struct nfp *nfp)
     nfp_list = nfp;
     nfp->prev=NULL;
 }
-
-/** nfp_unlink
+/*f nfp_unlink */
+/**
  */
 static void
 nfp_unlink(struct nfp *nfp)
@@ -148,7 +180,9 @@ nfp_unlink(struct nfp *nfp)
     nfp->prev=NULL;
 }
 
-/** nfp_init
+/*a NFP instance functions
+ */
+/*f nfp_init
  *
  * Initialize NFP structure, attaching to specified device number
  * Returns NULL on error, otherwise an allocated NFP structure
@@ -156,24 +190,34 @@ nfp_unlink(struct nfp *nfp)
  *
  * @param device_num   NFP device number to attach to (-1 => none)
  */
-struct nfp *
-nfp_init(int device_num)
+extern struct nfp *
+nfp_init(int device_num, int sig_term)
 {
     struct nfp *nfp;
     nfp = malloc(sizeof(struct nfp));
     if (!nfp) return NULL;
 
+    nfp->pagemap.fd = -1;
+    nfp->dev   = NULL;
+    nfp->cpp   = NULL;
+    nfp->shm.file = NULL;
+
     if (!exit_handler_registered) {
         exit_handler_registered=1;
         atexit(exit_handler);
     }
+    if (sig_term) {
+        if (signal(SIGTERM, sigterm_handler) == SIG_ERR) {
+            fprintf(stderr, "Failed to attach signal handler for SIGTERM\n");
+            goto err;
+        }
+        if (signal(SIGINT, sigterm_handler) == SIG_ERR) {
+            fprintf(stderr, "Failed to attach signal handler for SIGINT\n");
+            goto err;
+        }
+    }
+
     nfp_link(nfp);
-
-    nfp->pagemap.fd = -1;
-    nfp->dev   = NULL;
-    nfp->cpp   = NULL;
-
-    nfp->shm.file = NULL;
 
     nfp->pagemap.page_size      = getpagesize();
     nfp->pagemap.huge_page_size = gethugepagesize();
@@ -194,7 +238,7 @@ err:
     return NULL;
 }
 
-/** nfp_shutdown
+/*f nfp_shutdown
  *
  * Shutdown the NFP, unloading firmware before closing the device
  * Performs an incremental shutdown of the activated components, and can
@@ -209,7 +253,7 @@ nfp_shutdown(struct nfp *nfp)
 {
     if (!nfp) return;
     if (nfp->dev) {
-        nfp_unload(nfp);
+        nfp_fw_unload(nfp);
         nfp_device_close(nfp->dev);
         nfp->dev = NULL;
     }
@@ -218,13 +262,13 @@ nfp_shutdown(struct nfp *nfp)
     free(nfp);
 }
 
-/** nfp_fw_load
+/*a Firmware
+ */
+/*f nfp_fw_load
  *
  * Load firmware from an 'nffw' file
- * Return 0 on success, <0 on failure
  *
- * @param nfp       NFP structure of NFP device to unload firmware for
- * @param filename  Full filename of file to load
+ * Return 0 on success, <0 on failure
  *
  */
 int
@@ -234,13 +278,17 @@ nfp_fw_load(struct nfp *nfp, const char *filename)
     int nffw_size, err;
 
     nffw_size=read_file(filename,&nffw);
-    if (nffw_size<0) return -1;
+    if (nffw_size<0) {
+        fprintf(stderr,"Failed to read firmware file %s\n",filename);
+        return -1;
+    }
+
     err=nfp_nffw_load(nfp->dev, nffw, nffw_size, &nfp->firmware_id);
     free(nffw);
     return err;
 }
 
-/** nfp_fw_unload
+/*f nfp_fw_unload
  *
  * Unload any loaded firmware; if nothing loaded, then does nothing
  *
@@ -248,7 +296,7 @@ nfp_fw_load(struct nfp *nfp, const char *filename)
  *
  */
 void
-nfp_unload(struct nfp *nfp)
+nfp_fw_unload(struct nfp *nfp)
 {
     if (!nfp->dev) return;
     nfp_nffw_info_acquire(nfp->dev);
@@ -258,7 +306,7 @@ nfp_unload(struct nfp *nfp)
     nfp_nffw_info_release(nfp->dev);
 }
 
-/** nfp_fw_start
+/*f nfp_fw_start
  *
  * Start any loaded firmware
  *
@@ -271,7 +319,9 @@ nfp_fw_start(struct nfp *nfp)
     return nfp_nffw_start(nfp->dev,nfp->firmware_id);
 }
 
-/** nfp_shm_alloc
+/*a Shared memory
+ */
+/*f nfp_shm_alloc
  */
 extern int
 nfp_shm_alloc(struct nfp *nfp, const char *shm_filename, int shm_key, size_t byte_size, int create)
@@ -311,7 +361,7 @@ nfp_shm_alloc(struct nfp *nfp, const char *shm_filename, int shm_key, size_t byt
     return byte_size;
 }
 
-/** nfp_shm_data
+/*f nfp_shm_data
  *
  * Get SHM data pointer after it has been allocated
  *
@@ -324,7 +374,7 @@ nfp_shm_data(struct nfp *nfp)
     return nfp->shm.data;
 }
 
-/** nfp_shm_close
+/*f nfp_shm_close
  */
 extern void
 nfp_shm_close(struct nfp *nfp)
@@ -343,7 +393,8 @@ nfp_shm_close(struct nfp *nfp)
     }
 }
 
-/** nfp_huge_malloc
+/*a Huge pages */
+/*f nfp_huge_malloc
  *
  * Malloc using hugepages, and get pointer to it,
  * and return 0 on success
@@ -353,7 +404,7 @@ nfp_shm_close(struct nfp *nfp)
  * @param byte_size  Byte size to allocate
  *
  */
-int
+extern int
 nfp_huge_malloc(struct nfp *nfp, void **ptr, size_t byte_size)
 {
     int  num_huge_pages;
@@ -371,7 +422,7 @@ nfp_huge_malloc(struct nfp *nfp, void **ptr, size_t byte_size)
     return allocation_size;
 }
 
-/** nfp_huge_physical_address
+/*f nfp_huge_physical_address
  *
  * Find physical address of an offset into a huge malloc region
  *
@@ -380,7 +431,7 @@ nfp_huge_malloc(struct nfp *nfp, void **ptr, size_t byte_size)
  * @param ofs   Offset from pointer to find address
  *
  */
-uint64_t
+extern uint64_t
 nfp_huge_physical_address(struct nfp *nfp, void *ptr, uint64_t ofs)
 {
     uint64_t linux_pfn, linux_page_data;
@@ -409,7 +460,7 @@ nfp_huge_physical_address(struct nfp *nfp, void *ptr, uint64_t ofs)
     return addr;
 }
 
-/** nfp_huge_free
+/*f nfp_huge_free
  *
  * Free a hugepage allocation
  *
@@ -417,18 +468,19 @@ nfp_huge_physical_address(struct nfp *nfp, void *ptr, uint64_t ofs)
  * @param ptr        Huge page allocation previous returned by nfp_huge_malloc
  *
  */
-void
+extern void
 nfp_huge_free(struct nfp *nfp, void *ptr)
 {
     free_huge_pages(ptr);
 }
 
-/** nfp_show_rtsyms
+/*a Run-time symbols */
+/*f nfp_show_rtsyms
  *
  * @param nfp      Nfp with loaded firmware whose run-time symbols are to be displayed
  *
  */
-void
+extern void
 nfp_show_rtsyms(struct nfp *nfp)
 {
     int i, num_symbols;
@@ -445,7 +497,7 @@ nfp_show_rtsyms(struct nfp *nfp)
     }
 }
 
-/** nfp_get_rtsym_cppid
+/*f nfp_get_rtsym_cppid
  *
  * Read a run-time symbol and derive a struct nfp_cppid to use for reading/writing
  *
@@ -454,7 +506,7 @@ nfp_show_rtsyms(struct nfp *nfp)
  * @param cppid    Structure to store result in, used for later read/write
  *
  */
-int
+extern int
 nfp_get_rtsym_cppid(struct nfp *nfp, const char *sym_name, struct nfp_cppid *cppid)
 {
     const struct nfp_rtsym *rtsym;
@@ -466,12 +518,94 @@ nfp_get_rtsym_cppid(struct nfp *nfp, const char *sym_name, struct nfp_cppid *cpp
         return -1;
     }
 
+    if (cppid==NULL) // Just checking the symbol exists
+        return 0;
+
     cppid->cpp_id = NFP_CPP_ISLAND_ID(rtsym->target, NFP_CPP_ACTION_RW, 0, rtsym->domain);
     cppid->addr   = rtsym->addr;
     return 0;
 }
 
-/** nfp_write
+/*a Firmware sync support */
+/*f nfp_sync_resolve */
+extern int
+nfp_sync_resolve(struct nfp *nfp)
+{
+    int i, num_symbols;
+    const struct nfp_rtsym *rtsym;
+    int island_me_counts[100];
+    int total_islands_to_sync;
+
+    if ((!nfp) || (!nfp->dev)) return -1;
+
+    nfp_rtsym_reload(nfp->dev);
+    num_symbols=nfp_rtsym_count(nfp->dev);
+
+    for (i=0; i<sizeof(island_me_counts)/sizeof(int); i++) {
+        island_me_counts[i] = 0;
+    }
+    total_islands_to_sync = 0;
+    for (i=0; i<num_symbols; i++) {
+        int island;
+        int me;
+        char check[2];
+        rtsym = nfp_rtsym_get(nfp->dev,i);
+        if (sscanf(rtsym->name,"i%d.me%d.__me_sync_stage_se%c",&island,&me,&check[0])==3) {
+            if (island_me_counts[island]==0)
+                total_islands_to_sync ++;
+            island_me_counts[island]++;
+        }
+    }
+
+    for (i=0; i<num_symbols; i++) {
+        int island;
+        char check[2];
+        struct nfp_cppid cppid;
+
+        rtsym = nfp_rtsym_get(nfp->dev,i);
+        if (sscanf(rtsym->name,"i%d.island_sync_stage_se%c",&island,&check[0])==2) {
+            if (island_me_counts[island]==0) {
+                fprintf(stderr, "Sync requested for island %d but there were no MEs specified for that island\n", island);
+                return -1;
+            }
+            cppid.cpp_id = NFP_CPP_ISLAND_ID(rtsym->target, NFP_CPP_ACTION_RW, 0, rtsym->domain);
+            cppid.addr   = rtsym->addr;
+            if (nfp_write(nfp,
+                          &cppid,
+                          offsetof(struct sync_stage_set_hdr, total_users),
+                          &(island_me_counts[island]),
+                          sizeof(int) )!=0) {
+                fprintf(stderr, "Failed to set sync total users_completed for island %d\n", island);
+                return -1;
+            }
+            island_me_counts[island] = -1;
+        }
+
+        if (!strcmp(rtsym->name,"global_sync_stage_set")) {
+            cppid.cpp_id = NFP_CPP_ISLAND_ID(rtsym->target, NFP_CPP_ACTION_RW, 0, rtsym->domain);
+            cppid.addr   = rtsym->addr;
+            if (nfp_write(nfp,
+                          &cppid,
+                          offsetof(struct sync_stage_set_hdr, total_users),
+                          &total_islands_to_sync,
+                          sizeof(int) )!=0) {
+                fprintf(stderr, "Failed to set sync total users_completed for device\n");
+                return -1;
+            }
+        }
+    }
+
+    for (i=0; i<sizeof(island_me_counts)/sizeof(int); i++) {
+        if (island_me_counts[i]>0) {
+            fprintf(stderr, "Failed to set sync for island %d as MEs syncs were found but island sync was not\n",i);
+            return -1;
+        }
+    }
+    return 0;
+}
+
+/*a NFP CPP read/write */
+/*f nfp_write
  *
  * Write data to an NFP memory or register
  *
@@ -482,7 +616,7 @@ nfp_get_rtsym_cppid(struct nfp *nfp, const char *sym_name, struct nfp_cppid *cpp
  * @param size     Size in bytes of data to write
  *
  */
-int
+extern int
 nfp_write(struct nfp *nfp, struct nfp_cppid *cppid, int offset, void *data, ssize_t size)
 {
     /*
@@ -500,7 +634,7 @@ nfp_write(struct nfp *nfp, struct nfp_cppid *cppid, int offset, void *data, ssiz
     return -1;
 }
 
-/** nfp_read
+/*f nfp_read
  *
  * Read data from an NFP memory or register
  *
@@ -511,7 +645,7 @@ nfp_write(struct nfp *nfp, struct nfp_cppid *cppid, int offset, void *data, ssiz
  * @param size     Size in bytes of data to read
  *
  */
-int
+extern int
 nfp_read(struct nfp *nfp, struct nfp_cppid *cppid, int offset, void *data, ssize_t size)
 {
     if (nfp_cpp_read(nfp->cpp, cppid->cpp_id, cppid->addr+offset, data, size )==size)

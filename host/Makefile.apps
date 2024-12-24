@@ -16,6 +16,30 @@
 # @brief       Makefile for the host applications
 #
 
+#a Data coprocessor
+$(HOST_BIN_DIR)/data_coprocessor_basic: $(HOST_BUILD_DIR)/nfp_support.o
+$(HOST_BIN_DIR)/data_coprocessor_basic: $(HOST_BUILD_DIR)/data_coprocessor_basic.o
+
+$(HOST_BIN_DIR)/data_coprocessor_basic:
+	$(LD) -o $(HOST_BIN_DIR)/data_coprocessor_basic \
+	  $(HOST_BUILD_DIR)/data_coprocessor_basic.o \
+	  $(HOST_BUILD_DIR)/nfp_support.o $(LIBS)
+
+all_host: data_coprocessor_basic
+
+clean_host: clean_host__data_coprocessor_basic
+
+clean_host__data_coprocessor_basic:
+	rm -f $(HOST_BIN_DIR)/data_coprocessor_basic
+
+data_coprocessor_basic: $(HOST_BIN_DIR)/data_coprocessor_basic
+
+test_data_coprocessor_basic: data_coprocessor_basic
+	(sudo VERBOSE=$(VERBOSE) LOGFILE=$(LOGFILE) TEST_RE=$(TEST_RE) python $(PYTHON_DIR)/tests/data_coprocessor_basic.py)
+
+test: test_data_coprocessor_basic
+
+#a PCAP test 
 $(HOST_BIN_DIR)/pcap_test: $(HOST_BUILD_DIR)/pcap_test.o
 $(HOST_BIN_DIR)/pcap_test: $(HOST_BUILD_DIR)/nfp_support.o
 
@@ -31,6 +55,7 @@ clean_host__pcap_test:
 
 pcap_test: $(HOST_BIN_DIR)/pcap_test
 
+#a Packet generator/capture server
 $(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/pktgen_mem.o
 $(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/pktgencap.o
 $(HOST_BIN_DIR)/pktgencap: $(HOST_BUILD_DIR)/nfp_support.o
@@ -44,6 +69,12 @@ $(HOST_BIN_DIR)/pktgencap:
 
 pktgencap: $(HOST_BIN_DIR)/pktgencap
 
+clean_host: clean_host__pktgencap
+
+clean_host__pktgencap:
+	rm -f $(HOST_BIN_DIR)/pktgencap
+
+#a Packet generator/capture client controller
 $(HOST_BIN_DIR)/pktgencap_ctl: $(HOST_BUILD_DIR)/nfp_ipc.o
 $(HOST_BIN_DIR)/pktgencap_ctl: $(HOST_BUILD_DIR)/pktgencap_ctl.o
 
@@ -52,6 +83,9 @@ $(HOST_BIN_DIR)/pktgencap_ctl:
 
 pktgencap_ctl: $(HOST_BIN_DIR)/pktgencap_ctl
 
+all_host: pktgencap_ctl
+
+#a Packet generator/capture client test
 $(HOST_BIN_DIR)/pktgencap_test: $(HOST_BUILD_DIR)/nfp_ipc.o
 $(HOST_BIN_DIR)/pktgencap_test: $(HOST_BUILD_DIR)/pktgencap_test.o
 
@@ -60,6 +94,9 @@ $(HOST_BIN_DIR)/pktgencap_test:
 
 pktgencap_test: $(HOST_BIN_DIR)/pktgencap_test
 
+all_host: pktgencap_test
+
+#a NFP IPC test infrastructure
 $(HOST_BIN_DIR)/nfp_ipc_test: $(HOST_BUILD_DIR)/nfp_dummy.o
 $(HOST_BIN_DIR)/nfp_ipc_test: $(HOST_BUILD_DIR)/nfp_ipc.o
 $(HOST_BIN_DIR)/nfp_ipc_test: $(HOST_BUILD_DIR)/nfp_ipc_test.o
@@ -69,14 +106,14 @@ $(HOST_BIN_DIR)/nfp_ipc_test:
 
 nfp_ipc_test: $(HOST_BIN_DIR)/nfp_ipc_test
 
+test_nfp_ipc_test: nfp_ipc_test
+	$(HOST_BIN_DIR)/nfp_ipc_test
+
 clean_host__nfp_ipc_test:
 	rm -f $(HOST_BIN_DIR)/nfp_ipc_test
 
 clean_host: clean_host__nfp_ipc_test
 
-all_host: pktgencap pktgencap_ctl pktgencap_test nfp_ipc_test
+test: test_nfp_ipc_test
 
-clean_host: clean_host__pktgencap
-
-clean_host__pktgencap:
-	rm -f $(HOST_BIN_DIR)/pktgencap
+all_host: nfp_ipc_test

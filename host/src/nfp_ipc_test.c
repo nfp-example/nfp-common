@@ -1,4 +1,4 @@
-/** Copyright (C) 2015,  Gavin J Stark.  All rights reserved.
+/** Copyright (C) 2015-2016,  Gavin J Stark.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,13 +17,20 @@
  *
  */
 
-/** Includes
+/*a Includes
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include "nfp_ipc.h"
 
+/*a Useful functions
+ */
 /** get_rand
+ * @brief Get a random number between 0 and max-1
+ *
+ * @param max Range of numbers to pick randomly from
+ *
+ * @returns Random number between 0 and @p max-1
  */
 static int
 get_rand(int max)
@@ -35,8 +42,19 @@ get_rand(int max)
     return (int)(d / (1<<24));
 }
 
-/** test_simple
+/*a Tests
  */
+/*f test_simple */
+/**
+ * @brief test_simple
+ *
+ * @param num_clients Number of clients to use
+ *
+ * @returns Zero on success, else an error indications
+ *
+ * Start up the specified number of clients, then shut them down.
+ *
+ **/
 static int
 test_simple(int num_clients)
 {
@@ -49,22 +67,33 @@ test_simple(int num_clients)
 
     server_desc.max_clients = num_clients;
     nfp_ipc = malloc(nfp_ipc_size());
-    nfp_ipc_init(nfp_ipc, &server_desc);
+    nfp_ipc_server_init(nfp_ipc, &server_desc);
     for (i=0; i<num_clients; i++) {
-        clients[i] = nfp_ipc_start_client(nfp_ipc, &client_desc);
+        clients[i] = nfp_ipc_client_start(nfp_ipc, &client_desc);
         if (clients[i]<0)
             return i+100;
     }
     for (i=0; i<num_clients; i++) {
-        nfp_ipc_stop_client(nfp_ipc, clients[i]);
+        nfp_ipc_client_stop(nfp_ipc, clients[i]);
     }
-    err = nfp_ipc_shutdown(nfp_ipc, 1000);
+    err = nfp_ipc_server_shutdown(nfp_ipc, 1000);
     free(nfp_ipc);
     return err;
 }
 
-/** test_start_stop
- */
+/*f test_start_stop */
+/**
+ * @brief test_start_stop
+ *
+ * @param iter Number of iterations to run for
+ *
+ * @param num_clients Number of clients to use
+ *
+ * @returns Zero on success, else an error indications
+ *
+ * Randomly start and stop clients.
+ *
+ **/
 static int
 test_start_stop(int num_clients, int iter)
 {
@@ -78,14 +107,14 @@ test_start_stop(int num_clients, int iter)
 
     server_desc.max_clients = num_clients;
     nfp_ipc = malloc(nfp_ipc_size());
-    nfp_ipc_init(nfp_ipc, &server_desc);
+    nfp_ipc_server_init(nfp_ipc, &server_desc);
     for (i=0; i<num_clients; i++) {
         clients[i] = -1;
     }
     for (; iter > 0; iter--) {
         i = get_rand(num_clients);
         if (clients[i] < 0) {
-            clients[i] = nfp_ipc_start_client(nfp_ipc, &client_desc);
+            clients[i] = nfp_ipc_client_start(nfp_ipc, &client_desc);
             //printf("Started %d:%d\n",i,clients[i]);
             if (clients[i]<0) {
                 for (i=0; i<num_clients; i++) {
@@ -95,7 +124,7 @@ test_start_stop(int num_clients, int iter)
                 return 100;
             }
         } else {
-            nfp_ipc_stop_client(nfp_ipc, clients[i]);
+            nfp_ipc_client_stop(nfp_ipc, clients[i]);
             //printf("Stopped %d:%d\n",i,clients[i]);
             clients[i] = -1;
         }
@@ -103,15 +132,37 @@ test_start_stop(int num_clients, int iter)
     }
     for (i=0; i<num_clients; i++) {
         if (clients[i] >= 0) {
-            nfp_ipc_stop_client(nfp_ipc, clients[i]);
+            nfp_ipc_client_stop(nfp_ipc, clients[i]);
         }
     }
-    err = nfp_ipc_shutdown(nfp_ipc, 1000);
+    err = nfp_ipc_server_shutdown(nfp_ipc, 1000);
     free(nfp_ipc);
     return err;
 }
 
-/** test_mem_simple
+/*f test_mem_simple */
+/**
+ * @brief test_msg_bounce
+ *
+ * @param iter Number of iterations to run for
+ *
+ * @param max_blocks
+ *
+ * @param size_base
+ *
+ * @param size_range
+ *
+ * @returns Zero on success, else an error indications
+ *
+ * Create a server, then allocate and free messages in the server.
+ *
+ * The allocations are randomly handled so that the heap will fragment
+ * and require coalescing.
+ *
+ * At the end all the messages are freed.
+ *
+ * Ideally this test is run with the nfp_ipc heap checking enabled
+ *
  **/
 static int
 test_mem_simple(int iter, int max_blocks, int size_base, int size_range)
@@ -126,7 +177,7 @@ test_mem_simple(int iter, int max_blocks, int size_base, int size_range)
     server_desc.max_clients = 1;
 
     nfp_ipc = malloc(nfp_ipc_size());
-    nfp_ipc_init(nfp_ipc, &server_desc);
+    nfp_ipc_server_init(nfp_ipc, &server_desc);
 
     for (i=0; i<max_blocks; i++) {
         msg[i] = NULL;
@@ -135,29 +186,47 @@ test_mem_simple(int iter, int max_blocks, int size_base, int size_range)
         i = get_rand(max_blocks);
         if (!msg[i]) {
             size = size_base + get_rand(size_range);
-            msg[i] = nfp_ipc_alloc_msg(nfp_ipc, size);
+            msg[i] = nfp_ipc_msg_alloc(nfp_ipc, size);
             if (!msg[i]) {
                 printf("Failed to allocate blah\n");
                 return 100;
             }
         } else {
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
             msg[i] = NULL;
         }
     }
 
     for (i=0; i<max_blocks; i++) {
         if (msg[i]) {
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
         }
     }
 
-    err = nfp_ipc_shutdown(nfp_ipc, 1000);
+    err = nfp_ipc_server_shutdown(nfp_ipc, 1000);
 
     return err;
 }
 
-/** test_msg_simple
+/*f test_msg_simple */
+/**
+ * @brief test_msg_simple
+ *
+ * @param iter Number of iterations to run for
+ *
+ * @param max_clients Maximum number of clients to use
+ *
+ * @returns Zero on success, else an error indications
+ *
+ * Start up all the clients (@p max_clients), and randomly either send
+ * a message from a client or poll for a message in the server
+ *
+ * At most one message is sent per client
+ *
+ * When the server receives a message it frees it
+ *
+ * At the end make the server poll for all the messages that should be pending
+ *
  **/
 static int
 test_msg_simple(int iter, int max_clients)
@@ -174,17 +243,17 @@ test_msg_simple(int iter, int max_clients)
     server_desc.max_clients = max_clients;
 
     nfp_ipc = malloc(nfp_ipc_size());
-    nfp_ipc_init(nfp_ipc, &server_desc);
+    nfp_ipc_server_init(nfp_ipc, &server_desc);
 
     for (i=0; i<max_clients; i++) {
-        nfp_ipc_start_client(nfp_ipc, &client_desc);
+        nfp_ipc_client_start(nfp_ipc, &client_desc);
         msg[i] = NULL;
     }
     for (; iter > 0; iter--) {
         i = get_rand(max_clients);
         if (!msg[i]) {
             size = 64;
-            msg[i] = nfp_ipc_alloc_msg(nfp_ipc, size);
+            msg[i] = nfp_ipc_msg_alloc(nfp_ipc, size);
             if (nfp_ipc_client_send_msg(nfp_ipc, i, msg[i])!=0) {
                 printf("Adding message %d did not succeed but it should (max 1 queue entry per client in this use case)\n",i);
                 return 100;
@@ -202,7 +271,7 @@ test_msg_simple(int iter, int max_clients)
                        msg[i] );
                 return 100;
             }
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
             msg[i] = NULL;
         }
     }
@@ -215,23 +284,44 @@ test_msg_simple(int iter, int max_clients)
                        msg[i] );
                 return 100;
             }
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
             msg[i] = NULL;
     }
     for (i=0; i<max_clients; i++) {
         if (msg[i]) {
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
         }
-        nfp_ipc_stop_client(nfp_ipc, i);
+        nfp_ipc_client_stop(nfp_ipc, i);
     }
 
-    err = nfp_ipc_shutdown(nfp_ipc, 1000);
+    err = nfp_ipc_server_shutdown(nfp_ipc, 1000);
     free(nfp_ipc);
 
     return err;
 }
 
-/** test_msg_bounce
+/*f test_msg_bounce */
+/**
+ * @brief test_msg_bounce
+ *
+ * @param iter Number of iterations to run for
+ *
+ * @param max_clients Maximum number of clients to use for bouncing
+ *
+ * @returns Zero on success, else an error indications
+ *
+ * Start up all the clients (@p max_clients), and randomly either send
+ * a message from a client, poll for a message in the server, or poll
+ * for a message in the client
+ *
+ * At most one message is sent per client
+ *
+ * When the server receives a message from the client it bounces it back straight away
+ *
+ * At most one message will then be queued for a client
+ *
+ * At the end make the server poll and bounce, and then close out all clients
+ *
  **/
 static int
 test_msg_bounce(int iter, int max_clients)
@@ -249,10 +339,10 @@ test_msg_bounce(int iter, int max_clients)
     server_desc.max_clients = max_clients;
 
     nfp_ipc = malloc(nfp_ipc_size());
-    nfp_ipc_init(nfp_ipc, &server_desc);
+    nfp_ipc_server_init(nfp_ipc, &server_desc);
 
     for (i=0; i<max_clients; i++) {
-        nfp_ipc_start_client(nfp_ipc, &client_desc);
+        nfp_ipc_client_start(nfp_ipc, &client_desc);
         msg[i] = NULL;
         msg_state[i] = 0;
     }
@@ -260,7 +350,7 @@ test_msg_bounce(int iter, int max_clients)
         i = get_rand(max_clients);
         if (msg_state[i]==0) {
             size = 64;
-            msg[i] = nfp_ipc_alloc_msg(nfp_ipc, size);
+            msg[i] = nfp_ipc_msg_alloc(nfp_ipc, size);
             if (nfp_ipc_client_send_msg(nfp_ipc, i, msg[i])!=0) {
                 printf("Adding message %d did not succeed but it should (max 1 queue entry per client in this use case)\n",i);
                 return 100;
@@ -294,7 +384,7 @@ test_msg_bounce(int iter, int max_clients)
                        msg[i] );
                 return 100;
             }
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
             msg[i] = NULL;
             msg_state[i] = 0;
         }
@@ -309,7 +399,7 @@ test_msg_bounce(int iter, int max_clients)
                 return 100;
             }
             // check msg_state[i]==1
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
             msg[i] = NULL;
     }
     for (i=0; i<max_clients; i++) {
@@ -318,18 +408,27 @@ test_msg_bounce(int iter, int max_clients)
                 printf("Message state expected to be 2 if msg[i] exists and not for server\n");
                 return 100;
             }
-            nfp_ipc_free_msg(nfp_ipc, msg[i]);
+            nfp_ipc_msg_free(nfp_ipc, msg[i]);
         }
-        nfp_ipc_stop_client(nfp_ipc, i);
+        nfp_ipc_client_stop(nfp_ipc, i);
     }
 
-    err = nfp_ipc_shutdown(nfp_ipc, 1000);
+    err = nfp_ipc_server_shutdown(nfp_ipc, 1000);
     free(nfp_ipc);
 
     return err;
 }
 
-/** TEST_RUN
+/*a Toplevel - main
+ */
+/*f TEST_RUN */
+/**
+ * @brief Run a test and display a pass/fail message
+ *
+ * @param msg Message describing the test for (success or failure)
+ *
+ * @param x Test function to run for the test
+ *
  */
 #define TEST_RUN(msg,x)                    \
     do { \
@@ -341,7 +440,10 @@ test_msg_bounce(int iter, int max_clients)
     } \
     } while (0);
 
-/** main
+/*f main */
+/**
+ * @brief Main function - run the required tests
+ *
  */
 extern int
 main(int argc, char **argv)

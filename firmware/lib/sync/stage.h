@@ -1,4 +1,6 @@
-/* Copyright (C) 2015,  Gavin J Stark.  All rights reserved.
+/*a Copyright */
+/**
+ * Copyright (C) 2015-2016,  Gavin J Stark.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,44 +51,111 @@
  * sync_stage_set_stage_complete(ALL_INIT).
  * 
  */
+
+/*a Opening guard */
 #ifndef _SYNC__SYNC_H_
 #define _SYNC__SYNC_H_
 
-/** Includes
- */
+/*a Includes */
 #include <stdint.h>
 #include <nfp.h>
 
-/** struct sync_stage_set_hdr - CHANGE .init IF YOU CHANGE THIS
+/*a Types */
+/*t struct sync_stage_set_hdr - CHANGE PREINIT MACRO IF YOU CHANGE THIS */
+/* Also CLONED in nfp_support.c in part - change that too... */
+/**
+ * Structure used to keep up to date with which MEs/islands have
+ * completed the current stage, and how many MEs/islands there are to
+ * synchronize
+ *
+ * One instance of this structure is used per island, and one for the
+ * device
+ *
  */
 struct sync_stage_set_hdr
 {
-    int total_stages;
+    /** Total number of MEs/islands being synchronized by this
+     * structure **/
     int total_users;
+    /** Total number of initialization stages to synchonize **/
+    int total_stages;
+    /** Last initialization stage completed by all of the users of
+     * this structure **/
     int last_stage_completed;
+    /** Number of users that have completed the next stage
+     * (last_stage_completed+1) **/
     int users_completed;
+    /** Mask of which users have completed the next stage - for debug
+     * purposes only, when things hang... **/
     int users_completed_mask;
+    /** Padding to force to 32-B alignment, to permit atomic
+     * operations on the _next_ structure this is used with **/
     int padding[3];
 };
 
-/** struct sync_stage_set - CHANGE .init IF YOU CHANGE THIS
+/*t struct sync_stage_set - CHANGE PREINIT MACRO IF YOU CHANGE THIS */
+/**
+ * Structure used to keep track of which MEs/islands have completed
+ * which initialization stage, plus locking structures for the MEs
+ * that have completed and are waiting for others to complete.
  */
 struct sync_stage_set
 {
+    /** Header structure keeping track of the number of users and
+     * which stage is being tracked.
+     *
+     * MUST BE A MULTIPLE OF 16B
+     *
+     **/
     struct sync_stage_set_hdr hdr;
+    /** Structure ALIGNED TO 16B that keeps track of pending users,
+     * that have completed the initialization stage and are waiting
+     * for the last one across the line to signal them
+     *
+     * MUST BE ALIGNED TO 32B boundary
+     *
+     * **/
     struct {
+        /** Queue of locks memory, managed by an atomic memory unit
+        engine, which keeps the list of waiting users. This must all
+        fit within a 64B cache line, and it must be aligned to a 16B
+        boundary - and to support >8 users it must be 32B long. **/
         uint64_t queue_lock[4];
     };
 };
 
-/** Macros
+/*a Macros
  */
-#define __SYNC_STAGE_SET_PREINIT(num_stages,num_users,scope,mem,ql_init) \
-    __asm { .alloc_mem        scope ## _sync_stage_set_mem mem scope 256 256 } \
-    __asm { .declare_resource scope ## _sync_stage_set_res scope 256 scope ## _sync_stage_set_mem } \
-    __asm { .alloc_resource   scope ## _sync_stage_set scope ## _sync_stage_set_res scope 256 } \
-    __asm { .init             scope ## _sync_stage_set+0 num_stages }   \
-    __asm { .init             scope ## _sync_stage_set+4 num_users }    \
+/*f __SYNC_STAGE_SET_GLOBALS */
+/**
+ * For internal use
+ *
+ * Declare and initialize memory structure used in a CTM or global
+ * memory for managing multiple MEs/islands synchronization.
+ *
+ * Exposed to user code with SYNC_STAGE_SET_PREINIT and
+ *
+ * A struct sync_stage_set will be placed in @p mem visible with @p
+ * scope (island or global).
+ *
+ * The structure should start with the queue lock preclaimed (which
+ * differs depending on whether it is for MEs or for islands), so @p
+ * ql_init should be 1 for MEs.
+ *
+ * Note that was:
+ * @code{.c}
+ *  __asm { .alloc_mem        scope ## _sync_stage_set_mem mem scope 256 256 } \
+ *  __asm { .declare_resource scope ## _sync_stage_set_res scope 256 scope ## _sync_stage_set_mem } \
+ *  __asm { .alloc_resource   scope ## _sync_stage_set scope ## _sync_stage_set_res scope 256 } \
+ * @endcode
+ *
+ * but that broke in SDK 6.0 alpha
+ *
+ **/
+#define __SYNC_STAGE_SET_GLOBALS(num_stages,scope,mem,ql_init) \
+    __asm { .alloc_mem        scope ## _sync_stage_set mem scope 256 256 } \
+    __asm { .init             scope ## _sync_stage_set+0 0 }            \
+    __asm { .init             scope ## _sync_stage_set+4 num_stages }   \
     __asm { .init             scope ## _sync_stage_set+8 0 }            \
     __asm { .init             scope ## _sync_stage_set+12 0 }           \
     __asm { .init             scope ## _sync_stage_set+16 0 }           \
@@ -102,21 +171,71 @@ struct sync_stage_set
     __asm { .init             scope ## _sync_stage_set+56 0 }           \
     __asm { .init             scope ## _sync_stage_set+60 0 }
 
-#define SYNC_STAGE_SET_GLOBAL_PREINIT(num_stages,num_islands)       \
-    __SYNC_STAGE_SET_PREINIT(num_stages,num_islands,global,emem,0)
+/*f __SYNC_STAGE_SET_DEVICE_GLOBALS */
+/**
+ * Internal use only
+ *
+ * Declare and initialize memory structure used in a global memory for
+ * managing multiple islands synchronization.
+ **/
+#define __SYNC_STAGE_SET_DEVICE_GLOBALS(num_stages)       \
+    __SYNC_STAGE_SET_GLOBALS(num_stages,global,emem,0)
 
-#define SYNC_STAGE_SET_ISLAND_PREINIT(num_stages,num_mes)       \
-    __SYNC_STAGE_SET_PREINIT(num_stages,num_mes,island,ctm,16)
+/*f __SYNC_STAGE_SET_ISLAND_PREINIT */
+/**
+ * Internal use only
+ *
+ * Declare and initialize memory structure used in an island memory for
+ * managing multiple MEs synchronization.
+ **/
+#define __SYNC_STAGE_SET_ISLAND_GLOBALS(num_stages)       \
+    __SYNC_STAGE_SET_GLOBALS(num_stages,island,ctm,16)
 
-#define SYNC_STAGE_SET_ME_PREINIT(num_stages,num_ctx)   \
-    __declspec(shared) int __sss_num_ctx=num_ctx;
+/*f __SYNC_STAGE_SET_ME_GLOBALS */
+/**
+ * Internal use only
+ *
+ * Declare and initialize memory structure used for synchronizing
+ * contexts within a microengine, and ensure at least one structure
+ * will be visible per ME as a run-time symbol
+ **/
+#define __SYNC_STAGE_SET_ME_GLOBALS()        \
+    __asm { .alloc_mem        __me_sync_stage_set ctm me 8 8 } \
+    __declspec(shared) int __sss_num_ctx=0;
 
-#define SYNC_STAGE_SET_PREINIT(num_stages,num_ctxts,num_mes,num_islands) \
-    SYNC_STAGE_SET_ME_PREINIT(num_stages,num_ctxts)                     \
-    SYNC_STAGE_SET_ISLAND_PREINIT(num_stages,num_mes)                   \
-    SYNC_STAGE_SET_GLOBAL_PREINIT(num_stages,num_islands)
+/*f __SYNC_STAGE_SET_ME_PREINIT */
+/**
+ * Internal use only
+ *
+ * Increment number of contexts running in the ME, and make sure other
+ * contexts get the chance to do this too before any call of
+ * @p sync_stage_set_stage_complete() can occur
+ **/
+#define __SYNC_STAGE_SET_ME_PREINIT()        \
+    __sss_num_ctx += 1;           \
+    __asm { ctx_arb[voluntary] }; \
+    __asm { ctx_arb[voluntary] }; \
 
-/** sync_stage_set_stage_complete
+/*f SYNC_STAGE_SET_GLOBALS */
+/**
+ * Declare and initialize memory structures used for synchronizing
+ * contexts, microengines, and islands - at least one ME per islands
+ * must have this in its code
+ **/
+#define SYNC_STAGE_SET_GLOBALS(num_stages) \
+    __SYNC_STAGE_SET_ME_GLOBALS()               \
+    __SYNC_STAGE_SET_ISLAND_GLOBALS(num_stages) \
+    __SYNC_STAGE_SET_DEVICE_GLOBALS(num_stages)
+
+/*f SYNC_STAGE_SET_PREINIT */
+/**
+ * Required before any calls to sync_stage_set_stage_complete() for every context
+ **/
+#define SYNC_STAGE_SET_PREINIT() \
+    __SYNC_STAGE_SET_ME_PREINIT()
+
+/*f sync_stage_set_stage_complete */
+/**
  *
  * Indicate that a synchronization stage set is complete. The thread
  * will wait until all threads, MEs, islands synchronize (assuming
@@ -128,6 +247,5 @@ struct sync_stage_set
  */
 __noinline void sync_state_set_stage_complete(int stage);
 
-/** Close guard
- */
+/*a Close guard */
 #endif /*_SYNC__SYNC_H_ */

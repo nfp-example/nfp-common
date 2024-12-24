@@ -25,6 +25,7 @@ NFAS_BASE_DEFS =
 # -indirect_ref_format_nfp6000  BREAKS codeless builds
 CHIP = nfp-6xxx-a0
 CHIP = NFP-624A-0C-B0
+CHIP = NFP-6240-0C-B0
 #CHIP = NFP-4xxx-b0
 #CHIP = NFP-624A-0C-A0
 NFAS_BASE_FLAGS = -chip $(CHIP)

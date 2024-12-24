@@ -56,29 +56,47 @@ struct pktgen_nfp {
     struct nfp_cppid pcap_cls_host;
     struct nfp_cppid pcap_cls_ring;
     struct {
+        /** a */
         t_sl_timer pcap_give_pcie_buffer;
+        /** a */
         t_sl_timer nfp_ipc_server_poll;
+        /** a */
         t_sl_timer poll_pcap_buffer_recycle;
+        /** a */
         t_sl_timer polling_loop;
     } timers;
     struct {
+        /** a */
         char *base;
+        /** a */
         size_t size;
+        /** a */
         uint64_t phys_addr[MAX_PAGES];
+        /** a */
         struct nfp_ipc *nfp_ipc;
     } shm;
     struct {
+        /** a */
         uint32_t ring_mask;
+        /** a */
         uint32_t wptr;
+        /** a */
         uint32_t rptr;
+        /** a */
         uint32_t ack;
     } host;
     struct {
+        /** a */
         int num_buffers;
+        /** a */
         struct pcap_host_phys_buffer buffers[PCAP_HOST_PHYS_ENTRIES];
+        /** a */
         int ring_wptr;
+        /** a */
         int ring_entries;
+        /** a */
         int ring_rptr;
+        /** a */
         int buffers_given[PCAP_HOST_CLS_RING_SIZE_ENTRIES];
     } pcap;
     struct pktgen_mem_layout *mem_layout;
@@ -605,7 +623,7 @@ main(int argc, char **argv)
 
     struct nfp_ipc_server_desc nfp_ipc_server_desc;
     nfp_ipc_server_desc.max_clients = MAX_NFP_IPC_CLIENTS;
-    nfp_ipc_init(pktgen_nfp.shm.nfp_ipc, &nfp_ipc_server_desc);
+    nfp_ipc_server_init(pktgen_nfp.shm.nfp_ipc, &nfp_ipc_server_desc);
 
     SL_TIMER_INIT(pktgen_nfp.timers.nfp_ipc_server_poll);
     SL_TIMER_INIT(pktgen_nfp.timers.poll_pcap_buffer_recycle);
@@ -708,7 +726,7 @@ main(int argc, char **argv)
         }
     }
 
-    nfp_ipc_shutdown(pktgen_nfp.shm.nfp_ipc, 5*1000*1000);
+    nfp_ipc_server_shutdown(pktgen_nfp.shm.nfp_ipc, 5*1000*1000);
 
     nfp_shutdown(pktgen_nfp.nfp);
     return 0;

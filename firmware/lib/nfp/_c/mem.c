@@ -29,23 +29,41 @@
 /** struct queue_desc
  */
 struct queue_desc {
+/** a **/
     union {
+/** a **/
         struct {
+/** a **/
             unsigned int ring_size:4;
+/** a **/
             unsigned int reserved1:2;
+/** a **/
             unsigned int head_ptr:24;
+/** a **/
             unsigned int eop:1;
+/** a **/
             unsigned int zero:1;
+/** a **/
             unsigned int tail_ptr:30;
+/** a **/
             unsigned int ring_type:2;
+/** a **/
             unsigned int q_loc:2;
+/** a **/
             unsigned int reserved2:4;
+/** a **/
             unsigned int q_page:2;
+/** a **/
             unsigned int q_count:24;
+/** a **/
             uint32_t padding;
+/** a **/
         };
+/** a **/
         uint32_t __raw[4];
+/** a **/
     };
+/** a **/
 };
 
 /** MEM_QUEUE_OP
@@ -84,50 +102,138 @@ __intrinsic void fn_name(uint32_t mu_qdesc, \
 
 /** MEM_QUEUE_READ_OP
  */
-#define MEM_QUEUE_READ_OP(fn_name,queue_op) MEM_QUEUE_OP(fn_name,queue_op,__xread uint32_t *)
+#define MEM_QUEUE_READ_OP(fn_name,queue_op) MEM_QUEUE_OP(fn_name,queue_op,__xread void *)
 
 /** MEM_QUEUE_READ_OP_ASYNC
  */
-#define MEM_QUEUE_READ_OP_ASYNC(fn_name,queue_op) MEM_QUEUE_OP_ASYNC(fn_name,queue_op,__xread uint32_t *)
+#define MEM_QUEUE_READ_OP_ASYNC(fn_name,queue_op) MEM_QUEUE_OP_ASYNC(fn_name,queue_op,__xread void *)
 
 /** MEM_QUEUE_WRITE_OP
  */
-#define MEM_QUEUE_WRITE_OP(fn_name,queue_op) MEM_QUEUE_OP(fn_name,queue_op,__xwrite uint32_t *)
+#define MEM_QUEUE_WRITE_OP(fn_name,queue_op) MEM_QUEUE_OP(fn_name,queue_op,__xwrite void *)
 
 /** MEM_QUEUE_WRITE_OP_ASYNC
  */
-#define MEM_QUEUE_WRITE_OP_ASYNC(fn_name,queue_op) MEM_QUEUE_OP_ASYNC(fn_name,queue_op,__xwrite uint32_t *)
+#define MEM_QUEUE_WRITE_OP_ASYNC(fn_name,queue_op) MEM_QUEUE_OP_ASYNC(fn_name,queue_op,__xwrite void *)
 
-/** mem_read64
- *
- * @param data   Transfer registers to read
- * @param addr   Full 40-bit pointer in to memory
- * @param size   Size in bytes to write (must be multiple of 8)
- *
- */
-__intrinsic void
-mem_read64(__xread void *data, __mem void *addr, const size_t size)
-{
-    SIGNAL sig;
-    uint32_t addr_lo, addr_hi, size_in_uint64;
-    size_in_uint64 = size>>3;
-    addr_lo = (uint32_t)(((uint64_t)addr)&0xff);
-    addr_hi = (uint32_t)(((uint64_t)addr)>>8);
-    __asm {
-        mem[read, *data, addr_hi, <<8, addr_lo, \
-            __ct_const_val(size_in_uint64)], ctx_swap[sig];
-    }
+/*f MEM_READ_WRITE_OP */
+#define MEM_READ_WRITE_OP(fn_name,mem_op,data_type)             \
+__intrinsic void fn_name(data_type data,                        \
+                         __mem void *addr,                      \
+                         const size_t size)                     \
+{                                                               \
+    SIGNAL sig;                                                 \
+    uint32_t addr_lo, addr_hi, size_in_uint64;                  \
+    __ct_assert(__is_ct_const(size), "Size must be constant");  \
+    __ct_assert(size != 0, "Size must not be zero");            \
+    size_in_uint64 = size>>3;                                   \
+    addr_lo = (uint32_t)(((uint64_t)addr)&0xff);                \
+    addr_hi = (uint32_t)(((uint64_t)addr)>>8);                  \
+    __asm {                                                     \
+        mem[mem_op, *data, addr_hi, <<8, addr_lo,               \
+            __ct_const_val(size_in_uint64)], ctx_swap[sig]      \
+            }                                                   \
 }
 
-/** mem_read64_s8
- *
- * @param data     Transfer registers to read
- * @param base_s8  Base address in MU >> 8
- * @param ofs      Offset in bytes from MU base
- * @param size     Size in bytes to write (must be multiple of 8)
- *
- */
-#include <nfp.h>
+/*f MEM_READ_WRITE_HL_OP */
+#define MEM_READ_WRITE_HL_OP(fn_name,mem_op,data_type)          \
+    __intrinsic void fn_name(data_type data,                    \
+                             uint32_t addr_hi,                  \
+                             uint32_t addr_lo,                  \
+                             const size_t size)                 \
+{                                                               \
+    SIGNAL sig;                                                 \
+    uint32_t addr_s8, size_in_uint64;                           \
+    __ct_assert(__is_ct_const(size), "Size must be constant");  \
+    __ct_assert(size != 0, "Size must not be zero");            \
+    size_in_uint64 = size>>3;                                   \
+    addr_s8 = addr_hi<<24;                                      \
+    __asm {                                                     \
+        mem[mem_op, *data, addr_s8, <<8, addr_lo,               \
+            __ct_const_val(size_in_uint64)], ctx_swap[sig]      \
+            }                                                   \
+}
+
+/*f MEM_ATOMIC_OP */
+#define MEM_ATOMIC_OP(fn_name,mem_op,data_type)                 \
+__intrinsic void fn_name ## _s8(data_type data,                 \
+                                uint32_t base_s8,               \
+                                uint32_t ofs,                   \
+                                const size_t size )             \
+{                                                               \
+    SIGNAL sig;                                                 \
+    uint32_t size_in_uint32;                                    \
+    __ct_assert(__is_ct_const(size), "Size must be constant");  \
+    __ct_assert(size != 0, "Size must not be zero");            \
+    size_in_uint32 = size>>2;                                   \
+    __asm {                                                     \
+        mem[mem_op, *data, base_s8, <<8, ofs,                   \
+            __ct_const_val(size_in_uint32)], ctx_swap[sig]      \
+            }                                                   \
+}                                                               \
+                                                                \
+__intrinsic void fn_name ## _hl(data_type data,                 \
+                                uint32_t addr_hi,               \
+                                uint32_t addr_lo,               \
+                                const size_t size )             \
+{                                                               \
+    fn_name ## _s8(data,addr_hi<<24,addr_lo,size);              \
+}                                                               \
+                                                                \
+__intrinsic void fn_name(data_type data,                        \
+                         __mem void *addr,                      \
+                         const size_t size )                    \
+{                                                               \
+    fn_name ## _s8(data,                                        \
+                   (uint32_t)((uint64_t)(addr)>>32),            \
+                   (uint32_t)((uint64_t)(addr)),                \
+                   size);                                       \
+}
+
+/*f MEM_ATOMIC_OP_DUALSIG */
+#define MEM_ATOMIC_OP_DUALSIG(fn_name,mem_op,data_type)                 \
+__intrinsic void fn_name ## _s8(data_type data,                 \
+                                uint32_t base_s8,               \
+                                uint32_t ofs,                   \
+                                const size_t size )             \
+{                                                               \
+    SIGNAL_PAIR sig_pair;                                       \
+    uint32_t size_in_uint32;                                    \
+    __ct_assert(__is_ct_const(size), "Size must be constant");  \
+    __ct_assert(size != 0, "Size must not be zero");            \
+    size_in_uint32 = size>>2;                                   \
+    __asm {                                                     \
+        mem[mem_op, *data, base_s8, <<8, ofs,                   \
+            __ct_const_val(size_in_uint32)], sig_done[sig_pair] \
+            }                                                   \
+wait_for_all(&sig_pair); \
+}                                                               \
+                                                                \
+__intrinsic void fn_name ## _hl(data_type data,                 \
+                                uint32_t addr_hi,               \
+                                uint32_t addr_lo,               \
+                                const size_t size )             \
+{                                                               \
+    fn_name ## _s8(data,addr_hi<<24,addr_lo,size);              \
+}                                                               \
+                                                                \
+__intrinsic void fn_name(data_type data,                        \
+                         __mem void *addr,                      \
+                         const size_t size )                    \
+{                                                               \
+    fn_name ## _s8(data,                                        \
+                   (uint32_t)((uint64_t)(addr)>>32),            \
+                   (uint32_t)((uint64_t)(addr)),                \
+                   size);                                       \
+}
+
+/*f mem_read64 */
+MEM_READ_WRITE_OP(mem_read64,read,__xread void *);
+
+/*f mem_read64_hl */
+MEM_READ_WRITE_HL_OP(mem_read64_hl,read,__xread void *);
+
+/*f mem_read64_s8 */
 __intrinsic void
 mem_read64_s8(__xread void *data,
               uint32_t base_s8,
@@ -158,26 +264,11 @@ mem_read64_s8(__xread void *data,
     }
 }
 
-/** mem_write64
- *
- * @param data   Transfer registers to write
- * @param addr   Full 40-bit pointer in to memory
- * @param size   Size in bytes to write (must be multiple of 8)
- *
- */
-__intrinsic void
-mem_write64(__xwrite void *data, __mem void *addr, const size_t size)
-{
-    SIGNAL sig;
-    uint32_t addr_lo, addr_hi, size_in_uint64;
-    size_in_uint64 = size>>3;
-    addr_lo = (uint32_t)(((uint64_t)addr)&0xff);
-    addr_hi = (uint32_t)(((uint64_t)addr)>>8);
-    __asm {
-        mem[write, *data, addr_hi, <<8, addr_lo, \
-            __ct_const_val(size_in_uint64)], ctx_swap[sig];
-    }
-}
+/*f mem_write64 */
+MEM_READ_WRITE_OP(mem_write64,write,__xwrite void *);
+
+/*f mem_write64_hl */
+MEM_READ_WRITE_HL_OP(mem_write64_hl,write,__xwrite void *);
 
 /** mem_write64_s8
  *
@@ -203,27 +294,29 @@ mem_write64_s8(__xwrite void *data,
     }
 }
 
-/** mem_atomic_read_s8
- */
-__intrinsic void
-mem_atomic_read_s8(__xread void *xfr, uint32_t base_s8, uint32_t ofs, int size )
-{
-    SIGNAL sig;
-    int size_in_words=size/sizeof(int);
-    __asm {
-        mem[atomic_read, *xfr, base_s8, <<8, ofs, size_in_words], ctx_swap[sig];
-    }
-}
+/*f mem_atomic_read / _s8 / _hl*/
+MEM_ATOMIC_OP(mem_atomic_read,atomic_read,__xread void *);
 
-/** mem_atomic_write_s8
- */
-__intrinsic void
-mem_atomic_write_s8(__xwrite void *xfr, uint32_t base_s8, uint32_t ofs, int size )
+/*f mem_atomic_write / _s8 / _hl*/
+MEM_ATOMIC_OP(mem_atomic_write,atomic_write,__xwrite void *);
+
+/*f mem_atomic_add  / _s8 / _hl */
+MEM_ATOMIC_OP(mem_atomic_add,add,__xwrite void *);
+
+/*f mem_atomic_test_add  / _s8 / _hl */
+MEM_ATOMIC_OP_DUALSIG(mem_atomic_test_add,test_add,__xrw void *);
+
+/*f mem_atomic_incr_hl */
+__intrinsic void mem_atomic_incr_hl(uint32_t addr_hi,
+                                    uint32_t addr_lo)
 {
-    SIGNAL sig;
-    int size_in_words=size/sizeof(int);
+    uint32_t base_s8;
+    uint32_t x;
+    base_s8 = addr_hi<<24;
+    x = (6<<3) | (1<<16);
     __asm {
-        mem[atomic_write, *xfr, base_s8, <<8, ofs, size_in_words], ctx_swap[sig];
+        alu[--,--,b,x];
+        mem[add_imm, --, base_s8, <<8, addr_lo, 1], indirect_ref;
     }
 }
 

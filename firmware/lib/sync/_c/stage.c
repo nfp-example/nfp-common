@@ -1,4 +1,5 @@
-/* Copyright (C) 2015,  Gavin J Stark.  All rights reserved.
+/*a Copyright
+/** Copyright (C) 2015-2016,  Gavin J Stark.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,16 +21,17 @@
  * 
  */
 
-/** Includes
- */
+/*a Includes */
 #include <sync/stage.h>
 #include <nfp_override.h>
 #include <nfp/mem.h>
+#include <nfp/me.h>
 
-/** Debug definitions
-    mailbox0 = SS0W00NN; S = last stage completed by context, W=0->not last context of ME, 1->last context of ME synchronizing, 2-> last context and synced, N=number of contexts done
-    mailbox1 = SS0W00NN; S = last stage completed by all MEs in island, W=0->not last ME of island, 1->last ME if island synchronizing, 2-> last ME and synced, N=MES completed
-    mailbox2 = SS0W00NN; S = last stage completed by context as last ME in island, W=0->not last island, 1->last island if island synchronizing, 2-> last island and synced
+/*a Debug definitions */
+/**
+ *  mailbox0 = SS0W00NN; S = last stage completed by context, W=0->not last context of ME, 1->last context of ME synchronizing, 2-> last context and synced, N=number of contexts done
+ *  mailbox1 = SS0W00NN; S = last stage completed by all MEs in island, W=0->not last ME of island, 1->last ME if island synchronizing, 2-> last ME and synced, N=MES completed
+ *  mailbox2 = SS0W00NN; S = last stage completed by context as last ME in island, W=0->not last island, 1->last island if island synchronizing, 2-> last island and synced
  */
 #define DEBUG_ISLAND_COMPLETE(stage,hdr) do { \
     register int i=(hdr.last_stage_completed<<24); \
@@ -82,14 +84,14 @@
     } while (0)
 
 
-/** Static variables
- */
+/*a Static variables */
 __declspec(shared) int __sss_num_ctx;
 static __declspec(shared) int num_ctx_done;
 static __declspec(shared) int next_sig_ctx;
 static __declspec(shared) int last_stage_completed;
 
-/** encode_signal
+/*f encode_signal */
+/**
  *
  * Encode a signal for a thread of an ME in an island into a 32-bit
  * value, for placing on a MicroQ. Requires an EVEN signal number,
@@ -115,7 +117,8 @@ encode_signal(SIGNAL_PAIR *sig)
              (sig_num << 0) );
 }
 
-/** send_signal
+/*f send_signal */
+/**
  *
  * Signal an encoded signal using CTM interthread signal
  *
@@ -140,7 +143,8 @@ send_signal(uint32_t encoded_signal)
     }
 }
 
-/** send_signal_cls_reflect
+/*f send_signal_cls_reflect */
+/**
  *
  * Signal an encoded signal using CLS reflect (uses CLS in remote island)
  *
@@ -169,7 +173,8 @@ send_signal_cls_reflect(uint32_t encoded_signal)
     }
 }
 
-/** mes_in_island_complete
+/*f mes_in_island_complete */
+/**
  * 
  * A microQ is used to queue up signals of islands that have completed a
  * stage. Also a count of 'completed islands' is maintained.
@@ -276,7 +281,8 @@ mes_in_island_complete(__mem struct sync_stage_set *global_sync_stage_set,
     DEBUG_ISLAND_NEW_STAGE(stage,hdr);
 }
 
-/** contexts_in_me_complete
+/*f contexts_in_me_complete */
+/**
  * 
  * A queue lock is used to synchronize MEs that have reached the
  * end of the current stage The queue lock is notionally 'preclaimed'
@@ -392,7 +398,8 @@ contexts_in_me_complete(void)
     DEBUG_ME_NEW_STAGE(hdr);
 }
 
-/** issue_sequence_signal
+/*f issue_sequence_signal */
+/**
  *
  * Isssue signal to same ME, and ctx_arb to let things run
  *
@@ -406,7 +413,8 @@ issue_sequence_signal(int sig_ctx)
     __asm { ctx_arb[voluntary] }
 }
 
-/** get_sequence_signal
+/*f get_sequence_signal */
+/**
  *
  * Get a sig_ctx for this context, and a given signal
  *
@@ -421,7 +429,8 @@ get_sequence_signal(volatile SIGNAL *sig)
     return sig_ctx;
 }
 
-/** context_complete
+/*f context_complete */
+/**
  *
  * Handle the completion of a stage for a context, and return the stage completed.
  *
@@ -457,7 +466,8 @@ context_complete(int total_ctx)
     return stage_completed;
 }
 
-/** sync_stage_set_stage_complete
+/*f sync_stage_set_stage_complete */
+/**
  * 
  * Use a sync_stage_set in an island to synchronize the MEs in the island.
  * Couple with a sync_stage_set globally to synchronize the islands

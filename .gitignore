@@ -1,8 +1,12 @@
+html/
+
 *~
 *.nffw
 firmware/build/
 host/build/
 host/bin/
+doc/latex
+doc/html
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

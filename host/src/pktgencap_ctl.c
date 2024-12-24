@@ -36,8 +36,11 @@
 struct pktgen_nfp {
     struct nfp *nfp;
     struct {
+        /** base **/
         char *base;
+        /** size **/
         size_t size;
+        /** nfp_ipc **/
         struct nfp_ipc *nfp_ipc;
     } shm;
 };
@@ -87,7 +90,7 @@ main(int argc, char **argv)
     int nfp_ipc_client;
     int i;
 
-    pktgen_nfp.nfp = nfp_init(-1);
+    pktgen_nfp.nfp = nfp_init(-1,0);
 
     if (pktgen_alloc_shm(&pktgen_nfp)<0) {
         fprintf(stderr, "Failed to find pktgencap shared memory\n");
@@ -95,7 +98,7 @@ main(int argc, char **argv)
     }
 
     nfp_ipc_client_desc.name = "pktgencap_ctl";
-    nfp_ipc_client = nfp_ipc_start_client(pktgen_nfp.shm.nfp_ipc, &nfp_ipc_client_desc);
+    nfp_ipc_client = nfp_ipc_client_start(pktgen_nfp.shm.nfp_ipc, &nfp_ipc_client_desc);
     if (nfp_ipc_client < 0) {
         fprintf(stderr, "Failed to connect to pktgen SHM\n");
         return 1;
@@ -109,7 +112,7 @@ main(int argc, char **argv)
         int poll;
 
         timeout = 1000*1000;
-        msg = nfp_ipc_alloc_msg(pktgen_nfp.shm.nfp_ipc, sizeof(struct pktgen_ipc_msg));
+        msg = nfp_ipc_msg_alloc(pktgen_nfp.shm.nfp_ipc, sizeof(struct pktgen_ipc_msg));
         pktgen_msg = (struct pktgen_ipc_msg *)(&msg->data[0]);
         if (!strcmp(argv[i],"shutdown")) {
             pktgen_msg->reason = PKTGEN_IPC_SHUTDOWN;
@@ -150,12 +153,13 @@ main(int argc, char **argv)
                     fprintf(stderr,"Error returned by pktgencap (%d) for command %s\n",msg->ack,argv[i]);
                     i = argc;
                 }
+                nfp_ipc_msg_free(pktgen_nfp.shm.nfp_ipc, event.msg);
                 break;
             }
         }
     }
 
-    nfp_ipc_stop_client(pktgen_nfp.shm.nfp_ipc, nfp_ipc_client);
+    nfp_ipc_client_stop(pktgen_nfp.shm.nfp_ipc, nfp_ipc_client);
 
     return 0;
 }

@@ -42,7 +42,7 @@ extern int main(int argc, char **argv)
     int offset;
     int err;
 
-    nfp=nfp_init(0);
+    nfp=nfp_init(0,0);
     if (!nfp) {
         fprintf(stderr,"Failed to open NFP\n");
         return 4;

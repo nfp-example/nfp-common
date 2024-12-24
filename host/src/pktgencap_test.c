@@ -35,8 +35,11 @@
 struct pktgen_nfp {
     struct nfp *nfp;
     struct {
+        /** base */
         char *base;
+        /** size */
         size_t size;
+        /** nfp_ipc */
         struct nfp_ipc *nfp_ipc;
     } shm;
 };
@@ -120,12 +123,12 @@ main(int argc, char **argv)
     struct pktgen_nfp pktgen_nfp;
     int nfp_ipc_client;
 
-    pktgen_nfp.nfp = nfp_init(-1);
+    pktgen_nfp.nfp = nfp_init(-1,1);
 
     pktgen_alloc_shm(&pktgen_nfp);
 
     struct nfp_ipc_client_desc nfp_ipc_client_desc;
-    nfp_ipc_client = nfp_ipc_start_client(pktgen_nfp.shm.nfp_ipc, &nfp_ipc_client_desc);
+    nfp_ipc_client = nfp_ipc_client_start(pktgen_nfp.shm.nfp_ipc, &nfp_ipc_client_desc);
     if (nfp_ipc_client < 0) {
         fprintf(stderr, "Failed to connect to pktgen SHM\n");
         return 1;
@@ -151,7 +154,7 @@ main(int argc, char **argv)
             }
         }
 
-    nfp_ipc_stop_client(pktgen_nfp.shm.nfp_ipc, nfp_ipc_client);
+    nfp_ipc_client_stop(pktgen_nfp.shm.nfp_ipc, nfp_ipc_client);
 
     return 0;
 }
